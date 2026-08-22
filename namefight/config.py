@@ -67,37 +67,42 @@ class SkillDef:
     weight: float
     trigger: str         # on_attack / on_defense / on_turn_start / passive
     effect: dict         # {type: 效果类型, ...参数}
+    mastery: tuple       # 熟练度 -> 倍率区间 (lo, hi)，作用于 mastery_on 字段
+    mastery_on: str      # 熟练度作用的参数（默认 chance；条件触发型技能可为 value 等）
 
 
 @dataclass(frozen=True)
 class SkillVariance:
-    """技能个性化（MD5 扰动）区间：概率与数值各自的倍率范围。"""
-    chance_lo: float
-    chance_hi: float
+    """技能个性化（MD5 扰动）区间：数值字段的倍率范围（触发概率由熟练度系统负责）。"""
     value_lo: float
     value_hi: float
 
 
 @dataclass(frozen=True)
 class VariableLinkDef:
-    """可共鸣变量：变量 id、抽取权重、共鸣倍率区间、差值模式的参照属性。"""
+    """可共鸣变量：变量 id、抽取权重、共鸣倍率区间、差值/求和模式的参照属性。"""
     id: str
     weight: float
     rate_lo: float
     rate_hi: float
-    diff_against: str    # 差值模式：与敌方哪个属性求差
+    diff_against: str    # difference / sum 模式：与敌方哪个属性运算
 
 
 @dataclass(frozen=True)
 class SkillLinkCfg:
-    """技能变量共鸣配置：可共鸣效果类型、共鸣概率、来源/模式权重、变量池、
-    各效果类型被修正的参数字段（targets，如 stun -> chance 表示修正触发概率）。"""
+    """技能变量共鸣配置（v0.9.0 起每技能两个变数槽位）：
+
+    - chance：单个槽位实际成为变数的概率；
+    - mode_weights：own（己方单值）/ enemy（敌方单值）/ difference（差值）/ sum（并值）权重；
+    - targets：效果类型 -> 可共鸣参数字段列表（依序为槽位一 / 槽位二）；
+    - variables：可共鸣的属性变量池。"""
     chance: float
     variables: tuple         # (VariableLinkDef, ...)
-    linkable_types: frozenset
-    source_weights: tuple    # (("own", w), ("enemy", w))
-    mode_weights: tuple      # (("ratio", w), ("difference", w))
-    targets: dict            # {效果类型: 参数名(chance/value/damage/turns)}
+    mode_weights: tuple      # (("own", w), ...)
+    targets: dict            # {效果类型: (字段名, ...)}
+
+
+VALID_LINK_MODES = ("own", "enemy", "difference", "sum")
 
 
 @dataclass(frozen=True)
@@ -139,6 +144,7 @@ class BattleCfg:
     crit_multiplier: float
     variance_lo: float
     variance_hi: float
+    atk_factor: float       # 攻击换算系数（白板 100 攻击下的实际攻击当量）
     defense_factor: float
     min_damage: int
     max_ticks: int
@@ -232,9 +238,15 @@ def load_game_config(config_root) -> GameCfg:
         if float(s.get("weight", 1)) <= 0:
             raise ConfigError("技能权重必须为正: %s" % s["id"])
         seen_skills.add(s["id"])
+        mastery = s.get("mastery", [1.0, 1.0])
+        if (len(mastery) != 2 or float(mastery[0]) <= 0
+                or float(mastery[0]) > float(mastery[1])):
+            raise ConfigError("技能 %s 的熟练度区间非法" % s["id"])
         skills.append(SkillDef(
             id=str(s["id"]), weight=float(s.get("weight", 1)),
             trigger=str(s.get("trigger", "passive")), effect=dict(s.get("effect", {})),
+            mastery=(float(mastery[0]), float(mastery[1])),
+            mastery_on=str(s.get("mastery_on", "chance")),
         ))
     if not skills:
         raise ConfigError("技能池为空")
@@ -245,14 +257,10 @@ def load_game_config(config_root) -> GameCfg:
         raise ConfigError("技能数量配置非法: [%s, %s]" % (sc_min, sc_max))
 
     var = skills_data.get("md5_variance", {})
-    var_chance = var.get("chance", [1.0, 1.0])
     var_value = var.get("value", [1.0, 1.0])
     skill_md5_variance = SkillVariance(
-        chance_lo=float(var_chance[0]), chance_hi=float(var_chance[1]),
         value_lo=float(var_value[0]), value_hi=float(var_value[1]),
     )
-    if skill_md5_variance.chance_lo > skill_md5_variance.chance_hi:
-        raise ConfigError("md5_variance.chance 区间非法")
     if skill_md5_variance.value_lo > skill_md5_variance.value_hi:
         raise ConfigError("md5_variance.value 区间非法")
 
@@ -284,26 +292,30 @@ def load_game_config(config_root) -> GameCfg:
             pairs.append((str(key), float(weight)))
         return tuple(pairs)
 
-    source_weights = _weight_pairs(link_data.get("source_weights", {"own": 1}), "共鸣来源")
-    mode_weights = _weight_pairs(link_data.get("mode_weights", {"ratio": 1}), "共鸣模式")
-    valid_params = {"chance", "value", "damage", "turns"}
+    mode_weights = _weight_pairs(link_data.get("mode_weights", {"own": 1}), "共鸣模式")
+    for mode, _ in mode_weights:
+        if mode not in VALID_LINK_MODES:
+            raise ConfigError("共鸣模式非法: %s" % mode)
     targets = {}
-    for effect_type, param in (link_data.get("targets", {}) or {}).items():
-        if str(param) not in valid_params:
-            raise ConfigError("共鸣目标字段非法: %s -> %s" % (effect_type, param))
-        targets[str(effect_type)] = str(param)
+    for effect_type, fields in (link_data.get("targets", {}) or {}).items():
+        if isinstance(fields, str):
+            fields = [fields]
+        fields = tuple(str(x) for x in fields)
+        if not fields or len(fields) > 2:
+            raise ConfigError("共鸣目标字段应为 1~2 个: %s" % effect_type)
+        targets[str(effect_type)] = fields
     skill_variable_link = SkillLinkCfg(
         chance=float(link_data.get("chance", 0)),
         variables=tuple(link_variables),
-        linkable_types=frozenset(str(x) for x in link_data.get("linkable_types", [])),
-        source_weights=source_weights or (("own", 1.0),),
-        mode_weights=mode_weights or (("ratio", 1.0),),
+        mode_weights=mode_weights or (("own", 1.0),),
         targets=targets,
     )
     if not 0.0 <= skill_variable_link.chance <= 1.0:
         raise ConfigError("variable_link.chance 必须在 [0, 1]")
     if skill_variable_link.chance > 0 and not link_variables:
         raise ConfigError("variable_link.chance > 0 但变量池为空")
+    if skill_variable_link.chance > 0 and not targets:
+        raise ConfigError("variable_link.chance > 0 但 targets 为空")
 
     # 技能名称词缀（前缀/后缀，附带微小参数修正）
     mod_data = skills_data.get("name_modifiers", {})
@@ -393,18 +405,21 @@ def load_game_config(config_root) -> GameCfg:
         crit_multiplier=float(battle_data.get("crit_multiplier", 1.8)),
         variance_lo=float(variance[0]),
         variance_hi=float(variance[1]),
+        atk_factor=float(battle_data.get("atk_factor", 1.0)),
         defense_factor=float(battle_data.get("defense_factor", 1.0)),
         min_damage=int(battle_data.get("min_damage", 1)),
         max_ticks=int(battle_data.get("max_ticks", 600)),
         gauge_threshold=float(battle_data.get("gauge_threshold", 100)),
         crit_cap=float(battle_data.get("crit_cap", 100)),
         dodge_cap=float(battle_data.get("dodge_cap", 60)),
-        seed_separator=str(battle_data.get("seed_separator", "")),
+        seed_separator=str(battle_data.get("seed_separator", "")),
     )
     if battle.max_ticks < 1:
         raise ConfigError("max_ticks 必须 >= 1")
     if battle.gauge_threshold <= 0:
         raise ConfigError("gauge_threshold 必须 > 0")
+    if battle.atk_factor <= 0:
+        raise ConfigError("atk_factor 必须 > 0")
     if battle.variance_lo > battle.variance_hi:
         raise ConfigError("variance 区间非法")
 

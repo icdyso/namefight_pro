@@ -227,12 +227,12 @@
     scheduleTick();
   }
 
-  /* 客户端行动槽逐刻推进（每刻 +速度%），与服务器快照对齐校正 */
+  /* 客户端行动槽逐刻推进（每刻推进 gauge_gain%），与服务器快照对齐校正 */
   function advanceGauges() {
     ["a", "b"].forEach(function (side) {
       var refs = els.hud && els.hud[side];
-      if (!refs || refs._dead || !refs._spd) return;
-      var g = Math.min(100, (refs._gauge || 0) + refs._spd);
+      if (!refs || refs._dead || !refs._gain) return;
+      var g = Math.min(100, (refs._gauge || 0) + refs._gain);
       refs._gauge = g;
       refs.gaugeFill.style.transition = "width " + tickDuration() + "ms linear";
       refs.gaugeFill.style.width = g + "%";
@@ -386,8 +386,9 @@
       var span = Math.max(1, a.max - a.min);
       var pct = Math.max(0, Math.min(100, (a.value - a.min) / span * 100));
       var valueText = a.format === "percent" ? a.value + "%" : String(a.value);
+      var icon = a.emoji ? a.emoji + " " : "";
       return NF.h("div", { class: "stat-row" },
-        NF.h("span", { class: "stat-name" }, a.name),
+        NF.h("span", { class: "stat-name" }, icon + a.name),
         NF.h("span", { class: "stat-value" }, valueText),
         NF.h("div", { class: "stat-bar" },
           NF.h("div", { class: "stat-fill " + a.id, style: { width: pct + "%" } })));
@@ -396,16 +397,18 @@
     var skillNodes = f.skills.map(function (s) {
       var textNode = s.text ? NF.h("div", { class: "skill-text" }, skillText(s)) : null;
       var tipTextNode = s.text ? NF.h("div", { class: "tip-line" }, skillText(s)) : null;
-      // 登记共鸣技能的文本节点：对战中按快照逐刻刷新实时数值
+      // 登记共鸣技能的文本节点：对战中按快照逐刻刷新实时数值（每技能至多两个占位）
       if (s.live_text && state.skillRefs) {
         state.skillRefs[side].push({ s: s, textNode: textNode, tipTextNode: tipTextNode });
       }
       return NF.h("div", { class: "skill-chip" },
-        NF.h("div", { class: "skill-name" }, s.name),
+        NF.h("div", { class: "skill-name" }, s.name,
+          s.mastery_text ? NF.h("span", { class: "skill-mastery" }, s.mastery_text) : null),
         textNode,
         s.flavor ? NF.h("div", { class: "skill-desc" }, s.flavor) : null,
         NF.h("div", { class: "tip" },
           NF.h("div", { class: "tip-title" }, s.name),
+          s.mastery_text ? NF.h("div", { class: "tip-line muted" }, s.mastery_text) : null,
           tipTextNode,
           s.flavor ? NF.h("div", { class: "tip-line muted" }, s.flavor) : null,
           s.modifiers && s.modifiers.length
@@ -473,9 +476,11 @@
   /* ---------- 战斗 HUD：HP / 属性 / 行动槽 / buff 实时渲染 ---------- */
 
   function buildHud(f, side) {
-    var attrName = function (id) {
+    var attrIcon = function (id) {
       var found = f.attributes.filter(function (a) { return a.id === id; })[0];
-      return found ? found.name : id.toUpperCase();
+      if (found && found.emoji) return found.emoji + " ";
+      var name = found ? found.name : id.toUpperCase();
+      return name + " ";
     };
     var refs = {};
     refs.hpFill = NF.h("div", { class: "hud-hpfill" });
@@ -483,7 +488,7 @@
     refs.atkVal = NF.h("b", null, "");
     refs.defVal = NF.h("b", null, "");
     refs.spdVal = NF.h("b", null, "");
-    refs.atkStat = NF.h("span", { class: "hud-stat" }, attrName("atk") + " ", refs.atkVal);
+    refs.atkStat = NF.h("span", { class: "hud-stat", title: attrNameOf(f, "atk") }, attrIcon("atk"), refs.atkVal);
     refs.gaugeFill = NF.h("div", { class: "hud-gaugefill" });
     refs.buffs = NF.h("div", { class: "hud-buffs" });
     refs.root = NF.h("div", { class: "hud side-" + side },
@@ -493,13 +498,18 @@
       NF.h("div", { class: "hud-hpwrap" }, refs.hpFill, refs.hpText),
       NF.h("div", { class: "hud-stats" },
         refs.atkStat,
-        NF.h("span", { class: "hud-stat" }, attrName("def") + " ", refs.defVal),
-        NF.h("span", { class: "hud-stat" }, attrName("spd") + " ", refs.spdVal)),
+        NF.h("span", { class: "hud-stat", title: attrNameOf(f, "def") }, attrIcon("def"), refs.defVal),
+        NF.h("span", { class: "hud-stat", title: attrNameOf(f, "spd") }, attrIcon("spd"), refs.spdVal)),
       NF.h("div", { class: "hud-gaugewrap" },
         NF.h("span", { class: "hud-gaugelabel" }, t("gauge_label")),
         NF.h("div", { class: "hud-gauge" }, refs.gaugeFill)),
       refs.buffs);
     return refs;
+  }
+
+  function attrNameOf(f, id) {
+    var found = f.attributes.filter(function (a) { return a.id === id; })[0];
+    return found ? found.name : id.toUpperCase();
   }
 
   function applyHudState(refs, snap, instant) {
@@ -510,7 +520,7 @@
     refs.atkVal.textContent = fmtInt(snap.atk);
     refs.defVal.textContent = fmtInt(snap.def);
     refs.spdVal.textContent = fmtInt(snap.spd);
-    refs._spd = snap.spd;
+    refs._gain = snap.gauge_gain != null ? +snap.gauge_gain : 0;
     refs._dead = snap.hp <= 0;
     var boosted = (snap.buffs || []).some(function (b) { return b.id === "last_stand"; });
     refs.atkStat.classList.toggle("atk-boost", boosted);
@@ -562,13 +572,18 @@
   }
 
   /* 与引擎 resonance_coeff + apply_resonance 完全一致：
-     最终值 = base + 变量式 × coeff，再按字段上下限截断 */
+     最终值 = base + 变量式 × coeff，再按字段上下限截断。
+     变量式：own 己方单值 / enemy 敌方单值 / difference 差值 / sum 并值。 */
   function liveFinalValue(lc, selfSnap, enemySnap) {
     var expr;
-    if (lc.mode === "difference") {
-      expr = liveSnapValue(selfSnap, lc.variable) - liveSnapValue(enemySnap, lc.against);
+    if (lc.mode === "difference" || lc.mode === "sum") {
+      var own = liveSnapValue(selfSnap, lc.variable);
+      var other = liveSnapValue(enemySnap, lc.against);
+      expr = lc.mode === "difference" ? own - other : own + other;
+    } else if (lc.mode === "enemy") {
+      expr = liveSnapValue(enemySnap, lc.variable);
     } else {
-      expr = liveSnapValue(lc.source === "enemy" ? enemySnap : selfSnap, lc.variable);
+      expr = liveSnapValue(selfSnap, lc.variable);
     }
     var v = lc.base + expr * lc.coeff;
     var lo = lc.clamp ? lc.clamp[0] : null;
@@ -580,6 +595,19 @@
     return fmtPct(v);
   }
 
+  /* live 文本中的实时数值占位符（每技能至多 2 个）按 link_calc 顺序填充 */
+  function fillLiveText(tmpl, calcs, selfSnap, enemySnap) {
+    var parts = tmpl.split(LIVE_MARK);
+    if (parts.length < 2) return tmpl;
+    var out = parts[0];
+    for (var i = 1; i < parts.length; i++) {
+      var value = (calcs && calcs[i - 1])
+        ? liveFinalValue(calcs[i - 1], selfSnap, enemySnap) : "";
+      out += value + parts[i];
+    }
+    return out;
+  }
+
   function updateLiveSkills(snapA, snapB) {
     if (!state.skillRefs || !state.battle) return;
     [["a", snapA, snapB], ["b", snapB, snapA]].forEach(function (row) {
@@ -587,7 +615,7 @@
         var s = ref.s;
         if (!s.live_text || !ref.textNode) return;
         var tmpl = state.simple && s.live_text_simple ? s.live_text_simple : s.live_text;
-        var text = tmpl.split(LIVE_MARK).join(liveFinalValue(s.link_calc, row[1], row[2]));
+        var text = fillLiveText(tmpl, s.link_calc, row[1], row[2]);
         if (ref.textNode.textContent !== text) {
           ref.textNode.textContent = text;
           if (ref.tipTextNode) ref.tipTextNode.textContent = text;

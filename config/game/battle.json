@@ -4,10 +4,11 @@
     0.85,
     1.15
   ],
-  "defense_factor": 1.0,
+  "atk_factor": 0.13,
+  "defense_factor": 0.05,
   "min_damage": 1,
   "max_ticks": 600,
-  "gauge_threshold": 100,
+  "gauge_threshold": 1000,
   "crit_cap": 100,
   "dodge_cap": 60,
   "seed_separator": "\u001f"

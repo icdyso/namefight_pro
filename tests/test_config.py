@@ -43,8 +43,8 @@ class GameConfigTests(unittest.TestCase):
 
     def test_md5_variance_ranges_sane(self):
         var = GAME.skill_md5_variance
-        self.assertLessEqual(var.chance_lo, var.chance_hi)
         self.assertLessEqual(var.value_lo, var.value_hi)
+        self.assertGreater(var.value_lo, 0)
 
     def test_variable_link_sane(self):
         link = GAME.skill_variable_link
@@ -57,20 +57,24 @@ class GameConfigTests(unittest.TestCase):
             self.assertGreaterEqual(v.rate_lo, 0)
             self.assertIn(v.diff_against, attr_ids,
                           "共鸣变量 %s 的差值参照 %s 不是已定义属性" % (v.id, v.diff_against))
-        for source, weight in link.source_weights:
-            self.assertGreater(weight, 0)
-            self.assertIn(source, ("own", "enemy"))
-        for mode, weight in link.mode_weights:
-            self.assertGreater(weight, 0)
-            self.assertIn(mode, ("ratio", "difference"))
+        modes = {m for m, _ in link.mode_weights}
+        self.assertTrue(modes)
+        for mode in modes:
+            self.assertIn(mode, ("own", "enemy", "difference", "sum"))
         if link.chance > 0:
             self.assertTrue(link.variables)
-            for t in link.linkable_types:
-                self.assertIn(t, SUPPORTED_EFFECTS,
-                              "可共鸣类型 %s 不是引擎支持的效果" % t)
-            for effect_type, param in link.targets.items():
-                self.assertIn(param, ("chance", "value", "damage", "turns"),
-                              "共鸣目标字段非法: %s" % effect_type)
+            for effect_type, fields in link.targets.items():
+                self.assertIn(effect_type, SUPPORTED_EFFECTS,
+                              "可共鸣类型 %s 不是引擎支持的效果" % effect_type)
+                self.assertTrue(1 <= len(fields) <= 2,
+                                "共鸣目标字段应为 1~2 个: %s" % effect_type)
+
+    def test_mastery_ranges_sane(self):
+        for s in GAME.skills:
+            lo, hi = s.mastery
+            self.assertGreater(lo, 0)
+            self.assertLessEqual(lo, hi)
+            self.assertIn(s.mastery_on, ("chance", "value", "immune"))
 
     def test_name_modifiers_sane(self):
         mods = GAME.skill_name_modifiers
@@ -78,7 +82,7 @@ class GameConfigTests(unittest.TestCase):
             self.assertTrue(0.0 <= chance <= 1.0)
         self.assertLessEqual(mods.scale_lo, mods.scale_hi)
         self.assertGreater(mods.scale_lo, 0)
-        known_params = {"chance", "value", "damage", "turns"}
+        known_params = {"chance", "value", "damage", "turns", "ticks"}
         for pool in (mods.prefixes, mods.suffixes):
             self.assertTrue(pool)
             for m in pool:

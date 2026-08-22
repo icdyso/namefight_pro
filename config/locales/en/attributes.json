@@ -1,8 +1,8 @@
 {
-  "hp":    { "name": "HP" },
-  "atk":   { "name": "ATK" },
-  "def":   { "name": "DEF" },
-  "spd":   { "name": "SPD" },
-  "crit":  { "name": "CRIT" },
-  "dodge": { "name": "DODGE" }
+  "hp":    { "name": "HP",    "emoji": "❤️" },
+  "atk":   { "name": "ATK",   "emoji": "⚔️" },
+  "def":   { "name": "DEF",   "emoji": "🛡️" },
+  "spd":   { "name": "SPD",   "emoji": "💨" },
+  "crit":  { "name": "CRIT",  "emoji": "🎯" },
+  "dodge": { "name": "DODGE", "emoji": "🌀" }
 }

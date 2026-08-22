@@ -141,40 +141,75 @@ class FighterDeterminism(unittest.TestCase):
 
     def test_variable_link_varies_and_matches_display(self):
         link_cfg = GAME.skill_variable_link
-        sources = {s for s, _ in link_cfg.source_weights}
         modes = {m for m, _ in link_cfg.mode_weights}
         linked = []
         modded = []
-        for i in range(40):
+        dual = 0
+        for i in range(60):
             f = derive_fighter("linker%02d" % i, GAME)
             for sdef, eff in personalized_effects(f, GAME):
-                if "link" in eff:
-                    link = eff["link"]
-                    self.assertIn(link["source"], sources)
+                for link in eff.get("links", ()):
                     self.assertIn(link["mode"], modes)
                     self.assertIn(link["variable"], f.attrs)
+                    self.assertIn(link["field"], eff)
                     vdef = next(v for v in link_cfg.variables
                                 if v.id == link["variable"])
                     rate = link["rate"]
                     self.assertGreaterEqual(rate, vdef.rate_lo - 1e-9)
                     self.assertLessEqual(rate, vdef.rate_hi + 1e-9)
+                if eff.get("links"):
                     linked.append((f, sdef, eff))
+                    if len(eff["links"]) == 2:
+                        dual += 1
                 if "prefix" in eff or "suffix" in eff:
                     modded.append((f, eff))
         self.assertTrue(linked, "应有技能获得变量共鸣")
+        self.assertGreater(dual, 0, "应采样到双变数技能")
         self.assertTrue(modded, "应有技能获得词缀")
-        # 描述格式：主句内联线性公式（基数 + 基数 × 变量式 × 单位系数）+ 尾句依赖
+        # 描述格式：公式括号紧跟对应数值（基数 + 变量式*合并系数）+ 尾句依赖
         f, sdef, eff = linked[0]
         api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
         entry = next(s for s in api["skills"] if s["id"] == sdef.id)
-        if eff.get("link"):
+        if eff.get("links"):
             self.assertIn("越", entry["text"])
             self.assertIn("%", entry["text"])
             self.assertIn("（", entry["text"])
             self.assertIn(" + ", entry["text"])
-            self.assertIn("×", entry["text"])
+            self.assertIn("*", entry["text"])
             self.assertTrue(entry["text"].endswith("。"))
             self.assertLess(entry["text"].index("（"), entry["text"].index("。"))
+            # 变数出现概率契约：整体约 25%/槽位（含双变数时两个括号）
+            self.assertLessEqual(entry["text"].count("（"), 2)
+
+    def test_variable_appearance_rate_near_quota(self):
+        """变数出现概率契约：每个槽位 25%，技能级出现率应接近 1−0.75²。"""
+        total = with_link = 0
+        for i in range(150):
+            f = derive_fighter("quota%03d" % i, GAME)
+            for sdef, eff in personalized_effects(f, GAME):
+                total += 1
+                if eff.get("links"):
+                    with_link += 1
+        rate = with_link / total
+        self.assertGreater(rate, 0.30, "变数出现率过低: %.3f" % rate)
+        self.assertLess(rate, 0.58, "变数出现率过高: %.3f" % rate)
+
+    def test_mastery_present_and_scales_chance(self):
+        """每个技能实例都有熟练度：0~100，触发概率按各自区间缩放并截断。"""
+        seen = 0
+        for i in range(60):
+            f = derive_fighter("mastery%02d" % i, GAME)
+            api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+            for sdef, eff in personalized_effects(f, GAME):
+                entry = next(s for s in api["skills"] if s["id"] == sdef.id)
+                self.assertIn("mastery", eff)
+                self.assertTrue(0 <= eff["mastery"] <= 100)
+                self.assertTrue(entry["mastery_text"])
+                if sdef.mastery_on == "chance" and "chance" in eff:
+                    self.assertGreaterEqual(eff["chance"], 0.02)
+                    self.assertLessEqual(eff["chance"], 0.95)
+                seen += 1
+        self.assertGreater(seen, 100)
 
     def test_effect_link_appears_in_battles(self):
         found = 0
@@ -193,92 +228,117 @@ class FighterDeterminism(unittest.TestCase):
     def _collect_linked(self, count=25):
         """采样获得共鸣技能的斗士（link_calc/live 文本测试用）。"""
         linked = []
-        for i in range(200):
+        for i in range(300):
             f = derive_fighter("live%03d" % i, GAME)
             for sdef, eff in personalized_effects(f, GAME):
-                if "link" in eff:
+                if eff.get("links"):
                     linked.append((f, sdef, eff))
             if len(linked) >= count:
                 break
         return linked
 
     def test_live_text_marker_and_simple_mode(self):
-        """live 文本恰有一个 LIVE_MARKER；简易模式隐藏公式（尾句保留）。"""
-        from namefight.fighter import LIVE_MARKER, resonance_target
+        """live 文本有 1~2 个 LIVE_MARKER（与 link_calc 一一对应）；
+        简易模式隐藏公式（尾句保留）。"""
+        from namefight.fighter import LIVE_MARKER
         zh = load_locale(CONFIG_ROOT, "zh")
-        linked = self._collect_linked(10)
+        linked = self._collect_linked(20)
         self.assertTrue(linked)
         for f, sdef, eff in linked:
             api = fighter_to_api(f, GAME, zh)
             entry = next(s for s in api["skills"] if s["id"] == sdef.id)
-            target = resonance_target(eff, GAME)
-            if not target:
+            links = eff.get("links")
+            if not links:
                 continue
             self.assertIn("live_text", entry)
             self.assertIn("live_text_simple", entry)
             self.assertIn("link_calc", entry)
-            self.assertEqual(entry["live_text"].count(LIVE_MARKER), 1)
-            self.assertEqual(entry["live_text_simple"].count(LIVE_MARKER), 1)
-            # 简易模式：主句保留、公式（× 号）隐藏、尾句保留
-            self.assertNotIn("×", entry["text_simple"])
-            self.assertIn("×", entry["text"])
+            self.assertEqual(len(entry["link_calc"]), len(links))
+            self.assertEqual(entry["live_text"].count(LIVE_MARKER), len(links))
+            self.assertEqual(entry["live_text_simple"].count(LIVE_MARKER), len(links))
+            # 简易模式：主句保留、公式（* 号）隐藏、尾句保留
+            self.assertNotIn("*", entry["text_simple"])
+            self.assertIn("*", entry["text"])
             self.assertTrue(entry["text_simple"].endswith("。"))
-            # 变量以「当前」措辞参与描述
-            self.assertIn("当前", entry["text"])
+            # 公式中以属性 emoji 表示变量，且不出现「当前」措辞
+            self.assertNotIn("当前", entry["text"])
 
     def test_link_calc_matches_engine_resonance(self):
         """前端实时公式（base + 变量式 × coeff + 上下限）与引擎
-        resonance_coeff + apply_resonance 逐点一致。"""
+        resonance_coeff + apply_resonance 逐点一致（含双变数技能）。"""
         from namefight.battle import _live_value, _make_combatant
-        from namefight.fighter import (RESONANCE_CLAMPS, apply_resonance,
-                                       resonance_coeff, resonance_target)
+        from namefight.fighter import RESONANCE_SPECS, apply_resonance, resonance_coeff
         zh = load_locale(CONFIG_ROOT, "zh")
-        linked = self._collect_linked(15)
+        linked = self._collect_linked(25)
         enemy = _make_combatant(derive_fighter("对照者", GAME), 1, GAME)
         checked = 0
         for f, sdef, eff in linked:
-            target = resonance_target(eff, GAME)
-            if not target:
+            links = eff.get("links")
+            if not links:
                 continue
             api = fighter_to_api(f, GAME, zh)
             entry = next(s for s in api["skills"] if s["id"] == sdef.id)
-            lc = entry["link_calc"]
             actor = _make_combatant(f, 0, GAME)
-            # 引擎路径：按当前值计算系数并修正参数
-            coeff = resonance_coeff(lambda vid: _live_value(actor, vid),
-                                    lambda vid: _live_value(enemy, vid),
-                                    eff["link"], GAME)
-            proc = apply_resonance(eff, coeff, target)
-            # 前端路径：base + 变量式 × coeff（+ 截断）
-            if lc["mode"] == "difference":
-                expr = (_live_value(actor, lc["variable"])
-                        - _live_value(enemy, lc["against"]))
-            else:
-                src = enemy if lc["source"] == "enemy" else actor
-                expr = _live_value(src, lc["variable"])
-            value = lc["base"] + expr * lc["coeff"]
-            lo, hi = RESONANCE_CLAMPS.get(target, (None, None))
-            if lo is not None:
-                value = max(lo, value)
-            if hi is not None:
-                value = min(hi, value)
-            if target == "turns":
-                value = max(1, int(round(value)))
-            self.assertAlmostEqual(proc[target], value, places=9,
-                                   msg="技能 %s 实时公式与引擎不一致" % sdef.id)
-            checked += 1
-        self.assertGreater(checked, 5)
+            proc = dict(eff)
+            for lc in entry["link_calc"]:
+                field = lc["field"]
+                # 引擎路径：按当前值计算系数并修正参数
+                coeff = resonance_coeff(lambda vid: _live_value(actor, vid),
+                                        lambda vid: _live_value(enemy, vid),
+                                        next(l for l in links if l["field"] == field),
+                                        GAME)
+                proc = apply_resonance(proc, coeff, field)
+                # 前端路径：base + 变量式 × coeff（+ 截断）
+                if lc["mode"] in ("difference", "sum"):
+                    own = _live_value(actor, lc["variable"])
+                    other = _live_value(enemy, lc["against"])
+                    expr = own - other if lc["mode"] == "difference" else own + other
+                elif lc["mode"] == "enemy":
+                    expr = _live_value(enemy, lc["variable"])
+                else:
+                    expr = _live_value(actor, lc["variable"])
+                value = lc["base"] + expr * lc["coeff"]
+                lo, hi = lc["clamp"]
+                if lo is not None:
+                    value = max(lo, value)
+                if hi is not None:
+                    value = min(hi, value)
+                if lc["fmt"] == "turns":
+                    value = max(1, int(round(value)))
+                self.assertAlmostEqual(proc[field], value, places=9,
+                                       msg="技能 %s 字段 %s 实时公式与引擎不一致"
+                                           % (sdef.id, field))
+                checked += 1
+        self.assertGreater(checked, 15)
 
-    def test_snapshot_carries_live_attributes(self):
-        """快照含 crit/dodge：前端实时技能公式所需的全部属性可直接取用。"""
+    def test_snapshot_carriers_live_attributes(self):
+        """快照含 crit/dodge/gauge_gain：前端实时技能公式与逐刻行动槽
+        动画所需的全部数据可直接取用。"""
         fa = derive_fighter("Alice", GAME)
         fb = derive_fighter("Bob", GAME)
         outcome = run_battle(fa, fb, GAME)
         for e in outcome.events:
             for side in ("a", "b"):
                 snap = e["state"][side]
-                for key in ("hp", "max_hp", "atk", "def", "spd", "crit", "dodge", "gauge"):
+                for key in ("hp", "max_hp", "atk", "def", "spd",
+                            "crit", "dodge", "gauge", "gauge_gain"):
                     self.assertIn(key, snap)
+
+    def test_whiteboard_baseline_and_scale(self):
+        """数值缩放契约：白板基准 100（hp/atk/def/spd 基础值均为 100），
+        战斗常数按同比例折算（atk_factor / defense_factor / gauge_threshold）。"""
+        for a in GAME.attributes:
+            if a.id in ("hp", "atk", "def", "spd"):
+                self.assertEqual(a.base, 100, "白板属性 %s 基准应为 100" % a.id)
+        f = derive_fighter("白板测试", GAME)
+        for a in GAME.attributes:
+            expect = a.base + sum(
+                d for aid, d in title_bonus_items(
+                    f.title_fields,
+                    next(s for s in GAME.title_structures
+                         if s.id == f.title_structure_id), GAME)
+                if aid == a.id)
+            self.assertEqual(f.attrs[a.id], max(1, expect))
 
     def test_snapshots_off_matches_full_run(self):
         """极速模式（无快照）与完整模式的胜负、tick 与事件序列完全一致。"""

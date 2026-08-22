@@ -1,8 +1,8 @@
 {
-  "hp":    { "name": "生命" },
-  "atk":   { "name": "攻击" },
-  "def":   { "name": "防御" },
-  "spd":   { "name": "速度" },
-  "crit":  { "name": "暴击" },
-  "dodge": { "name": "闪避" }
+  "hp":    { "name": "生命", "emoji": "❤️" },
+  "atk":   { "name": "攻击", "emoji": "⚔️" },
+  "def":   { "name": "防御", "emoji": "🛡️" },
+  "spd":   { "name": "速度", "emoji": "💨" },
+  "crit":  { "name": "暴击", "emoji": "🎯" },
+  "dodge": { "name": "闪避", "emoji": "🌀" }
 }
