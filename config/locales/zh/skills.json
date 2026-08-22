@@ -10,5 +10,20 @@
   "wind_step":    { "name": "疾风步",   "description": "身形如风，难以捉摸。" },
   "focus":        { "name": "心眼",     "description": "看破一切破绽。" },
   "spring_heal":  { "name": "回春术",   "description": "体内涌起温和的暖流。" },
-  "last_stand":   { "name": "背水一战", "description": "绝境之中，爆发潜能。" }
+  "last_stand":   { "name": "背水一战", "description": "绝境之中，爆发潜能。" },
+  "momentum":     { "name": "乘胜追击", "description": "攻势如潮，一浪高过一浪。" },
+  "overload":     { "name": "燃血轰击", "description": "以生命为薪，燃尽一切。" },
+  "rupture":      { "name": "破甲连打", "description": "专敲护甲的接缝处。" },
+  "lacerate":     { "name": "撕裂",     "description": "伤口绽开，血流不止。" },
+  "exploit":      { "name": "趁虚而入", "description": "敌人的狼狈，就是最好的时机。" },
+  "shadow_step":  { "name": "疾影突袭", "description": "影随身动，快若闪电。" },
+  "all_in":       { "name": "孤注一掷", "description": "要么轰轰烈烈，要么一无所有。" },
+  "bulwark":      { "name": "坚守壁垒", "description": "气势如虹时，坚不可摧。" },
+  "retribution":  { "name": "以牙还牙", "description": "你给我的暴击，我都记着。" },
+  "iron_will":    { "name": "不倒意志", "description": "只要还站着，就还没输。" },
+  "purify":       { "name": "净化",     "description": "毒素与血污，一挥而散。" },
+  "late_bloom":   { "name": "大器晚成", "description": "熬过前期，渐入佳境。" },
+  "true_sight":   { "name": "洞悉",     "description": "再厚的护甲也有弱点。" },
+  "blood_pact":   { "name": "血契",     "description": "以血为契，换取力量。" },
+  "grudge":       { "name": "怨念深重", "description": "每一道伤疤，都在积蓄力量。" }
 }

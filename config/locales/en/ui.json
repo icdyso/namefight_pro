@@ -22,6 +22,8 @@
   "playback_skip": "Skip",
   "speed_label": "Speed",
   "gauge_label": "Act",
+  "simple_mode_label": "Simple",
+  "simple_mode_title": "Hide resonance formulas in skill descriptions",
   "winner_text": "{name} wins!",
   "draw_text": "Perfectly matched - a draw!",
   "summary_text": "{ticks} ticks · Red dealt {dmg_a} damage · Blue dealt {dmg_b} damage",

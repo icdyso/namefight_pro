@@ -6,6 +6,7 @@
 
   var TICK_MS = 255;          // 每个 tick 的基础演出时长（ms），v0.6.0 起为原速的 1/3
   var SPEEDS = [0.5, 1, 2, 4];  // 回放倍速
+  var LIVE_MARK = "\u0001";   // 后端 live 文本中的实时数值占位符
 
   var state = {
     lang: "zh",
@@ -18,7 +19,10 @@
     playing: false,
     timer: null,
     speed: 1,
-    busy: false
+    busy: false,
+    simple: false,    // 简易显示模式（隐藏技能描述中的共鸣公式）
+    skillRefs: null,  // {a: [{s, textNode, tipTextNode}], b: [...]} 实时刷新用
+    lastBattleState: null  // 最近一次应用的双方快照（重渲染后恢复实时数值）
   };
 
   var els = {};
@@ -27,6 +31,19 @@
 
   function t(key) {
     return state.text[key] != null ? state.text[key] : key;
+  }
+
+  /* 展示精度契约（AGENTS.md 2.1.5）：百分数 2 位小数，其余数值取整 */
+  function fmtInt(v) {
+    return String(Math.round(+v || 0));
+  }
+
+  function fmtPct(v) {
+    return (+v * 100).toFixed(2) + "%";
+  }
+
+  function skillText(s) {
+    return state.simple && s.text_simple != null ? s.text_simple : s.text;
   }
 
   function fmt(key, map) {
@@ -105,6 +122,7 @@
       .then(function (fs) {
         state.fighters = fs;
         state.battle = null;
+        state.lastBattleState = null;
         stopPlayback();
         renderArena();
         renderBattlePanel();
@@ -122,6 +140,7 @@
         state.fighters = res.fighters;
         state.battle = res;
         state.shown = 0;
+        state.lastBattleState = null;
         renderArena();
         renderBattlePanel();
         startPlayback();
@@ -283,6 +302,11 @@
   }
 
   function buildHeader() {
+    var simpleBox = NF.h("input", {
+      class: "simple-box", type: "checkbox",
+      checked: state.simple ? "" : null,
+      onchange: function (e) { toggleSimple(e.target.checked); }
+    });
     return NF.h("header", { class: "app-header" },
       NF.h("div", { class: "lang-row", role: "group", "aria-label": t("lang_label") },
         state.langs.map(function (lg) {
@@ -290,10 +314,20 @@
             class: "lang-btn" + (lg === state.lang ? " active" : ""),
             onclick: function () { switchLang(lg); }
           }, lg.toUpperCase());
-        })),
+        }),
+        NF.h("label", { class: "simple-toggle", title: t("simple_mode_title") },
+          simpleBox, NF.h("span", null, t("simple_mode_label")))),
       NF.h("h1", { class: "app-title" }, t("app_title")),
       NF.h("p", { class: "app-subtitle" }, t("app_subtitle"))
     );
+  }
+
+  /* 简易显示模式：只重渲染卡牌（技能文本所在处），不影响正在进行的对战回放 */
+  function toggleSimple(on) {
+    if (state.simple === !!on) return;
+    state.simple = !!on;
+    try { localStorage.setItem("nf_simple", on ? "1" : "0"); } catch (e) { /* 忽略 */ }
+    renderArena();
   }
 
   function buildInputPanel() {
@@ -327,6 +361,7 @@
   function renderArena() {
     if (!els.arena) return;
     NF.clear(els.arena);
+    state.skillRefs = { a: [], b: [] };
     if (!state.fighters) {
       els.arena.appendChild(emptyCard());
       els.arena.appendChild(emptyCard());
@@ -334,6 +369,10 @@
     }
     els.arena.appendChild(fighterCard(state.fighters[0], "a"));
     els.arena.appendChild(fighterCard(state.fighters[1], "b"));
+    // 重渲染（如切换简易模式）后，按最近快照恢复实时技能数值
+    if (state.lastBattleState) {
+      updateLiveSkills(state.lastBattleState.a, state.lastBattleState.b);
+    }
   }
 
   function emptyCard() {
@@ -355,13 +394,19 @@
     });
 
     var skillNodes = f.skills.map(function (s) {
+      var textNode = s.text ? NF.h("div", { class: "skill-text" }, skillText(s)) : null;
+      var tipTextNode = s.text ? NF.h("div", { class: "tip-line" }, skillText(s)) : null;
+      // 登记共鸣技能的文本节点：对战中按快照逐刻刷新实时数值
+      if (s.live_text && state.skillRefs) {
+        state.skillRefs[side].push({ s: s, textNode: textNode, tipTextNode: tipTextNode });
+      }
       return NF.h("div", { class: "skill-chip" },
         NF.h("div", { class: "skill-name" }, s.name),
-        s.text ? NF.h("div", { class: "skill-text" }, s.text) : null,
+        textNode,
         s.flavor ? NF.h("div", { class: "skill-desc" }, s.flavor) : null,
         NF.h("div", { class: "tip" },
           NF.h("div", { class: "tip-title" }, s.name),
-          s.text ? NF.h("div", { class: "tip-line" }, s.text) : null,
+          tipTextNode,
           s.flavor ? NF.h("div", { class: "tip-line muted" }, s.flavor) : null,
           s.modifiers && s.modifiers.length
             ? NF.h("div", { class: "tip-mods" }, s.modifiers.join("；")) : null));
@@ -461,10 +506,10 @@
     if (!refs || !snap) return;
     var hpPct = snap.max_hp > 0 ? (snap.hp / snap.max_hp * 100) : 0;
     refs.hpFill.style.width = Math.max(0, Math.min(100, hpPct)) + "%";
-    refs.hpText.textContent = (+snap.hp).toFixed(2) + " / " + (+snap.max_hp).toFixed(2);
-    refs.atkVal.textContent = (+snap.atk).toFixed(2);
-    refs.defVal.textContent = (+snap.def).toFixed(2);
-    refs.spdVal.textContent = (+snap.spd).toFixed(2);
+    refs.hpText.textContent = fmtInt(snap.hp) + " / " + fmtInt(snap.max_hp);
+    refs.atkVal.textContent = fmtInt(snap.atk);
+    refs.defVal.textContent = fmtInt(snap.def);
+    refs.spdVal.textContent = fmtInt(snap.spd);
     refs._spd = snap.spd;
     refs._dead = snap.hp <= 0;
     var boosted = (snap.buffs || []).some(function (b) { return b.id === "last_stand"; });
@@ -504,8 +549,57 @@
 
   function applyBattleState(battleState, instant) {
     if (!battleState || !els.hud) return;
+    state.lastBattleState = battleState;
     applyHudState(els.hud.a, battleState.a, instant);
     applyHudState(els.hud.b, battleState.b, instant);
+    updateLiveSkills(battleState.a, battleState.b);
+  }
+
+  /* ---------- 对战实时技能数据：按双方快照重算共鸣最终值 ---------- */
+
+  function liveSnapValue(snap, vid) {
+    return snap && snap[vid] != null ? +snap[vid] : 0;
+  }
+
+  /* 与引擎 resonance_coeff + apply_resonance 完全一致：
+     最终值 = base + 变量式 × coeff，再按字段上下限截断 */
+  function liveFinalValue(lc, selfSnap, enemySnap) {
+    var expr;
+    if (lc.mode === "difference") {
+      expr = liveSnapValue(selfSnap, lc.variable) - liveSnapValue(enemySnap, lc.against);
+    } else {
+      expr = liveSnapValue(lc.source === "enemy" ? enemySnap : selfSnap, lc.variable);
+    }
+    var v = lc.base + expr * lc.coeff;
+    var lo = lc.clamp ? lc.clamp[0] : null;
+    var hi = lc.clamp ? lc.clamp[1] : null;
+    if (lo != null && v < lo) v = lo;
+    if (hi != null && v > hi) v = hi;
+    if (lc.fmt === "turns") return String(Math.max(1, Math.round(v)));
+    if (lc.fmt === "num") return fmtInt(v);
+    return fmtPct(v);
+  }
+
+  function updateLiveSkills(snapA, snapB) {
+    if (!state.skillRefs || !state.battle) return;
+    [["a", snapA, snapB], ["b", snapB, snapA]].forEach(function (row) {
+      (state.skillRefs[row[0]] || []).forEach(function (ref) {
+        var s = ref.s;
+        if (!s.live_text || !ref.textNode) return;
+        var tmpl = state.simple && s.live_text_simple ? s.live_text_simple : s.live_text;
+        var text = tmpl.split(LIVE_MARK).join(liveFinalValue(s.link_calc, row[1], row[2]));
+        if (ref.textNode.textContent !== text) {
+          ref.textNode.textContent = text;
+          if (ref.tipTextNode) ref.tipTextNode.textContent = text;
+          var chip = ref.textNode.parentNode;
+          if (chip && chip.classList) {
+            chip.classList.remove("live-flash");
+            void chip.offsetWidth;  // 重新触发闪烁动画
+            chip.classList.add("live-flash");
+          }
+        }
+      });
+    });
   }
 
   function renderControls() {
@@ -548,8 +642,8 @@
       NF.h("div", { class: "result-winner" }, headline),
       NF.h("div", { class: "result-summary" }, fmt("summary_text", {
         ticks: r.ticks,
-        dmg_a: (+r.damage.a).toFixed(2),
-        dmg_b: (+r.damage.b).toFixed(2)
+        dmg_a: fmtInt(r.damage.a),
+        dmg_b: fmtInt(r.damage.b)
       }))));
   }
 
@@ -567,6 +661,7 @@
   }
 
   function init() {
+    try { state.simple = localStorage.getItem("nf_simple") === "1"; } catch (e) { /* 忽略 */ }
     loadLangText(detectLang())
       .catch(function () { return loadLangText("zh"); })
       .then(function () { renderAll(); })

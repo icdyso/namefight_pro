@@ -1,19 +1,51 @@
 {
-  "skill_count": { "min": 2, "max": 3 },
+  "skill_count": {
+    "min": 2,
+    "max": 3
+  },
   "md5_variance": {
-    "chance": [0.7, 1.35],
-    "value": [0.85, 1.25]
+    "chance": [
+      0.7,
+      1.35
+    ],
+    "value": [
+      0.85,
+      1.25
+    ]
   },
   "variable_link": {
     "chance": 0.95,
-    "linkable_types": ["damage_multiplier", "extra_strikes", "poison", "stun"],
-    "source_weights": { "own": 3, "enemy": 2 },
-    "mode_weights": { "ratio": 3, "difference": 2 },
+    "linkable_types": [
+      "damage_multiplier",
+      "extra_strikes",
+      "poison",
+      "stun",
+      "streak_bonus",
+      "overload",
+      "exploit",
+      "gamble",
+      "bleed",
+      "armor_shred"
+    ],
+    "source_weights": {
+      "own": 3,
+      "enemy": 2
+    },
+    "mode_weights": {
+      "ratio": 3,
+      "difference": 2
+    },
     "targets": {
       "damage_multiplier": "value",
       "extra_strikes": "chance",
       "poison": "damage",
       "stun": "chance",
+      "streak_bonus": "value",
+      "overload": "value",
+      "exploit": "value",
+      "gamble": "chance",
+      "bleed": "chance",
+      "armor_shred": "chance",
       "lifesteal": "value",
       "damage_reduction": "value",
       "reflect": "value",
@@ -23,58 +55,421 @@
       "low_hp_atk_bonus": "value"
     },
     "variables": {
-      "atk":   { "weight": 3, "rate": [0.25, 0.65], "diff_against": "def" },
-      "def":   { "weight": 2, "rate": [0.25, 0.65], "diff_against": "atk" },
-      "spd":   { "weight": 3, "rate": [0.25, 0.65], "diff_against": "spd" },
-      "hp":    { "weight": 2, "rate": [0.25, 0.65], "diff_against": "hp" },
-      "crit":  { "weight": 1, "rate": [0.25, 0.65], "diff_against": "dodge" },
-      "dodge": { "weight": 1, "rate": [0.25, 0.65], "diff_against": "crit" }
+      "atk": {
+        "weight": 3,
+        "rate": [
+          0.25,
+          0.65
+        ],
+        "diff_against": "def"
+      },
+      "def": {
+        "weight": 2,
+        "rate": [
+          0.25,
+          0.65
+        ],
+        "diff_against": "atk"
+      },
+      "spd": {
+        "weight": 3,
+        "rate": [
+          0.25,
+          0.65
+        ],
+        "diff_against": "spd"
+      },
+      "hp": {
+        "weight": 2,
+        "rate": [
+          0.25,
+          0.65
+        ],
+        "diff_against": "hp"
+      },
+      "crit": {
+        "weight": 1,
+        "rate": [
+          0.25,
+          0.65
+        ],
+        "diff_against": "dodge"
+      },
+      "dodge": {
+        "weight": 1,
+        "rate": [
+          0.25,
+          0.65
+        ],
+        "diff_against": "crit"
+      }
     }
   },
   "name_modifiers": {
     "prefix_chance": 0.5,
     "suffix_chance": 0.4,
-    "mod_variance": [0.7, 1.3],
+    "mod_variance": [
+      0.7,
+      1.3
+    ],
     "prefixes": [
-      { "id": "swift",    "weight": 3, "mod": { "chance": 0.03 } },
-      { "id": "fierce",   "weight": 3, "mod": { "value": 0.08 } },
-      { "id": "venomous", "weight": 2, "mod": { "damage": 1 } },
-      { "id": "lingering","weight": 1, "mod": { "turns": 1 } },
-      { "id": "vast",     "weight": 1, "mod": { "value": 0.05, "chance": 0.02 } }
+      {
+        "id": "swift",
+        "weight": 3,
+        "mod": {
+          "chance": 0.03
+        }
+      },
+      {
+        "id": "fierce",
+        "weight": 3,
+        "mod": {
+          "value": 0.08
+        }
+      },
+      {
+        "id": "venomous",
+        "weight": 2,
+        "mod": {
+          "damage": 1
+        }
+      },
+      {
+        "id": "lingering",
+        "weight": 1,
+        "mod": {
+          "turns": 1
+        }
+      },
+      {
+        "id": "vast",
+        "weight": 1,
+        "mod": {
+          "value": 0.05,
+          "chance": 0.02
+        }
+      }
     ],
     "suffixes": [
-      { "id": "breaker",   "weight": 3, "mod": { "value": 0.06 } },
-      { "id": "opportune", "weight": 3, "mod": { "chance": 0.04 } },
-      { "id": "deep",      "weight": 2, "mod": { "damage": 1 } },
-      { "id": "endless",   "weight": 1, "mod": { "turns": 1 } },
-      { "id": "surging",   "weight": 1, "mod": { "value": 0.12, "chance": -0.03 } }
+      {
+        "id": "breaker",
+        "weight": 3,
+        "mod": {
+          "value": 0.06
+        }
+      },
+      {
+        "id": "opportune",
+        "weight": 3,
+        "mod": {
+          "chance": 0.04
+        }
+      },
+      {
+        "id": "deep",
+        "weight": 2,
+        "mod": {
+          "damage": 1
+        }
+      },
+      {
+        "id": "endless",
+        "weight": 1,
+        "mod": {
+          "turns": 1
+        }
+      },
+      {
+        "id": "surging",
+        "weight": 1,
+        "mod": {
+          "value": 0.12,
+          "chance": -0.03
+        }
+      }
     ]
   },
   "skills": [
-    { "id": "heavy_strike", "weight": 10, "trigger": "on_attack",
-      "effect": { "type": "damage_multiplier", "chance": 0.18, "value": 1.6 } },
-    { "id": "execution", "weight": 6, "trigger": "on_attack",
-      "effect": { "type": "damage_multiplier", "chance": 0.3, "value": 2.0,
-                  "condition": { "type": "target_hp_below", "value": 0.35 } } },
-    { "id": "bloodthirst", "weight": 8, "trigger": "on_attack",
-      "effect": { "type": "lifesteal", "chance": 1.0, "value": 0.25 } },
-    { "id": "venom", "weight": 9, "trigger": "on_attack",
-      "effect": { "type": "poison", "chance": 0.3, "damage": 2, "turns": 3 } },
-    { "id": "stun_blow", "weight": 6, "trigger": "on_attack",
-      "effect": { "type": "stun", "chance": 0.12 } },
-    { "id": "combo", "weight": 9, "trigger": "on_attack",
-      "effect": { "type": "extra_strikes", "chance": 0.22, "ratios": [0.5] } },
-    { "id": "iron_hide", "weight": 9, "trigger": "on_defense",
-      "effect": { "type": "damage_reduction", "chance": 1.0, "value": 0.2 } },
-    { "id": "thorns", "weight": 8, "trigger": "on_defense",
-      "effect": { "type": "reflect", "chance": 1.0, "value": 0.3 } },
-    { "id": "wind_step", "weight": 10, "trigger": "passive",
-      "effect": { "type": "dodge_bonus", "value": 8 } },
-    { "id": "focus", "weight": 10, "trigger": "passive",
-      "effect": { "type": "crit_bonus", "value": 10 } },
-    { "id": "spring_heal", "weight": 8, "trigger": "on_turn_start",
-      "effect": { "type": "heal", "chance": 0.25, "value": 6 } },
-    { "id": "last_stand", "weight": 7, "trigger": "passive",
-      "effect": { "type": "low_hp_atk_bonus", "threshold": 0.3, "value": 0.5 } }
+    {
+      "id": "heavy_strike",
+      "weight": 10,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "damage_multiplier",
+        "chance": 0.14,
+        "value": 1.3
+      }
+    },
+    {
+      "id": "execution",
+      "weight": 6,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "damage_multiplier",
+        "chance": 0.35,
+        "value": 2.4,
+        "condition": {
+          "type": "target_hp_below",
+          "value": 0.35
+        }
+      }
+    },
+    {
+      "id": "bloodthirst",
+      "weight": 8,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "lifesteal",
+        "chance": 1.0,
+        "value": 0.21
+      }
+    },
+    {
+      "id": "venom",
+      "weight": 9,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "poison",
+        "chance": 0.3,
+        "damage": 2,
+        "turns": 3
+      }
+    },
+    {
+      "id": "stun_blow",
+      "weight": 6,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "stun",
+        "chance": 0.13
+      }
+    },
+    {
+      "id": "combo",
+      "weight": 9,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "extra_strikes",
+        "chance": 0.24,
+        "ratios": [
+          0.5
+        ]
+      }
+    },
+    {
+      "id": "iron_hide",
+      "weight": 9,
+      "trigger": "on_defense",
+      "effect": {
+        "type": "damage_reduction",
+        "chance": 1.0,
+        "value": 0.13
+      }
+    },
+    {
+      "id": "thorns",
+      "weight": 8,
+      "trigger": "on_defense",
+      "effect": {
+        "type": "reflect",
+        "chance": 1.0,
+        "value": 0.18
+      }
+    },
+    {
+      "id": "wind_step",
+      "weight": 10,
+      "trigger": "passive",
+      "effect": {
+        "type": "dodge_bonus",
+        "value": 10
+      }
+    },
+    {
+      "id": "focus",
+      "weight": 10,
+      "trigger": "passive",
+      "effect": {
+        "type": "crit_bonus",
+        "value": 18
+      }
+    },
+    {
+      "id": "spring_heal",
+      "weight": 8,
+      "trigger": "on_turn_start",
+      "effect": {
+        "type": "heal",
+        "chance": 0.25,
+        "value": 7
+      }
+    },
+    {
+      "id": "last_stand",
+      "weight": 7,
+      "trigger": "passive",
+      "effect": {
+        "type": "low_hp_atk_bonus",
+        "threshold": 0.3,
+        "value": 0.25
+      }
+    },
+    {
+      "id": "momentum",
+      "weight": 8,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "streak_bonus",
+        "chance": 1.0,
+        "value": 0.028,
+        "cap": 4
+      }
+    },
+    {
+      "id": "overload",
+      "weight": 7,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "overload",
+        "chance": 1.0,
+        "value": 1.3,
+        "cost": 0.11
+      }
+    },
+    {
+      "id": "rupture",
+      "weight": 8,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "armor_shred",
+        "chance": 0.25,
+        "value": 1.0,
+        "turns": 3,
+        "max_stacks": 3
+      }
+    },
+    {
+      "id": "lacerate",
+      "weight": 8,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "bleed",
+        "chance": 0.3,
+        "value": 0.2,
+        "turns": 2
+      }
+    },
+    {
+      "id": "exploit",
+      "weight": 8,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "exploit",
+        "chance": 1.0,
+        "value": 0.5
+      }
+    },
+    {
+      "id": "shadow_step",
+      "weight": 7,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "gauge_surge",
+        "chance": 1.0,
+        "value": 14
+      }
+    },
+    {
+      "id": "all_in",
+      "weight": 8,
+      "trigger": "on_attack",
+      "effect": {
+        "type": "gamble",
+        "chance": 0.35,
+        "value": 1.9,
+        "penalty": 0.7
+      }
+    },
+    {
+      "id": "bulwark",
+      "weight": 8,
+      "trigger": "on_defense",
+      "effect": {
+        "type": "bulwark",
+        "chance": 1.0,
+        "threshold": 0.7,
+        "value": 0.3
+      }
+    },
+    {
+      "id": "retribution",
+      "weight": 7,
+      "trigger": "on_defense",
+      "effect": {
+        "type": "retribution",
+        "chance": 1.0,
+        "value": 13,
+        "cap": 5
+      }
+    },
+    {
+      "id": "iron_will",
+      "weight": 6,
+      "trigger": "passive",
+      "effect": {
+        "type": "iron_will",
+        "chance": 1.0
+      }
+    },
+    {
+      "id": "purify",
+      "weight": 5,
+      "trigger": "on_turn_start",
+      "effect": {
+        "type": "cleanse",
+        "chance": 0.8,
+        "value": 7
+      }
+    },
+    {
+      "id": "late_bloom",
+      "weight": 7,
+      "trigger": "passive",
+      "effect": {
+        "type": "tempo",
+        "tick": 40,
+        "value": 3.5
+      }
+    },
+    {
+      "id": "true_sight",
+      "weight": 8,
+      "trigger": "passive",
+      "effect": {
+        "type": "armor_pen",
+        "value": 0.42
+      }
+    },
+    {
+      "id": "blood_pact",
+      "weight": 6,
+      "trigger": "passive",
+      "effect": {
+        "type": "blood_pact",
+        "cost": 0.1,
+        "value": 0.18
+      }
+    },
+    {
+      "id": "grudge",
+      "weight": 8,
+      "trigger": "on_defense",
+      "effect": {
+        "type": "grudge",
+        "chance": 1.0,
+        "value": 0.02,
+        "cap": 3
+      }
+    }
   ]
 }

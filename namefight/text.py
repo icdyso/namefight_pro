@@ -12,13 +12,13 @@ class _SafeFormatDict(dict):
 
 
 def format_pct(x: float) -> str:
-    """0.2131 -> '21.31%'；展示层统一保留 2 位小数（后台数值保持全浮点）。"""
+    """0.2131 -> '21.31%'；展示层百分数保留 2 位小数（后台数值保持全浮点）。"""
     return "%.2f%%" % (float(x) * 100.0)
 
 
 def format_num(x: float) -> str:
-    """10.0 -> '10.00'；12.3456 -> '12.35'。展示层统一保留 2 位小数。"""
-    return "%.2f" % float(x)
+    """7.82 -> '8'；95.18 -> '95'。展示层非百分数保留整数（v0.8.0 起）。"""
+    return "%.0f" % float(x)
 
 
 def resolve_params(params, locale):

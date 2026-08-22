@@ -22,6 +22,8 @@
   "playback_skip": "跳过",
   "speed_label": "速度",
   "gauge_label": "行动",
+  "simple_mode_label": "简易显示",
+  "simple_mode_title": "隐藏技能描述中的共鸣公式",
   "winner_text": "{name} 获胜！",
   "draw_text": "势均力敌，平局！",
   "summary_text": "历时 {ticks} 刻 · 红方造成 {dmg_a} 点伤害 · 蓝方造成 {dmg_b} 点伤害",

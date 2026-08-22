@@ -190,6 +190,96 @@ class FighterDeterminism(unittest.TestCase):
                     break
         self.assertGreater(found, 0, "共鸣事件应在若干场对战中出现")
 
+    def _collect_linked(self, count=25):
+        """采样获得共鸣技能的斗士（link_calc/live 文本测试用）。"""
+        linked = []
+        for i in range(200):
+            f = derive_fighter("live%03d" % i, GAME)
+            for sdef, eff in personalized_effects(f, GAME):
+                if "link" in eff:
+                    linked.append((f, sdef, eff))
+            if len(linked) >= count:
+                break
+        return linked
+
+    def test_live_text_marker_and_simple_mode(self):
+        """live 文本恰有一个 LIVE_MARKER；简易模式隐藏公式（尾句保留）。"""
+        from namefight.fighter import LIVE_MARKER, resonance_target
+        zh = load_locale(CONFIG_ROOT, "zh")
+        linked = self._collect_linked(10)
+        self.assertTrue(linked)
+        for f, sdef, eff in linked:
+            api = fighter_to_api(f, GAME, zh)
+            entry = next(s for s in api["skills"] if s["id"] == sdef.id)
+            target = resonance_target(eff, GAME)
+            if not target:
+                continue
+            self.assertIn("live_text", entry)
+            self.assertIn("live_text_simple", entry)
+            self.assertIn("link_calc", entry)
+            self.assertEqual(entry["live_text"].count(LIVE_MARKER), 1)
+            self.assertEqual(entry["live_text_simple"].count(LIVE_MARKER), 1)
+            # 简易模式：主句保留、公式（× 号）隐藏、尾句保留
+            self.assertNotIn("×", entry["text_simple"])
+            self.assertIn("×", entry["text"])
+            self.assertTrue(entry["text_simple"].endswith("。"))
+            # 变量以「当前」措辞参与描述
+            self.assertIn("当前", entry["text"])
+
+    def test_link_calc_matches_engine_resonance(self):
+        """前端实时公式（base + 变量式 × coeff + 上下限）与引擎
+        resonance_coeff + apply_resonance 逐点一致。"""
+        from namefight.battle import _live_value, _make_combatant
+        from namefight.fighter import (RESONANCE_CLAMPS, apply_resonance,
+                                       resonance_coeff, resonance_target)
+        zh = load_locale(CONFIG_ROOT, "zh")
+        linked = self._collect_linked(15)
+        enemy = _make_combatant(derive_fighter("对照者", GAME), 1, GAME)
+        checked = 0
+        for f, sdef, eff in linked:
+            target = resonance_target(eff, GAME)
+            if not target:
+                continue
+            api = fighter_to_api(f, GAME, zh)
+            entry = next(s for s in api["skills"] if s["id"] == sdef.id)
+            lc = entry["link_calc"]
+            actor = _make_combatant(f, 0, GAME)
+            # 引擎路径：按当前值计算系数并修正参数
+            coeff = resonance_coeff(lambda vid: _live_value(actor, vid),
+                                    lambda vid: _live_value(enemy, vid),
+                                    eff["link"], GAME)
+            proc = apply_resonance(eff, coeff, target)
+            # 前端路径：base + 变量式 × coeff（+ 截断）
+            if lc["mode"] == "difference":
+                expr = (_live_value(actor, lc["variable"])
+                        - _live_value(enemy, lc["against"]))
+            else:
+                src = enemy if lc["source"] == "enemy" else actor
+                expr = _live_value(src, lc["variable"])
+            value = lc["base"] + expr * lc["coeff"]
+            lo, hi = RESONANCE_CLAMPS.get(target, (None, None))
+            if lo is not None:
+                value = max(lo, value)
+            if hi is not None:
+                value = min(hi, value)
+            if target == "turns":
+                value = max(1, int(round(value)))
+            self.assertAlmostEqual(proc[target], value, places=9,
+                                   msg="技能 %s 实时公式与引擎不一致" % sdef.id)
+            checked += 1
+        self.assertGreater(checked, 5)
+
+    def test_snapshot_carries_live_attributes(self):
+        """快照含 crit/dodge：前端实时技能公式所需的全部属性可直接取用。"""
+        fa = derive_fighter("Alice", GAME)
+        fb = derive_fighter("Bob", GAME)
+        outcome = run_battle(fa, fb, GAME)
+        for e in outcome.events:
+            for side in ("a", "b"):
+                snap = e["state"][side]
+                for key in ("hp", "max_hp", "atk", "def", "spd", "crit", "dodge", "gauge"):
+                    self.assertIn(key, snap)
+
     def test_snapshots_off_matches_full_run(self):
         """极速模式（无快照）与完整模式的胜负、tick 与事件序列完全一致。"""
         fa = derive_fighter("Alice", GAME)

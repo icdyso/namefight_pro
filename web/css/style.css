@@ -48,6 +48,14 @@ body {
 }
 .lang-btn:hover { color: var(--text); border-color: rgba(255, 255, 255, .3); }
 .lang-btn.active { color: #241a05; background: var(--gold); border-color: var(--gold); }
+.simple-toggle {
+  display: flex; align-items: center; gap: 5px; cursor: pointer;
+  background: var(--panel-strong); border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 10px; font-size: 12px; font-weight: 700; color: var(--muted);
+  letter-spacing: 1px; user-select: none; transition: .18s;
+}
+.simple-toggle:hover { color: var(--text); border-color: rgba(255, 255, 255, .3); }
+.simple-box { accent-color: var(--gold); margin: 0; }
 
 /* ---------- 输入区 ---------- */
 .input-panel {
@@ -215,6 +223,13 @@ body {
 
 /* ---------- 悬停详情（技能 / buff） ---------- */
 .skill-chip, .buff-chip { position: relative; }
+
+/* 对战中实时技能数值刷新时的闪烁提示 */
+@keyframes liveFlash {
+  0% { background: rgba(255, 200, 60, .32); }
+  100% { background: var(--panel-strong); }
+}
+.skill-chip.live-flash { animation: liveFlash .6s ease-out; }
 .tip {
   display: none; position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 60;
   width: 250px; max-width: 72vw; background: #1a1f33; border: 1px solid var(--line);

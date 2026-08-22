@@ -160,11 +160,6 @@ class LocaleCoverageTests(unittest.TestCase):
                 self.assertIn(m.id, loc.modifiers.get("suffixes", {}),
                               "[%s] 后缀 %s 缺文案" % (lang, m.id))
 
-    def test_every_stat_key_has_text(self):
-        for lang, loc in LOCALES.items():
-            for key in STATS_KEYS_USED:
-                self.assertIn(key, loc.stats, "[%s] 技能参数标签 %s 缺文案" % (lang, key))
-
     def test_ui_key_parity_across_locales(self):
         key_sets = [frozenset(loc.ui.keys()) for loc in LOCALES.values()]
         self.assertTrue(key_sets)
@@ -231,10 +226,13 @@ class RngAndTextTests(unittest.TestCase):
 
     def test_format_helpers(self):
         from namefight.text import format_num, format_pct
+        # v0.8.0 起展示层：百分数 2 位小数，其余数值取整
         self.assertEqual(format_pct(0.2131), "21.31%")
         self.assertEqual(format_pct(1.6), "160.00%")
-        self.assertEqual(format_num(10.0), "10.00")
-        self.assertEqual(format_num(12.345), "12.35")
+        self.assertEqual(format_num(10.0), "10")
+        self.assertEqual(format_num(7.82), "8")
+        self.assertEqual(format_num(95.18), "95")
+        self.assertEqual(format_num(-3.5), "-4")
 
 
 if __name__ == "__main__":

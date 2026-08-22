@@ -23,6 +23,7 @@ _FIELD_LOCALE = {"prefix": "prefixes", "core": "cores", "core2": "cores", "suffi
 # 技能参数标签模板键（测试据此校验每个 locale 都有对应文案）
 STATS_KEYS_USED = frozenset({
     "link_sep", "link_ratio", "link_difference", "link_formula",
+    "link_expr_difference", "current_word",
     "scope_own", "scope_enemy", "mode_ratio", "mode_difference",
     "mod_chance", "mod_value", "mod_damage", "mod_turns",
     "field_chance", "field_value", "field_damage", "field_turns",
@@ -30,7 +31,37 @@ STATS_KEYS_USED = frozenset({
     "nat_damage_multiplier", "nat_execution", "nat_lifesteal", "nat_poison",
     "nat_stun", "nat_extra_strikes", "nat_damage_reduction", "nat_reflect",
     "nat_dodge_bonus", "nat_crit_bonus", "nat_heal", "nat_low_hp_atk_bonus",
+    "nat_streak_bonus", "nat_overload", "nat_armor_shred", "nat_bleed",
+    "nat_exploit", "nat_gauge_surge", "nat_gamble", "nat_bulwark",
+    "nat_retribution", "nat_iron_will", "nat_cleanse", "nat_tempo",
+    "nat_armor_pen", "nat_blood_pact", "nat_grudge",
 })
+
+# 对战实时技能数据的占位符：live 文本中主句数值位替换为该标记，
+# 前端按快照实时计算最终值后替换回文本（JSON 转义为 \u0001）
+LIVE_MARKER = "\x01"
+
+# 共鸣修正字段的展示上下限（与 apply_resonance 保持一致，前端实时计算复用）
+RESONANCE_CLAMPS = {
+    "chance": (0.02, 0.95),
+    "value": (0.05, 5.0),
+    "damage": (0.0, None),
+    "turns": (None, None),
+}
+
+# 共鸣字段 -> 主句模板参数名（live 文本中该参数位替换为 LIVE_MARKER）
+_SLOT_BY_TYPE = {
+    ("damage_multiplier", "value"): "mult",
+    ("extra_strikes", "chance"): "chance",
+    ("poison", "damage"): "damage",
+    ("stun", "chance"): "chance",
+    ("streak_bonus", "value"): "value",
+    ("overload", "value"): "mult",
+    ("exploit", "value"): "value",
+    ("gamble", "chance"): "chance",
+    ("bleed", "chance"): "chance",
+    ("armor_shred", "chance"): "chance",
+}
 
 
 class InvalidName(Exception):
@@ -268,95 +299,206 @@ def title_bonus_items(title_fields, structure, game: GameCfg):
     return items
 
 
-def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale) -> str:
-    """标准化自然语言描述：参数为共鸣修正后的最终值（敌方按基础值估算），
-    共鸣部分追加「XX越XX / XX高于XX越多」句式与内联公式。"""
-    display_eff, coeff, target = estimated_resonanced_eff(fighter, eff, game)
-    tmpl = locale.stats
+def _nat_params(display_eff: dict):
+    """效果类型 -> (模板键, 模板参数)。数值均为共鸣估算后的展示值：
+    百分数 2 位小数（format_pct），其余取整（format_num）。"""
     ttype = display_eff.get("type")
     chance = float(display_eff.get("chance", 1.0))
-    key = "nat_" + str(ttype)
-    params = {}
     if ttype == "damage_multiplier":
         cond = display_eff.get("condition")
         if cond:
-            key = "nat_execution"
-            params = {"chance": format_pct(chance), "mult": format_pct(float(display_eff.get("value", 1.0))),
-                      "threshold": format_pct(float(cond.get("value", 0)))}
-        else:
-            params = {"chance": format_pct(chance), "mult": format_pct(float(display_eff.get("value", 1.0)))}
-    elif ttype == "lifesteal":
-        params = {"value": format_pct(float(display_eff.get("value", 0.0)))}
-    elif ttype == "poison":
-        params = {"chance": format_pct(chance),
-                  "damage": format_num(float(display_eff.get("damage", 0))),
-                  "turns": int(display_eff.get("turns", 0))}
-    elif ttype == "stun":
-        params = {"chance": format_pct(chance)}
-    elif ttype == "extra_strikes":
+            return "nat_execution", {
+                "chance": format_pct(chance),
+                "mult": format_pct(float(display_eff.get("value", 1.0))),
+                "threshold": format_pct(float(cond.get("value", 0)))}
+        return "nat_damage_multiplier", {
+            "chance": format_pct(chance),
+            "mult": format_pct(float(display_eff.get("value", 1.0)))}
+    if ttype == "lifesteal":
+        return "nat_lifesteal", {"value": format_pct(float(display_eff.get("value", 0.0)))}
+    if ttype == "poison":
+        return "nat_poison", {
+            "chance": format_pct(chance),
+            "damage": format_num(float(display_eff.get("damage", 0))),
+            "turns": int(display_eff.get("turns", 0))}
+    if ttype == "stun":
+        return "nat_stun", {"chance": format_pct(chance)}
+    if ttype == "extra_strikes":
         ratios = display_eff.get("ratios", [])
-        params = {"chance": format_pct(chance),
-                  "extra": format_pct(float(ratios[0]) if ratios else 0.0)}
-    elif ttype == "damage_reduction":
-        params = {"value": format_pct(float(display_eff.get("value", 0.0)))}
-    elif ttype == "reflect":
-        params = {"value": format_pct(float(display_eff.get("value", 0.0)))}
-    elif ttype == "dodge_bonus":
-        params = {"value": format_num(float(display_eff.get("value", 0.0)))}
-    elif ttype == "crit_bonus":
-        params = {"value": format_num(float(display_eff.get("value", 0.0)))}
-    elif ttype == "heal":
-        params = {"chance": format_pct(chance),
-                  "value": format_num(float(display_eff.get("value", 0)))}
-    elif ttype == "low_hp_atk_bonus":
-        params = {"threshold": format_pct(float(display_eff.get("threshold", 0.3))),
-                  "value": format_pct(float(display_eff.get("value", 0.5)))}
+        return "nat_extra_strikes", {
+            "chance": format_pct(chance),
+            "extra": format_pct(float(ratios[0]) if ratios else 0.0)}
+    if ttype == "damage_reduction":
+        return "nat_damage_reduction", {"value": format_pct(float(display_eff.get("value", 0.0)))}
+    if ttype == "reflect":
+        return "nat_reflect", {"value": format_pct(float(display_eff.get("value", 0.0)))}
+    if ttype == "dodge_bonus":
+        return "nat_dodge_bonus", {"value": format_num(float(display_eff.get("value", 0.0)))}
+    if ttype == "crit_bonus":
+        return "nat_crit_bonus", {"value": format_num(float(display_eff.get("value", 0.0)))}
+    if ttype == "heal":
+        return "nat_heal", {
+            "chance": format_pct(chance),
+            "value": format_num(float(display_eff.get("value", 0)))}
+    if ttype == "low_hp_atk_bonus":
+        return "nat_low_hp_atk_bonus", {
+            "threshold": format_pct(float(display_eff.get("threshold", 0.3))),
+            "value": format_pct(float(display_eff.get("value", 0.5)))}
+    # ---- v0.8.0 新增效果 ----
+    if ttype == "streak_bonus":
+        return "nat_streak_bonus", {
+            "value": format_pct(float(display_eff.get("value", 0.0))),
+            "cap": int(display_eff.get("cap", 0))}
+    if ttype == "overload":
+        return "nat_overload", {
+            "cost": format_pct(float(display_eff.get("cost", 0.0))),
+            "mult": format_pct(float(display_eff.get("value", 1.0)))}
+    if ttype == "armor_shred":
+        return "nat_armor_shred", {
+            "chance": format_pct(chance),
+            "value": format_num(float(display_eff.get("value", 0))),
+            "turns": int(display_eff.get("turns", 0)),
+            "max_stacks": int(display_eff.get("max_stacks", 0))}
+    if ttype == "bleed":
+        return "nat_bleed", {
+            "chance": format_pct(chance),
+            "value": format_pct(float(display_eff.get("value", 0.0))),
+            "turns": int(display_eff.get("turns", 0))}
+    if ttype == "exploit":
+        return "nat_exploit", {"value": format_pct(float(display_eff.get("value", 0.0)))}
+    if ttype == "gauge_surge":
+        return "nat_gauge_surge", {"value": format_num(float(display_eff.get("value", 0)))}
+    if ttype == "gamble":
+        return "nat_gamble", {
+            "chance": format_pct(chance),
+            "mult": format_pct(float(display_eff.get("value", 1.0))),
+            "penalty": format_pct(float(display_eff.get("penalty", 1.0)))}
+    if ttype == "bulwark":
+        return "nat_bulwark", {
+            "threshold": format_pct(float(display_eff.get("threshold", 0.0))),
+            "value": format_pct(float(display_eff.get("value", 0.0)))}
+    if ttype == "retribution":
+        return "nat_retribution", {
+            "value": format_num(float(display_eff.get("value", 0))),
+            "cap": int(display_eff.get("cap", 0))}
+    if ttype == "iron_will":
+        return "nat_iron_will", {}
+    if ttype == "cleanse":
+        return "nat_cleanse", {"chance": format_pct(chance)}
+    if ttype == "tempo":
+        return "nat_tempo", {
+            "tick": int(display_eff.get("tick", 0)),
+            "value": format_num(float(display_eff.get("value", 0)))}
+    if ttype == "armor_pen":
+        return "nat_armor_pen", {"value": format_pct(float(display_eff.get("value", 0.0)))}
+    if ttype == "blood_pact":
+        return "nat_blood_pact", {
+            "cost": format_pct(float(display_eff.get("cost", 0.0))),
+            "value": format_pct(float(display_eff.get("value", 0.0)))}
+    if ttype == "grudge":
+        return "nat_grudge", {
+            "value": format_pct(float(display_eff.get("value", 0.0))),
+            "cap": int(display_eff.get("cap", 0))}
+    return "nat_" + str(ttype), {}
+
+
+def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale,
+                  simple: bool = False, live: bool = False) -> str:
+    """标准化自然语言描述。参数为共鸣修正后的最终值（敌方按基础值估算）：
+
+    - simple=True：简易显示模式，隐藏主句内联公式（尾句保留）；
+    - live=True：主句的共鸣数值位替换为 LIVE_MARKER，供前端按快照实时填充。
+    """
+    display_eff, coeff, target = estimated_resonanced_eff(fighter, eff, game)
+    tmpl = locale.stats
+    key, raw_params = _nat_params(display_eff)
+    params = dict(raw_params)
     params.setdefault("link", "")
-    text = render_template(tmpl.get(key, key), params, locale)
+    sentence = ""
     if target:
         formula, sentence = _link_parts(eff, eff["link"], target, game, locale)
-        if formula:
+        if formula and not simple:
             params["link"] = formula
-            text = render_template(tmpl.get(key, key), params, locale)
-        if sentence:
-            text = text + sentence
+        if live:
+            slot = _SLOT_BY_TYPE.get((str(eff.get("type")), target))
+            if slot and slot in params:
+                params[slot] = LIVE_MARKER
+    text = render_template(tmpl.get(key, key), params, locale)
+    if sentence:
+        text = text + sentence
     return text
 
 
 def _link_parts(eff: dict, link: dict, target: str, game: GameCfg, locale):
     """共鸣描述两部分：
 
-    1. 内联线性公式（注入主句 {link} 占位符）：
-       最终值 = 基数 + 基数 × 变量式 × 单位系数（rate ÷ 基础值），数值均 2 位小数；
-    2. 尾句依赖描述：「XX越XX，字段越高。」/「XX高于XX越多，字段越高。」
+    1. 内联最简线性公式（注入主句 {link} 占位符）：
+       最终值 = 基数 +（变量式）× 合并系数（基数 × rate ÷ 变量基础值）；
+       变量式以「当前」值描述——比例：单变量；差值：己方当前X − 敌方当前Y；
+    2. 尾句依赖描述：「XX当前越高，字段越高。」/「XX当前高于XX当前越多，字段越高。」
     """
     tmpl = locale.stats
     var_id = link.get("variable")
     var_name = locale.attributes.get(var_id, {}).get("name", var_id)
     base = game.attr(var_id).base if var_id else 1
+    current = str(tmpl.get("current_word", ""))
     scope_own = str(tmpl.get("scope_own", ""))
     scope_enemy = str(tmpl.get("scope_enemy", ""))
     field = str(tmpl.get("field_" + target, target))
-    per_unit = format_pct(float(link.get("rate", 0.0)) / max(1, base))
     base_display = format_resonance_final(eff.get(target), target, locale)
+    merged = format_pct(float(eff.get(target, 0.0)) * float(link.get("rate", 0.0))
+                        / max(1, base))
     if link.get("mode") == "difference":
         vdef = next((v for v in game.skill_variable_link.variables if v.id == var_id), None)
         against = vdef.diff_against if vdef else var_id
         against_name = locale.attributes.get(against, {}).get("name", against)
-        expr = scope_own + var_name + " − " + scope_enemy + against_name
+        own_full = scope_own + current + var_name
+        enemy_full = scope_enemy + current + against_name
+        expr = render_template(tmpl.get("link_expr_difference", "{own}−{enemy}"),
+                               {"own": own_full, "enemy": enemy_full}, locale)
         sentence = render_template(tmpl.get("link_difference", ""),
-                                   {"own": scope_own + var_name,
-                                    "enemy": scope_enemy + against_name,
+                                   {"own": own_full, "enemy": enemy_full,
                                     "field": field}, locale)
     else:
         scope = scope_enemy if link.get("source") == "enemy" else scope_own
-        expr = scope + var_name
+        expr = scope + current + var_name
         sentence = render_template(tmpl.get("link_ratio", ""),
                                    {"stat": expr, "field": field}, locale)
     formula = render_template(tmpl.get("link_formula", ""),
-                              {"base": base_display, "expr": expr, "per": per_unit},
+                              {"base": base_display, "expr": expr, "merged": merged},
                               locale)
     return formula, sentence
+
+
+def _link_calc(eff: dict, target: str, game: GameCfg) -> dict:
+    """对战实时技能数据：前端按公式 最终值 = base + 变量式 × coeff（含上下限）
+    用双方快照逐刻重算主句数值，与引擎 resonance_coeff + apply_resonance 完全一致。"""
+    link = eff["link"]
+    var_id = str(link.get("variable"))
+    try:
+        base = max(1, game.attr(var_id).base)
+    except Exception:
+        base = 1
+    against = var_id
+    if link.get("mode") == "difference":
+        vdef = next((v for v in game.skill_variable_link.variables
+                     if v.id == var_id), None)
+        against = vdef.diff_against if vdef else var_id
+    fmt = {"chance": "pct", "value": "pct",
+           "damage": "num", "turns": "turns"}.get(target, "pct")
+    lo, hi = RESONANCE_CLAMPS.get(target, (None, None))
+    value = float(eff.get(target, 0.0))
+    return {
+        "field": target,
+        "fmt": fmt,
+        "base": value,
+        "coeff": value * float(link.get("rate", 0.0)) / base,
+        "mode": str(link.get("mode", "ratio")),
+        "source": str(link.get("source", "own")),
+        "variable": var_id,
+        "against": against,
+        "clamp": [lo, hi],
+    }
 
 
 _MOD_TEMPLATES = {"chance": "mod_chance", "value": "mod_value",
@@ -500,14 +642,22 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
                 "mode": link.get("mode", "ratio"),
                 "rate": link.get("rate", 0),
             }
-        skills_api.append({
+        target = resonance_target(eff, game)
+        skill_entry = {
             "id": sdef.id,
             "name": name,
             "flavor": entry.get("description", ""),
             "text": _natural_text(eff, fighter, game, locale),
+            "text_simple": _natural_text(eff, fighter, game, locale, simple=True),
             "modifiers": _mod_texts(eff, game, locale),
             "link": link_api,
-        })
+        }
+        if target:
+            skill_entry["live_text"] = _natural_text(eff, fighter, game, locale, live=True)
+            skill_entry["live_text_simple"] = _natural_text(
+                eff, fighter, game, locale, simple=True, live=True)
+            skill_entry["link_calc"] = _link_calc(eff, target, game)
+        skills_api.append(skill_entry)
     elem = locale.elements.get(fighter.element_id, {})
     title_bonus = _title_bonus_api(fighter, game, locale)
     return {
