@@ -12,5 +12,13 @@
   "crit": "暴击 +{v}",
   "heal": "回复 {v} 生命",
   "threshold": "生命低于 {v} 时",
-  "atk_bonus": "攻击 +{v}"
+  "atk_bonus": "攻击 +{v}",
+  "link": "共鸣{stat} · 附伤 +{v}",
+  "link_sep": "·",
+  "link_atk": "锋",
+  "link_def": "坚",
+  "link_spd": "疾",
+  "link_hp": "命",
+  "link_crit": "锐",
+  "link_dodge": "影"
 }

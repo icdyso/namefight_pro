@@ -1,7 +1,12 @@
 {
-  "poison":     { "name": "中毒",     "detail": "每次行动损失 {damage} 点生命（剩 {turns} 次）" },
-  "stun":       { "name": "眩晕",     "detail": "下次行动被跳过" },
-  "last_stand": { "name": "背水一战", "detail": "攻击 +{value}" },
-  "crit_up":    { "name": "会心",     "detail": "暴击 +{value}" },
-  "dodge_up":   { "name": "轻灵",     "detail": "闪避 +{value}" }
+  "poison":     { "name": "中毒",     "detail": "每次行动损失 {damage} 点生命（剩 {turns} 次）",
+                  "desc": "中毒期间每次行动都会失去生命。" },
+  "stun":       { "name": "眩晕",     "detail": "下次行动被跳过",
+                  "desc": "眩晕将消耗一次行动。" },
+  "last_stand": { "name": "背水一战", "detail": "攻击 +{value}",
+                  "desc": "濒危时爆发的斗志，攻击力提升。" },
+  "crit_up":    { "name": "会心",     "detail": "暴击 +{value}",
+                  "desc": "来自被动技能的暴击提升。" },
+  "dodge_up":   { "name": "轻灵",     "detail": "闪避 +{value}",
+                  "desc": "来自被动技能的闪避提升。" }
 }

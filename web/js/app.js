@@ -199,11 +199,13 @@
   function skipPlayback() {
     if (!state.battle) return;
     stopPlayback();
+    state.skipping = true;
     var log = state.battle.log;
     while (state.shown < log.length) {
       appendLogEntry(log[state.shown]);
       state.shown++;
     }
+    state.skipping = false;
     showResult();
     renderControls();
   }
@@ -323,20 +325,29 @@
     });
 
     var skillNodes = f.skills.map(function (s) {
-      return NF.h("div", { class: "skill-chip", title: s.description },
+      return NF.h("div", { class: "skill-chip" },
         NF.h("div", { class: "skill-name" }, s.name),
         s.description ? NF.h("div", { class: "skill-desc" }, s.description) : null,
         s.stats && s.stats.length
-          ? NF.h("div", { class: "skill-stats" }, s.stats.join(" · ")) : null);
+          ? NF.h("div", { class: "skill-stats" }, s.stats.join(" · ")) : null,
+        NF.h("div", { class: "tip" },
+          NF.h("div", { class: "tip-title" }, s.name),
+          s.detail ? NF.h("div", { class: "tip-line" }, s.detail) : null,
+          s.description ? NF.h("div", { class: "tip-line muted" }, s.description) : null,
+          s.stats && s.stats.length
+            ? NF.h("div", { class: "tip-stats" }, s.stats.join(" · ")) : null));
     });
 
     return NF.h("div", { class: "fighter-card side-" + side },
       NF.h("div", { class: "card-head" },
-        NF.h("div", { class: "card-id" },
-          NF.h("h2", { class: "fighter-name" }, f.name),
-          NF.h("div", { class: "fighter-title" }, f.title.name),
-          f.title.description
-            ? NF.h("div", { class: "title-desc" }, f.title.description) : null),
+      NF.h("div", { class: "card-id" },
+        NF.h("h2", { class: "fighter-name" }, f.name),
+        NF.h("div", { class: "fighter-title" }, f.title.name),
+        f.title.description
+          ? NF.h("div", { class: "title-desc" }, f.title.description) : null,
+        f.title.bonuses_text
+          ? NF.h("div", { class: "title-bonus" },
+              fmt("title_bonus_label", { bonuses: f.title.bonuses_text })) : null),
         NF.h("div", { class: "fighter-power" },
           NF.h("div", { class: "power-value" }, String(f.power)),
           NF.h("div", { class: "power-label" }, t("power_label")))),
@@ -380,9 +391,9 @@
     els.battlePanel.appendChild(els.logBox);
     els.battlePanel.appendChild(els.resultBox);
     renderControls();
-    // 开战前的初始状态（满血 + 常驻被动）
+    // 开战前的初始状态（满血 + 常驻被动），瞬时应用
     if (state.battle.log.length && state.battle.log[0].state) {
-      applyBattleState(state.battle.log[0].state);
+      applyBattleState(state.battle.log[0].state, true);
     }
   }
 
@@ -418,7 +429,7 @@
     return refs;
   }
 
-  function applyHudState(refs, snap) {
+  function applyHudState(refs, snap, instant) {
     if (!refs || !snap) return;
     var hpPct = snap.max_hp > 0 ? (snap.hp / snap.max_hp * 100) : 0;
     refs.hpFill.style.width = Math.max(0, Math.min(100, hpPct)) + "%";
@@ -428,21 +439,43 @@
     refs.spdVal.textContent = String(snap.spd);
     var boosted = (snap.buffs || []).some(function (b) { return b.id === "last_stand"; });
     refs.atkStat.classList.toggle("atk-boost", boosted);
-    refs.gaugeFill.style.width = Math.max(0, Math.min(100, snap.gauge)) + "%";
-    NF.clear(refs.buffs);
-    (snap.buffs || []).forEach(function (b) {
-      var debuff = b.id === "poison" || b.id === "stun";
-      refs.buffs.appendChild(NF.h("span", {
-        class: "buff-chip" + (debuff ? " debuff" : ""),
-        title: b.detail
-      }, b.name));
-    });
+    // 行动槽平滑推进：上升时按回放节奏线性过渡，行动消耗时快速回落，跳过时瞬时
+    var gauge = Math.max(0, Math.min(100, snap.gauge));
+    var prev = refs._gauge == null ? gauge : refs._gauge;
+    refs._gauge = gauge;
+    var duration;
+    if (instant || gauge === prev) {
+      duration = 0;
+    } else if (gauge < prev) {
+      duration = 150;
+    } else {
+      duration = Math.max(40, BASE_INTERVAL / state.speed);
+    }
+    refs.gaugeFill.style.transition = duration > 0
+      ? "width " + duration + "ms linear" : "none";
+    refs.gaugeFill.style.width = gauge + "%";
+    // buff 差量刷新：集合未变化时不重建，避免闪烁
+    var sig = JSON.stringify(snap.buffs || []);
+    if (refs._buffSig !== sig) {
+      refs._buffSig = sig;
+      NF.clear(refs.buffs);
+      (snap.buffs || []).forEach(function (b) {
+        var debuff = b.id === "poison" || b.id === "stun";
+        refs.buffs.appendChild(NF.h("span", {
+          class: "buff-chip" + (debuff ? " debuff" : "")
+        }, b.name,
+          NF.h("div", { class: "tip" },
+            NF.h("div", { class: "tip-title" }, b.name),
+            b.detail ? NF.h("div", { class: "tip-line" }, b.detail) : null,
+            b.desc ? NF.h("div", { class: "tip-line muted" }, b.desc) : null)));
+      });
+    }
   }
 
-  function applyBattleState(battleState) {
+  function applyBattleState(battleState, instant) {
     if (!battleState || !els.hud) return;
-    applyHudState(els.hud.a, battleState.a);
-    applyHudState(els.hud.b, battleState.b);
+    applyHudState(els.hud.a, battleState.a, instant);
+    applyHudState(els.hud.b, battleState.b, instant);
   }
 
   function renderControls() {
@@ -472,7 +505,7 @@
     else if (entry.template === "victory" || entry.template === "draw") cls += " log-result";
     els.logBox.appendChild(NF.h("div", { class: cls }, entry.text));
     els.logBox.scrollTop = els.logBox.scrollHeight;
-    if (entry.state) applyBattleState(entry.state);
+    if (entry.state) applyBattleState(entry.state, !!state.skipping);
   }
 
   function showResult() {

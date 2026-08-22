@@ -45,6 +45,29 @@ class GameConfigTests(unittest.TestCase):
         self.assertLessEqual(var.chance_lo, var.chance_hi)
         self.assertLessEqual(var.value_lo, var.value_hi)
 
+    def test_variable_link_sane(self):
+        link = GAME.skill_variable_link
+        self.assertTrue(0.0 <= link.chance <= 1.0)
+        attr_ids = {a.id for a in GAME.attributes}
+        for v in link.variables:
+            self.assertIn(v.id, attr_ids, "共鸣变量 %s 不是已定义属性" % v.id)
+            self.assertGreater(v.weight, 0)
+            self.assertLessEqual(v.rate_lo, v.rate_hi)
+            self.assertGreaterEqual(v.rate_lo, 0)
+        if link.chance > 0:
+            self.assertTrue(link.variables)
+            for t in link.linkable_types:
+                self.assertIn(t, SUPPORTED_EFFECTS,
+                              "可共鸣类型 %s 不是引擎支持的效果" % t)
+
+    def test_title_bonuses_reference_known_attributes(self):
+        attr_ids = {a.id for a in GAME.attributes}
+        for pool in GAME.title_pools.values():
+            for fdef in pool:
+                for attr_id, delta in fdef.bonus.items():
+                    self.assertIn(attr_id, attr_ids)
+                    self.assertIsInstance(delta, int)
+
     def test_title_structures_reference_valid_fields(self):
         for s in GAME.title_structures:
             self.assertTrue(s.fields)
@@ -78,6 +101,8 @@ class LocaleCoverageTests(unittest.TestCase):
             for s in GAME.skills:
                 self.assertIn(s.id, loc.skills, "[%s] 技能 %s 缺文案" % (lang, s.id))
                 self.assertIn("description", loc.skills[s.id])
+                self.assertIn("detail", loc.skills[s.id],
+                              "[%s] 技能 %s 缺详细描述" % (lang, s.id))
             for pool_name, pool_key in _TITLE_POOL_LOCALE.items():
                 for fdef in GAME.title_pools[pool_name]:
                     entry = loc.titles.get(pool_key, {}).get(fdef.id)
@@ -98,6 +123,15 @@ class LocaleCoverageTests(unittest.TestCase):
                 self.assertIsNotNone(entry, "[%s] buff %s 缺文案" % (lang, buff_id))
                 self.assertIn("name", entry)
                 self.assertIn("detail", entry)
+                self.assertIn("desc", entry, "[%s] buff %s 缺详细说明" % (lang, buff_id))
+
+    def test_every_stat_key_has_text(self):
+        for lang, loc in LOCALES.items():
+            for key in STATS_KEYS_USED:
+                self.assertIn(key, loc.stats, "[%s] 技能参数标签 %s 缺文案" % (lang, key))
+            for v in GAME.skill_variable_link.variables:
+                self.assertIn("link_" + v.id, loc.stats,
+                              "[%s] 共鸣标记 link_%s 缺文案" % (lang, v.id))
 
     def test_every_stat_key_has_text(self):
         for lang, loc in LOCALES.items():

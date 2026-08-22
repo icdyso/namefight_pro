@@ -12,5 +12,13 @@
   "crit": "Crit +{v}",
   "heal": "Heal {v} HP",
   "threshold": "Below {v} HP",
-  "atk_bonus": "ATK +{v}"
+  "atk_bonus": "ATK +{v}",
+  "link": "Resonates with {stat}: +{v} bonus damage",
+  "link_sep": "·",
+  "link_atk": "Blade",
+  "link_def": "Guard",
+  "link_spd": "Swift",
+  "link_hp": "Vital",
+  "link_crit": "Keen",
+  "link_dodge": "Shade"
 }

@@ -13,6 +13,7 @@
   "skills_title": "技 能",
   "power_label": "战力",
   "md5_label": "MD5 {digest}",
+  "title_bonus_label": "称号加成：{bonuses}",
   "empty_card_title": "尚无斗士",
   "empty_card_hint": "输入名字后点击「生成属性」",
   "battle_title": "战斗实录",

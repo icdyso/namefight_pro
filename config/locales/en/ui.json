@@ -13,6 +13,7 @@
   "skills_title": "SKILLS",
   "power_label": "Power",
   "md5_label": "MD5 {digest}",
+  "title_bonus_label": "Title bonus: {bonuses}",
   "empty_card_title": "No fighter yet",
   "empty_card_hint": "Enter a name and click \"Reveal Stats\"",
   "battle_title": "Battle Log",

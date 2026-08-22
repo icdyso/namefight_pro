@@ -4,6 +4,18 @@
     "chance": [0.7, 1.35],
     "value": [0.85, 1.25]
   },
+  "variable_link": {
+    "chance": 0.6,
+    "linkable_types": ["damage_multiplier", "extra_strikes", "poison", "stun"],
+    "variables": {
+      "atk":   { "weight": 3, "rate": [0.2, 0.5] },
+      "def":   { "weight": 2, "rate": [0.4, 1.0] },
+      "spd":   { "weight": 3, "rate": [0.3, 0.7] },
+      "hp":    { "weight": 2, "rate": [0.03, 0.08] },
+      "crit":  { "weight": 1, "rate": [0.15, 0.35] },
+      "dodge": { "weight": 1, "rate": [0.2, 0.5] }
+    }
+  },
   "skills": [
     { "id": "heavy_strike", "weight": 10, "trigger": "on_attack",
       "effect": { "type": "damage_multiplier", "chance": 0.18, "value": 1.6 } },

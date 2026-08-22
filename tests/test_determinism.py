@@ -14,8 +14,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from namefight.battle import run_battle
 from namefight.config import load_game_config, load_locale
-from namefight.fighter import (derive_fighter, fighter_to_api,
-                               personalized_effects)
+from namefight.fighter import (derive_fighter, fighter_to_api, link_bonus,
+                               personalized_effects, title_bonus_items)
 
 CONFIG_ROOT = REPO_ROOT / "config"
 GAME = load_game_config(CONFIG_ROOT)
@@ -107,6 +107,54 @@ class FighterDeterminism(unittest.TestCase):
         for fname, fid in f.title_fields.items():
             expected = loc.titles[pool_key[fname]][fid]["name"]
             self.assertIn(expected, name)
+
+    def test_title_bonuses_applied(self):
+        for i in range(10):
+            f = derive_fighter("bonus%02d" % i, GAME)
+            structure = next(s for s in GAME.title_structures
+                             if s.id == f.title_structure_id)
+            deltas = {}
+            for attr_id, delta in title_bonus_items(f.title_fields, structure, GAME):
+                deltas[attr_id] = deltas.get(attr_id, 0) + delta
+            api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+            # API 展示的加成与配置一致
+            self.assertEqual({b["attr"]: b["value"] for b in api["title"]["bonuses"]},
+                             {k: v for k, v in deltas.items() if v != 0})
+            # 派生属性不小于 1
+            for attr_id, value in f.attrs.items():
+                self.assertGreaterEqual(value, 1)
+
+    def test_variable_link_varies_and_matches_display(self):
+        linked_names = []
+        for i in range(30):
+            f = derive_fighter("linker%02d" % i, GAME)
+            for sdef, eff in personalized_effects(f, GAME):
+                if "link" in eff:
+                    self.assertIn(eff["link"]["variable"], f.attrs)
+                    rate = eff["link"]["rate"]
+                    vdef = next(v for v in GAME.skill_variable_link.variables
+                                if v.id == eff["link"]["variable"])
+                    self.assertGreaterEqual(rate, vdef.rate_lo - 1e-9)
+                    self.assertLessEqual(rate, vdef.rate_hi + 1e-9)
+                    linked_names.append((f, sdef, eff))
+        self.assertTrue(linked_names, "应有技能获得变量共鸣")
+        # 展示的附伤 = 引擎使用的附伤（同一确定性函数）
+        f, sdef, eff = linked_names[0]
+        self.assertEqual(linked_names[0][2].get("link") and link_bonus(f, eff),
+                         link_bonus(f, eff))
+        api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+        entry = next(s for s in api["skills"] if s["id"] == sdef.id)
+        self.assertEqual(entry["link"]["bonus"], link_bonus(f, eff))
+
+    def test_effect_link_appears_in_battles(self):
+        found = 0
+        for i in range(20):
+            fa = derive_fighter("linkA%02d" % i, GAME)
+            fb = derive_fighter("linkB%02d" % i, GAME)
+            outcome = run_battle(fa, fb, GAME)
+            if any(e["template"] == "effect_link" for e in outcome.events):
+                found += 1
+        self.assertGreater(found, 0, "共鸣事件应在若干场对战中出现")
 
 
 class BattleDeterminism(unittest.TestCase):

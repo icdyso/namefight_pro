@@ -24,7 +24,7 @@ _FIELD_LOCALE = {"prefix": "prefixes", "core": "cores", "core2": "cores", "suffi
 STATS_KEYS_USED = frozenset({
     "chance", "mult", "lifesteal", "poison_damage", "poison_turns", "stun",
     "extra", "reduction", "reflect", "dodge", "crit", "heal", "threshold",
-    "atk_bonus",
+    "atk_bonus", "link", "link_sep",
 })
 
 
@@ -96,6 +96,10 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
         if fname == "core":
             core_id = item.id
 
+    # 称号字段小额加成（不消耗随机数，纯查表；在稀有度倍率之后应用）
+    for attr_id, delta in title_bonus_items(title_fields, structure, game):
+        attrs[attr_id] = max(1, attrs[attr_id] + delta)
+
     power = round(sum(attrs[a.id] * a.power_weight for a in game.attributes))
     return Fighter(
         name=raw_name if isinstance(raw_name, str) and raw_name else normalized,
@@ -110,9 +114,13 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
     """技能个性化：以 md5(规范化名字:技能id) 为种子，对触发概率与数值施加
     确定性扰动（区间见 config/game/skills.json 的 md5_variance）。
 
+    消耗顺序固定：chance -> value -> damage ->（仅可共鸣类型）是否共鸣 ->
+    共鸣变量 -> 共鸣倍率。
+
     返回 [(SkillDef, 个性化后的效果dict), ...]，顺序与 fighter.skill_ids 一致。
     """
     var = game.skill_md5_variance
+    link_cfg = game.skill_variable_link
     out = []
     for sid in fighter.skill_ids:
         sdef = next(s for s in game.skills if s.id == sid)
@@ -127,11 +135,39 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
             if key in eff:
                 factor = var.value_lo + rng.next_float() * (var.value_hi - var.value_lo)
                 eff[key] = round(float(eff[key]) * factor, 4)
+        if link_cfg.chance > 0 and eff.get("type") in link_cfg.linkable_types:
+            if rng.next_float() < link_cfg.chance:
+                vdef = rng.pick_weighted((v, v.weight) for v in link_cfg.variables)
+                rate = vdef.rate_lo + rng.next_float() * (vdef.rate_hi - vdef.rate_lo)
+                eff["link"] = {"variable": vdef.id, "rate": round(rate, 4)}
         out.append((sdef, eff))
     return out
 
 
-def _skill_stats(eff: dict, locale) -> list:
+def link_bonus(fighter: Fighter, eff: dict) -> int:
+    """技能共鸣的附伤数值 = 斗士自身属性值 × 共鸣倍率（确定性、可展示）。"""
+    link = eff.get("link")
+    if not link:
+        return 0
+    stat = fighter.attrs.get(link["variable"], 0)
+    return max(0, round(stat * float(link["rate"])))
+
+
+def title_bonus_items(title_fields, structure, game: GameCfg):
+    """按结构字段顺序展开称号加成 [(属性id, 加成值), ...]（不去重，直接叠加）。"""
+    items = []
+    for fname in structure.fields:
+        fid = title_fields.get(fname)
+        pool = game.title_pools[TITLE_FIELD_POOLS[fname]]
+        fdef = next((t for t in pool if t.id == fid), None)
+        if fdef is None:
+            continue
+        for attr_id, delta in fdef.bonus.items():
+            items.append((attr_id, int(delta)))
+    return items
+
+
+def _skill_stats(eff: dict, locale, fighter: Fighter = None) -> list:
     """把个性化后的技能参数渲染为可读文案列表（模板来自 locale.stats）。"""
     tmpl = locale.stats
 
@@ -168,6 +204,11 @@ def _skill_stats(eff: dict, locale) -> list:
     elif ttype == "low_hp_atk_bonus":
         stats.append(stat("threshold", format_pct(float(eff.get("threshold", 0.3)))))
         stats.append(stat("atk_bonus", format_pct(float(eff.get("value", 0.5)))))
+    link = eff.get("link")
+    if link and fighter is not None:
+        attr_name = locale.attributes.get(link["variable"], {}).get("name", link["variable"])
+        bonus = link_bonus(fighter, eff)
+        stats.append(render_template(tmpl.get("link", ""), {"stat": attr_name, "v": bonus}, locale))
     return [s for s in stats if s]
 
 
@@ -176,6 +217,33 @@ def _find_structure(fighter: Fighter, game: GameCfg):
         if s.id == fighter.title_structure_id:
             return s
     return None
+
+
+def _format_bonus(value: int, attr_format: str) -> str:
+    sign = "+" if value > 0 else ""
+    if attr_format == "percent":
+        return "%s%s%%" % (sign, value)
+    return "%s%s" % (sign, value)
+
+
+def _title_bonus_api(fighter: Fighter, game: GameCfg, locale) -> dict:
+    """称号加成的对外表示：按属性配置顺序聚合，供卡牌展示。"""
+    structure = _find_structure(fighter, game)
+    if structure is None:
+        return {"bonuses": [], "bonuses_text": ""}
+    sums = {}
+    for attr_id, delta in title_bonus_items(fighter.title_fields, structure, game):
+        sums[attr_id] = sums.get(attr_id, 0) + delta
+    bonuses = []
+    parts = []
+    for a in game.attributes:
+        if a.id not in sums or sums[a.id] == 0:
+            continue
+        name = locale.attributes.get(a.id, {}).get("name", a.id)
+        text = _format_bonus(sums[a.id], a.format)
+        bonuses.append({"attr": a.id, "name": name, "value": sums[a.id], "format": a.format})
+        parts.append("%s %s" % (name, text))
+    return {"bonuses": bonuses, "bonuses_text": " · ".join(parts)}
 
 
 def compose_title_name(fighter: Fighter, game: GameCfg, locale) -> str:
@@ -227,15 +295,31 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
     skills_api = []
     for sdef, eff in personalized_effects(fighter, game):
         entry = locale.skills.get(sdef.id, {})
+        name = str(entry.get("name", sdef.id))
+        link = eff.get("link")
+        if link:
+            marker = locale.stats.get("link_" + link["variable"])
+            if marker:
+                name = name + str(locale.stats.get("link_sep", "·")) + str(marker)
+        link_api = None
+        if link:
+            link_api = {
+                "variable": link["variable"],
+                "name": locale.attributes.get(link["variable"], {}).get("name", link["variable"]),
+                "bonus": link_bonus(fighter, eff),
+            }
         skills_api.append({
             "id": sdef.id,
-            "name": entry.get("name", sdef.id),
+            "name": name,
             "description": entry.get("description", ""),
-            "stats": _skill_stats(eff, locale),
+            "detail": entry.get("detail", ""),
+            "stats": _skill_stats(eff, locale, fighter),
+            "link": link_api,
         })
     rar_def = next(r for r in game.rarities if r.id == fighter.rarity_id)
     rar = locale.rarities.get(fighter.rarity_id, {})
     elem = locale.elements.get(fighter.element_id, {})
+    title_bonus = _title_bonus_api(fighter, game, locale)
     return {
         "name": fighter.name,
         "normalized": fighter.normalized,
@@ -248,6 +332,8 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
             "structure": fighter.title_structure_id,
             "name": compose_title_name(fighter, game, locale),
             "description": compose_title_desc(fighter, game, locale),
+            "bonuses": title_bonus["bonuses"],
+            "bonuses_text": title_bonus["bonuses_text"],
         },
         "attributes": attrs_api,
         "skills": skills_api,

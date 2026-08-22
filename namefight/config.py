@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -86,9 +86,27 @@ class SkillVariance:
 
 
 @dataclass(frozen=True)
+class VariableLinkDef:
+    """可共鸣变量：变量 id（属性 id，hp 表示生命上限）、抽取权重、共鸣倍率区间。"""
+    id: str
+    weight: float
+    rate_lo: float
+    rate_hi: float
+
+
+@dataclass(frozen=True)
+class SkillLinkCfg:
+    """技能变量共鸣配置：可共鸣的效果类型、共鸣概率、变量池。"""
+    chance: float
+    variables: tuple         # (VariableLinkDef, ...)
+    linkable_types: frozenset
+
+
+@dataclass(frozen=True)
 class TitleFieldDef:
     id: str
     weight: float
+    bonus: dict = field(default_factory=dict)  # {属性id: 小额加成（可为负）}
 
 
 @dataclass(frozen=True)
@@ -125,6 +143,7 @@ class GameCfg:
     skill_count_min: int
     skill_count_max: int
     skill_md5_variance: SkillVariance
+    skill_variable_link: SkillLinkCfg
     rarity_scaled_attributes: tuple
     battle: BattleCfg
 
@@ -235,6 +254,32 @@ def load_game_config(config_root) -> GameCfg:
     if skill_md5_variance.value_lo > skill_md5_variance.value_hi:
         raise ConfigError("md5_variance.value 区间非法")
 
+    # 技能变量共鸣
+    link_data = skills_data.get("variable_link", {})
+    link_variables = []
+    for vid, spec in (link_data.get("variables", {}) or {}).items():
+        if vid not in seen_attrs:
+            raise ConfigError("共鸣变量引用了未定义的属性: %s" % vid)
+        rate = spec.get("rate", [0.0, 0.0])
+        rate_lo, rate_hi = float(rate[0]), float(rate[1])
+        if rate_lo > rate_hi or rate_lo < 0:
+            raise ConfigError("共鸣变量 %s 倍率区间非法" % vid)
+        if float(spec.get("weight", 1)) <= 0:
+            raise ConfigError("共鸣变量 %s 权重必须为正" % vid)
+        link_variables.append(VariableLinkDef(
+            id=str(vid), weight=float(spec.get("weight", 1)),
+            rate_lo=rate_lo, rate_hi=rate_hi,
+        ))
+    skill_variable_link = SkillLinkCfg(
+        chance=float(link_data.get("chance", 0)),
+        variables=tuple(link_variables),
+        linkable_types=frozenset(str(x) for x in link_data.get("linkable_types", [])),
+    )
+    if not 0.0 <= skill_variable_link.chance <= 1.0:
+        raise ConfigError("variable_link.chance 必须在 [0, 1]")
+    if skill_variable_link.chance > 0 and not link_variables:
+        raise ConfigError("variable_link.chance > 0 但变量池为空")
+
     # 称号：多字段 + 多结构概率生成
     structures = []
     seen_structs = set()
@@ -273,7 +318,11 @@ def load_game_config(config_root) -> GameCfg:
             seen_ids.add(tid)
             if float(entry.get("weight", 1)) <= 0:
                 raise ConfigError("称号字段权重必须为正: %s/%s" % (pool_key, tid))
-            pool.append(TitleFieldDef(id=tid, weight=float(entry.get("weight", 1))))
+            bonus = {str(k): int(v) for k, v in entry.get("bonus", {}).items()}
+            for attr_id in bonus:
+                if attr_id not in seen_attrs:
+                    raise ConfigError("称号字段 %s/%s 加成了未定义的属性 %s" % (pool_key, tid, attr_id))
+            pool.append(TitleFieldDef(id=tid, weight=float(entry.get("weight", 1)), bonus=bonus))
         if not pool:
             raise ConfigError("称号字段池为空: %s" % pool_key)
         title_pools[pool_name] = tuple(pool)
@@ -304,6 +353,7 @@ def load_game_config(config_root) -> GameCfg:
         title_structures=tuple(structures), title_pools=title_pools,
         skill_count_min=sc_min, skill_count_max=sc_max,
         skill_md5_variance=skill_md5_variance,
+        skill_variable_link=skill_variable_link,
         rarity_scaled_attributes=scaled, battle=battle,
     )
 

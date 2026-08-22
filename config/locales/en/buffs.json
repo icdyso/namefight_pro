@@ -1,7 +1,12 @@
 {
-  "poison":     { "name": "Poisoned",   "detail": "Loses {damage} HP per action ({turns} left)" },
-  "stun":       { "name": "Stunned",    "detail": "Next action skipped" },
-  "last_stand": { "name": "Last Stand", "detail": "ATK +{value}" },
-  "crit_up":    { "name": "Focus",      "detail": "Crit +{value}" },
-  "dodge_up":   { "name": "Wind Step",  "detail": "Dodge +{value}" }
+  "poison":     { "name": "Poisoned",   "detail": "Loses {damage} HP per action ({turns} left)",
+                  "desc": "Loses HP on every action while poisoned." },
+  "stun":       { "name": "Stunned",    "detail": "Next action skipped",
+                  "desc": "Being stunned consumes one action." },
+  "last_stand": { "name": "Last Stand", "detail": "ATK +{value}",
+                  "desc": "Desperation boosts ATK when near death." },
+  "crit_up":    { "name": "Focus",      "detail": "Crit +{value}",
+                  "desc": "Crit bonus from a passive skill." },
+  "dodge_up":   { "name": "Wind Step",  "detail": "Dodge +{value}",
+                  "desc": "Dodge bonus from a passive skill." }
 }

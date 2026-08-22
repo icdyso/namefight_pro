@@ -16,7 +16,7 @@ import hashlib
 from dataclasses import dataclass, field
 
 from .config import GameCfg
-from .fighter import Fighter, personalized_effects
+from .fighter import Fighter, link_bonus, personalized_effects
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
@@ -32,8 +32,9 @@ TEMPLATES_USED = frozenset({
     "battle_start", "tick_marker", "turn_stun", "poison_tick", "poison_death",
     "skill_proc", "effect_damage_up", "effect_execution", "effect_lifesteal",
     "effect_poison", "effect_stun", "effect_extra_strike", "effect_heal",
-    "effect_reduction", "effect_reflect", "low_hp_trigger", "attack_crit",
-    "attack_miss", "attack_hit", "death", "victory", "draw", "timeout",
+    "effect_reduction", "effect_reflect", "effect_link", "low_hp_trigger",
+    "attack_crit", "attack_miss", "attack_hit", "death", "victory", "draw",
+    "timeout",
 })
 
 # 引擎会写入状态快照的 buff id（测试据此校验每个 locale 都有对应文案）
@@ -269,6 +270,8 @@ def _attack(actor, enemy, game, rng, ev):
     poison = None
     stun = False
     extra_ratios = []
+    resonance = 0        # 共鸣附伤（加在本次主伤害上）
+    poison_resonance = 0  # 淬毒类技能的共鸣（加在毒伤上）
     for sdef, eff in actor.skills:
         if sdef.trigger != "on_attack":
             continue
@@ -276,22 +279,37 @@ def _attack(actor, enemy, game, rng, ev):
             continue
         ev("skill_proc", {"a": actor.name, "skill": {"ref": "skill", "id": sdef.id}})
         t = eff.get("type")
+        satisfied = True
         if t == "damage_multiplier":
             cond = eff.get("condition")
-            satisfied = True
             if cond and cond.get("type") == "target_hp_below":
                 satisfied = enemy.hp <= enemy.max_hp * float(cond.get("value", 0))
-            if satisfied:
-                mult *= float(eff.get("value", 1.0))
-                if cond:
-                    ev("effect_execution", {"mult": format_pct(mult)})
-                else:
-                    ev("effect_damage_up", {"mult": format_pct(mult)})
+        # 变量共鸣：触发即按自身属性附加伤害
+        bonus = link_bonus(actor.fighter, eff) if satisfied else 0
+        if bonus > 0:
+            if t == "poison":
+                poison_resonance += bonus
+            else:
+                resonance += bonus
+            ev("effect_link", {
+                "a": actor.name,
+                "stat": {"ref": "attr", "id": eff["link"]["variable"]},
+                "damage": bonus,
+            })
+        if not satisfied:
+            continue
+        if t == "damage_multiplier":
+            mult *= float(eff.get("value", 1.0))
+            if eff.get("condition"):
+                ev("effect_execution", {"mult": format_pct(mult)})
+            else:
+                ev("effect_damage_up", {"mult": format_pct(mult)})
         elif t == "lifesteal":
             lifesteal += float(eff.get("value", 0))
         elif t == "poison":
-            poison = (int(round(float(eff.get("damage", 0)))),
+            poison = (int(round(float(eff.get("damage", 0)))) + poison_resonance,
                       int(eff.get("turns", 0)))
+            poison_resonance = 0
         elif t == "stun":
             stun = True
         elif t == "extra_strikes":
@@ -306,6 +324,8 @@ def _attack(actor, enemy, game, rng, ev):
     if crit:
         ev("attack_crit", {})
     dmg = _compute_damage(actor, enemy, mult, crit, game, rng)
+    if resonance > 0:
+        dmg = max(bc.min_damage, dmg + resonance)
 
     # 防守方技能（减伤 / 反甲）
     for sdef, eff in enemy.skills:
@@ -382,6 +402,7 @@ def _render_state(state, locale) -> dict:
                 "id": b["id"],
                 "name": entry.get("name", b["id"]),
                 "detail": render_template(entry.get("detail", ""), b.get("params"), locale),
+                "desc": entry.get("desc", ""),
             })
         out[side] = dict(snap, buffs=buffs)
     return out
