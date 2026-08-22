@@ -63,7 +63,7 @@ class _Combatant:
     stunned: bool = False
     last_stand_active: bool = False
     last_stand_bonus: float = 0.0
-    damage_dealt: int = 0
+    damage_dealt: float = 0.0
 
 
 @dataclass
@@ -126,7 +126,7 @@ def _compute_damage(actor, enemy, mult, crit, game, rng, ratio=1.0) -> int:
     variance = rng.next_gaussian(bc.variance_lo, bc.variance_hi)
     crit_mult = bc.crit_multiplier if crit else 1.0
     raw = _eff_atk(actor) * ratio * variance * crit_mult * mult
-    return max(bc.min_damage, round(raw - enemy.defense * bc.defense_factor))
+    return max(float(bc.min_damage), raw - enemy.defense * bc.defense_factor)
 
 
 def _snapshot(combatants, threshold: float) -> dict:
@@ -148,12 +148,12 @@ def _snapshot(combatants, threshold: float) -> dict:
                 elif t == "dodge_bonus":
                     buffs.append({"id": "dodge_up", "params": {"value": format_num(float(eff.get("value", 0)))}})
         return {
-            "hp": max(0, int(c.hp)),
+            "hp": round(max(0.0, float(c.hp)), 2),
             "max_hp": c.max_hp,
-            "atk": int(round(_eff_atk(c))),
+            "atk": round(_eff_atk(c), 2),
             "def": c.defense,
             "spd": c.spd,
-            "gauge": max(0.0, min(100.0, round(c.gauge * 100.0 / threshold, 1))),
+            "gauge": max(0.0, min(100.0, round(c.gauge * 100.0 / threshold, 2))),
             "buffs": buffs,
         }
     return {"a": one(combatants[0]), "b": one(combatants[1])}
@@ -219,7 +219,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                 dmg = actor.poison_damage
                 actor.hp -= dmg
                 actor.poison_turns -= 1
-                ev("poison_tick", {"a": actor.name, "damage": dmg})
+                ev("poison_tick", {"a": actor.name, "damage": format_num(dmg)})
                 if actor.hp <= 0:
                     ev("poison_death", {"a": actor.name})
                     winner = enemy
@@ -232,11 +232,11 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                     continue
                 ev("skill_proc", {"a": actor.name, "skill": {"ref": "skill", "id": sdef.id}})
                 if eff.get("type") == "heal" and actor.hp > 0:
-                    gained = min(int(round(float(eff.get("value", 0)))),
+                    gained = min(float(eff.get("value", 0.0)),
                                  actor.max_hp - actor.hp)
                     if gained > 0:
                         actor.hp += gained
-                        ev("effect_heal", {"a": actor.name, "heal": gained})
+                        ev("effect_heal", {"a": actor.name, "heal": format_num(gained)})
             if winner is not None:
                 break
             # 眩晕：消耗本次行动
@@ -340,7 +340,7 @@ def _attack(actor, enemy, game, rng, ev):
         elif t == "lifesteal":
             lifesteal += float(proc_eff.get("value", eff.get("value", 0)))
         elif t == "poison":
-            poison = (int(round(float(proc_eff.get("damage", eff.get("damage", 0))))),
+            poison = (float(proc_eff.get("damage", eff.get("damage", 0.0))),
                       int(proc_eff.get("turns", eff.get("turns", 0))))
         elif t == "stun":
             stun = True
@@ -367,26 +367,28 @@ def _attack(actor, enemy, game, rng, ev):
         t = eff.get("type")
         if t == "damage_reduction":
             ratio = float(eff.get("value", 0))
-            dmg = max(bc.min_damage, round(dmg * (1.0 - ratio)))
+            dmg = max(float(bc.min_damage), dmg * (1.0 - ratio))
             ev("effect_reduction", {"b": enemy.name, "ratio": format_pct(ratio)})
         elif t == "reflect":
-            refl = max(1, round(dmg * float(eff.get("value", 0))))
+            refl = max(1.0, dmg * float(eff.get("value", 0.0)))
             enemy.damage_dealt += refl
             actor.hp -= refl
-            ev("effect_reflect", {"a": actor.name, "b": enemy.name, "damage": refl})
+            ev("effect_reflect", {"a": actor.name, "b": enemy.name, "damage": format_num(refl)})
 
     enemy.hp -= dmg
     actor.damage_dealt += dmg
-    ev("attack_hit", {"a": actor.name, "b": enemy.name, "damage": dmg, "hp": max(0, enemy.hp)})
+    ev("attack_hit", {"a": actor.name, "b": enemy.name,
+                      "damage": format_num(dmg), "hp": format_num(max(0, enemy.hp))})
 
     if lifesteal > 0 and dmg > 0 and actor.hp > 0:
-        gained = min(round(dmg * lifesteal), actor.max_hp - actor.hp)
+        gained = min(dmg * lifesteal, actor.max_hp - actor.hp)
         if gained > 0:
             actor.hp += gained
-            ev("effect_lifesteal", {"a": actor.name, "heal": gained})
+            ev("effect_lifesteal", {"a": actor.name, "heal": format_num(gained)})
     if poison is not None and enemy.hp > 0 and poison[0] > 0 and poison[1] > 0:
         enemy.poison_damage, enemy.poison_turns = poison
-        ev("effect_poison", {"b": enemy.name, "damage": poison[0], "turns": poison[1]})
+        ev("effect_poison", {"b": enemy.name, "damage": format_num(poison[0]),
+                              "turns": poison[1]})
     if stun and enemy.hp > 0:
         enemy.stunned = True
         ev("effect_stun", {"b": enemy.name})
@@ -409,7 +411,7 @@ def _attack(actor, enemy, game, rng, ev):
             enemy.hp -= dmg2
             actor.damage_dealt += dmg2
             ev("attack_hit", {"a": actor.name, "b": enemy.name,
-                              "damage": dmg2, "hp": max(0, enemy.hp)})
+                              "damage": format_num(dmg2), "hp": format_num(max(0, enemy.hp))})
             if enemy.hp <= 0:
                 ev("death", {"b": enemy.name})
                 break

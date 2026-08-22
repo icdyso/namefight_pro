@@ -22,7 +22,7 @@ _FIELD_LOCALE = {"prefix": "prefixes", "core": "cores", "core2": "cores", "suffi
 
 # 技能参数标签模板键（测试据此校验每个 locale 都有对应文案）
 STATS_KEYS_USED = frozenset({
-    "link_sep", "link_ratio", "link_difference",
+    "link_sep", "link_ratio", "link_difference", "link_formula",
     "scope_own", "scope_enemy", "mode_ratio", "mode_difference",
     "mod_chance", "mod_value", "mod_damage", "mod_turns",
     "field_chance", "field_value", "field_damage", "field_turns",
@@ -119,7 +119,7 @@ def _apply_modifier(eff: dict, mod: dict) -> None:
         elif key == "turns":
             eff["turns"] = max(1, int(round(float(eff["turns"]))) + int(round(float(delta))))
         else:
-            eff[key] = round(float(eff[key]) + float(delta), 4)
+            eff[key] = float(eff[key]) + float(delta)
 
 
 def personalized_effects(fighter: Fighter, game: GameCfg):
@@ -143,17 +143,17 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
         chance = float(eff.get("chance", 1.0))
         if 0.0 < chance < 1.0:
             factor = rng.next_gaussian(var.chance_lo, var.chance_hi)
-            eff["chance"] = min(0.95, max(0.02, round(chance * factor, 4)))
+            eff["chance"] = min(0.95, max(0.02, chance * factor))
         for key in ("value", "damage"):
             if key in eff:
                 factor = rng.next_gaussian(var.value_lo, var.value_hi)
-                eff[key] = round(float(eff[key]) * factor, 4)
+                eff[key] = float(eff[key]) * factor
         if name_mod.prefix_chance > 0 and rng.next_float() < name_mod.prefix_chance:
             eff["prefix"] = rng.pick_weighted((m, m.weight) for m in name_mod.prefixes).id
-            eff["prefix_scale"] = round(rng.next_gaussian(name_mod.scale_lo, name_mod.scale_hi), 4)
+            eff["prefix_scale"] = rng.next_gaussian(name_mod.scale_lo, name_mod.scale_hi)
         if name_mod.suffix_chance > 0 and rng.next_float() < name_mod.suffix_chance:
             eff["suffix"] = rng.pick_weighted((m, m.weight) for m in name_mod.suffixes).id
-            eff["suffix_scale"] = round(rng.next_gaussian(name_mod.scale_lo, name_mod.scale_hi), 4)
+            eff["suffix_scale"] = rng.next_gaussian(name_mod.scale_lo, name_mod.scale_hi)
         for pool, mod_id, scale_key in ((name_mod.prefixes, eff.get("prefix"), "prefix_scale"),
                                         (name_mod.suffixes, eff.get("suffix"), "suffix_scale")):
             if not mod_id:
@@ -168,7 +168,7 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                 mode = rng.pick_weighted(link_cfg.mode_weights)
                 vdef = rng.pick_weighted((v, v.weight) for v in link_cfg.variables)
                 rate = rng.next_gaussian(vdef.rate_lo, vdef.rate_hi)
-                eff["link"] = {"variable": vdef.id, "rate": round(rate, 4),
+                eff["link"] = {"variable": vdef.id, "rate": rate,
                                "source": source, "mode": mode}
         out.append((sdef, eff))
     return out
@@ -214,13 +214,13 @@ def apply_resonance(eff: dict, coeff: float, target: str) -> dict:
         return scaled
     factor = 1.0 + coeff
     if target == "chance":
-        scaled["chance"] = min(0.95, max(0.02, round(float(scaled["chance"]) * factor, 4)))
+        scaled["chance"] = min(0.95, max(0.02, float(scaled["chance"]) * factor))
     elif target == "turns":
         scaled["turns"] = max(1, int(round(float(scaled["turns"]) * factor)))
     elif target == "damage":
-        scaled["damage"] = max(0.0, round(float(scaled["damage"]) * factor, 4))
+        scaled["damage"] = max(0.0, float(scaled["damage"]) * factor)
     else:  # value
-        scaled["value"] = min(5.0, max(0.05, round(float(scaled["value"]) * factor, 4)))
+        scaled["value"] = min(5.0, max(0.05, float(scaled["value"]) * factor))
     return scaled
 
 
@@ -229,11 +229,10 @@ def format_resonance_final(scaled_value, target: str, locale=None) -> str:
     if target == "chance" or target == "value":
         return format_pct(float(scaled_value))
     if target == "damage":
-        value = int(round(float(scaled_value)))
         if locale is None:
-            return str(value)
+            return format_num(float(scaled_value))
         return render_template(locale.stats.get("final_damage", "{v}"),
-                               {"v": value}, locale)
+                               {"v": format_num(float(scaled_value))}, locale)
     if target == "turns":
         value = int(round(float(scaled_value)))
         if locale is None:
@@ -290,7 +289,7 @@ def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale) -> str:
         params = {"value": format_pct(float(display_eff.get("value", 0.0)))}
     elif ttype == "poison":
         params = {"chance": format_pct(chance),
-                  "damage": int(round(float(display_eff.get("damage", 0)))),
+                  "damage": format_num(float(display_eff.get("damage", 0))),
                   "turns": int(display_eff.get("turns", 0))}
     elif ttype == "stun":
         params = {"chance": format_pct(chance)}
@@ -308,44 +307,56 @@ def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale) -> str:
         params = {"value": format_num(float(display_eff.get("value", 0.0)))}
     elif ttype == "heal":
         params = {"chance": format_pct(chance),
-                  "value": int(round(float(display_eff.get("value", 0))))}
+                  "value": format_num(float(display_eff.get("value", 0)))}
     elif ttype == "low_hp_atk_bonus":
         params = {"threshold": format_pct(float(display_eff.get("threshold", 0.3))),
                   "value": format_pct(float(display_eff.get("value", 0.5)))}
+    params.setdefault("link", "")
     text = render_template(tmpl.get(key, key), params, locale)
     if target:
-        clause = _link_clause(eff["link"], target, display_eff, coeff, game, locale)
-        if clause:
-            text = text + clause
+        formula, sentence = _link_parts(eff, eff["link"], target, game, locale)
+        if formula:
+            params["link"] = formula
+            text = render_template(tmpl.get(key, key), params, locale)
+        if sentence:
+            text = text + sentence
     return text
 
 
-def _link_clause(link: dict, target: str, display_eff: dict, coeff: float,
-                 game: GameCfg, locale) -> str:
-    """共鸣描述：「XX越XX / XX高于XX越多」句式 + 归一化公式 + 当前最终值。"""
+def _link_parts(eff: dict, link: dict, target: str, game: GameCfg, locale):
+    """共鸣描述两部分：
+
+    1. 内联线性公式（注入主句 {link} 占位符）：
+       最终值 = 基数 + 基数 × 变量式 × 单位系数（rate ÷ 基础值），数值均 2 位小数；
+    2. 尾句依赖描述：「XX越XX，字段越高。」/「XX高于XX越多，字段越高。」
+    """
     tmpl = locale.stats
     var_id = link.get("variable")
     var_name = locale.attributes.get(var_id, {}).get("name", var_id)
     base = game.attr(var_id).base if var_id else 1
     scope_own = str(tmpl.get("scope_own", ""))
     scope_enemy = str(tmpl.get("scope_enemy", ""))
-    rate = format_pct(float(link.get("rate", 0)))
     field = str(tmpl.get("field_" + target, target))
-    final = format_resonance_final(display_eff.get(target), target, locale)
+    per_unit = format_pct(float(link.get("rate", 0.0)) / max(1, base))
+    base_display = format_resonance_final(eff.get(target), target, locale)
     if link.get("mode") == "difference":
         vdef = next((v for v in game.skill_variable_link.variables if v.id == var_id), None)
         against = vdef.diff_against if vdef else var_id
         against_name = locale.attributes.get(against, {}).get("name", against)
-        return render_template(tmpl.get("link_difference", ""),
-                               {"own": scope_own + var_name,
-                                "enemy": scope_enemy + against_name,
-                                "base": base, "field": field,
-                                "pct": rate, "final": final}, locale)
-    scope = scope_enemy if link.get("source") == "enemy" else scope_own
-    stat_full = scope + var_name
-    return render_template(tmpl.get("link_ratio", ""),
-                           {"stat": stat_full, "base": base, "field": field,
-                            "pct": rate, "final": final}, locale)
+        expr = scope_own + var_name + " − " + scope_enemy + against_name
+        sentence = render_template(tmpl.get("link_difference", ""),
+                                   {"own": scope_own + var_name,
+                                    "enemy": scope_enemy + against_name,
+                                    "field": field}, locale)
+    else:
+        scope = scope_enemy if link.get("source") == "enemy" else scope_own
+        expr = scope + var_name
+        sentence = render_template(tmpl.get("link_ratio", ""),
+                                   {"stat": expr, "field": field}, locale)
+    formula = render_template(tmpl.get("link_formula", ""),
+                              {"base": base_display, "expr": expr, "per": per_unit},
+                              locale)
+    return formula, sentence
 
 
 _MOD_TEMPLATES = {"chance": "mod_chance", "value": "mod_value",
@@ -372,7 +383,7 @@ def _mod_texts(eff: dict, game: GameCfg, locale) -> list:
             scaled = float(delta) * scale
             sign = "+" if scaled > 0 else "-"
             magnitude = (format_pct(abs(scaled)) if param in ("chance", "value")
-                         else str(int(round(abs(scaled)))))
+                         else format_num(abs(scaled)))
             parts.append(render_template(locale.stats.get(template_key, template_key),
                                          {"v": sign + magnitude}, locale))
         if parts:

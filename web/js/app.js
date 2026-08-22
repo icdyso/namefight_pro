@@ -461,10 +461,10 @@
     if (!refs || !snap) return;
     var hpPct = snap.max_hp > 0 ? (snap.hp / snap.max_hp * 100) : 0;
     refs.hpFill.style.width = Math.max(0, Math.min(100, hpPct)) + "%";
-    refs.hpText.textContent = snap.hp + " / " + snap.max_hp;
-    refs.atkVal.textContent = String(snap.atk);
-    refs.defVal.textContent = String(snap.def);
-    refs.spdVal.textContent = String(snap.spd);
+    refs.hpText.textContent = (+snap.hp).toFixed(2) + " / " + (+snap.max_hp).toFixed(2);
+    refs.atkVal.textContent = (+snap.atk).toFixed(2);
+    refs.defVal.textContent = (+snap.def).toFixed(2);
+    refs.spdVal.textContent = (+snap.spd).toFixed(2);
     refs._spd = snap.spd;
     refs._dead = snap.hp <= 0;
     var boosted = (snap.buffs || []).some(function (b) { return b.id === "last_stand"; });
@@ -548,8 +548,8 @@
       NF.h("div", { class: "result-winner" }, headline),
       NF.h("div", { class: "result-summary" }, fmt("summary_text", {
         ticks: r.ticks,
-        dmg_a: r.damage.a,
-        dmg_b: r.damage.b
+        dmg_a: (+r.damage.a).toFixed(2),
+        dmg_b: (+r.damage.b).toFixed(2)
       }))));
   }
 

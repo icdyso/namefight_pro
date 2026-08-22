@@ -163,14 +163,18 @@ class FighterDeterminism(unittest.TestCase):
                     modded.append((f, eff))
         self.assertTrue(linked, "应有技能获得变量共鸣")
         self.assertTrue(modded, "应有技能获得词缀")
-        # 自然语言描述应包含共鸣句式、字段标识与最终百分比
+        # 描述格式：主句内联线性公式（基数 + 基数 × 变量式 × 单位系数）+ 尾句依赖
         f, sdef, eff = linked[0]
         api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
         entry = next(s for s in api["skills"] if s["id"] == sdef.id)
         if eff.get("link"):
             self.assertIn("越", entry["text"])
             self.assertIn("%", entry["text"])
-            self.assertIn("当前约", entry["text"])
+            self.assertIn("（", entry["text"])
+            self.assertIn(" + ", entry["text"])
+            self.assertIn("×", entry["text"])
+            self.assertTrue(entry["text"].endswith("。"))
+            self.assertLess(entry["text"].index("（"), entry["text"].index("。"))
 
     def test_effect_link_appears_in_battles(self):
         found = 0

@@ -231,10 +231,10 @@ class RngAndTextTests(unittest.TestCase):
 
     def test_format_helpers(self):
         from namefight.text import format_num, format_pct
-        self.assertEqual(format_pct(0.213), "21%")
-        self.assertEqual(format_pct(1.6), "160%")
-        self.assertEqual(format_num(10.0), "10")
-        self.assertEqual(format_num(12.5), "12.5")
+        self.assertEqual(format_pct(0.2131), "21.31%")
+        self.assertEqual(format_pct(1.6), "160.00%")
+        self.assertEqual(format_num(10.0), "10.00")
+        self.assertEqual(format_num(12.345), "12.35")
 
 
 if __name__ == "__main__":

@@ -12,14 +12,13 @@ class _SafeFormatDict(dict):
 
 
 def format_pct(x: float) -> str:
-    """0.213 -> '21%'；用于面向用户的百分比展示。"""
-    return "%s%%" % round(x * 100)
+    """0.2131 -> '21.31%'；展示层统一保留 2 位小数（后台数值保持全浮点）。"""
+    return "%.2f%%" % (float(x) * 100.0)
 
 
 def format_num(x: float) -> str:
-    """10.0 -> '10'；12.5 -> '12.5'（最多保留 1 位小数）。"""
-    text = ("%.1f" % float(x)).rstrip("0").rstrip(".")
-    return text if text else "0"
+    """10.0 -> '10.00'；12.3456 -> '12.35'。展示层统一保留 2 位小数。"""
+    return "%.2f" % float(x)
 
 
 def resolve_params(params, locale):
