@@ -54,11 +54,32 @@ class GameConfigTests(unittest.TestCase):
             self.assertGreater(v.weight, 0)
             self.assertLessEqual(v.rate_lo, v.rate_hi)
             self.assertGreaterEqual(v.rate_lo, 0)
+            self.assertIn(v.diff_against, attr_ids,
+                          "共鸣变量 %s 的差值参照 %s 不是已定义属性" % (v.id, v.diff_against))
+        for source, weight in link.source_weights:
+            self.assertGreater(weight, 0)
+            self.assertIn(source, ("own", "enemy"))
+        for mode, weight in link.mode_weights:
+            self.assertGreater(weight, 0)
+            self.assertIn(mode, ("ratio", "difference"))
         if link.chance > 0:
             self.assertTrue(link.variables)
             for t in link.linkable_types:
                 self.assertIn(t, SUPPORTED_EFFECTS,
                               "可共鸣类型 %s 不是引擎支持的效果" % t)
+
+    def test_name_modifiers_sane(self):
+        mods = GAME.skill_name_modifiers
+        for chance in (mods.prefix_chance, mods.suffix_chance):
+            self.assertTrue(0.0 <= chance <= 1.0)
+        known_params = {"chance", "value", "damage", "turns"}
+        for pool in (mods.prefixes, mods.suffixes):
+            self.assertTrue(pool)
+            for m in pool:
+                self.assertGreater(m.weight, 0)
+                for param in m.mod:
+                    self.assertIn(param, known_params,
+                                  "词缀 %s 修正了未知参数 %s" % (m.id, param))
 
     def test_title_bonuses_reference_known_attributes(self):
         attr_ids = {a.id for a in GAME.attributes}
@@ -132,6 +153,16 @@ class LocaleCoverageTests(unittest.TestCase):
             for v in GAME.skill_variable_link.variables:
                 self.assertIn("link_" + v.id, loc.stats,
                               "[%s] 共鸣标记 link_%s 缺文案" % (lang, v.id))
+
+    def test_modifiers_have_locale_text(self):
+        mods = GAME.skill_name_modifiers
+        for lang, loc in LOCALES.items():
+            for m in mods.prefixes:
+                self.assertIn(m.id, loc.modifiers.get("prefixes", {}),
+                              "[%s] 前缀 %s 缺文案" % (lang, m.id))
+            for m in mods.suffixes:
+                self.assertIn(m.id, loc.modifiers.get("suffixes", {}),
+                              "[%s] 后缀 %s 缺文案" % (lang, m.id))
 
     def test_every_stat_key_has_text(self):
         for lang, loc in LOCALES.items():

@@ -13,12 +13,21 @@
   "heal": "Heal {v} HP",
   "threshold": "Below {v} HP",
   "atk_bonus": "ATK +{v}",
-  "link": "Resonates with {stat}: +{v} bonus damage",
+  "link": "Resonance: {scope} {stat} ({mode}) x {v}",
+  "link_init": "· ~+{v} at start",
   "link_sep": "·",
   "link_atk": "Blade",
   "link_def": "Guard",
   "link_spd": "Swift",
   "link_hp": "Vital",
   "link_crit": "Keen",
-  "link_dodge": "Shade"
+  "link_dodge": "Shade",
+  "scope_own": "own",
+  "scope_enemy": "enemy",
+  "mode_ratio": "ratio",
+  "mode_difference": "difference",
+  "mod_chance": "Trigger {v}",
+  "mod_value": "Effect {v}",
+  "mod_damage": "Poison {v}",
+  "mod_turns": "Duration {v}"
 }

@@ -16,7 +16,7 @@ import hashlib
 from dataclasses import dataclass, field
 
 from .config import GameCfg
-from .fighter import Fighter, link_bonus, personalized_effects
+from .fighter import Fighter, personalized_effects
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
@@ -78,6 +78,47 @@ class BattleOutcome:
 
 def _eff_atk(c: _Combatant) -> float:
     return c.atk * (1.0 + c.last_stand_bonus) if c.last_stand_active else c.atk
+
+
+def _live_value(c: _Combatant, vid: str) -> float:
+    """共鸣取用的「当前值」：hp 为当前生命，atk 含背水一战加成，
+    crit/dodge 含被动，def/spd 为面板值。"""
+    if vid == "hp":
+        return float(max(0, c.hp))
+    if vid == "atk":
+        return _eff_atk(c)
+    if vid == "def":
+        return float(c.defense)
+    if vid == "spd":
+        return float(c.spd)
+    if vid == "crit":
+        return float(c.crit)
+    if vid == "dodge":
+        return float(c.dodge)
+    return 0.0
+
+
+def compute_link_bonus(actor: _Combatant, enemy: _Combatant, eff: dict, game: GameCfg) -> int:
+    """共鸣附伤（触发时刻的动态值）：
+
+    - 比例模式：bonus = 源方属性当前值 × rate（源方为己方或敌方）；
+    - 差值模式：bonus = (己方变量 − 敌方参照属性) × rate，参照属性见
+      config 中该变量的 diff_against（如 攻↔防、速↔速、暴击↔闪避）；
+    - 结果向下取整到非负整数。
+    """
+    link = eff.get("link")
+    if not link:
+        return 0
+    rate = float(link.get("rate", 0))
+    if link.get("mode") == "difference":
+        vdef = next((v for v in game.skill_variable_link.variables
+                     if v.id == link.get("variable")), None)
+        against = vdef.diff_against if vdef else link.get("variable")
+        raw = _live_value(actor, link.get("variable")) - _live_value(enemy, against)
+    else:
+        src = enemy if link.get("source") == "enemy" else actor
+        raw = _live_value(src, link.get("variable"))
+    return max(0, round(raw * rate))
 
 
 def _make_combatant(f: Fighter, pos: int, game: GameCfg) -> _Combatant:
@@ -284,8 +325,8 @@ def _attack(actor, enemy, game, rng, ev):
             cond = eff.get("condition")
             if cond and cond.get("type") == "target_hp_below":
                 satisfied = enemy.hp <= enemy.max_hp * float(cond.get("value", 0))
-        # 变量共鸣：触发即按自身属性附加伤害
-        bonus = link_bonus(actor.fighter, eff) if satisfied else 0
+        # 变量共鸣：触发时按「当前值」动态计算附伤（己方/敌方、比例/差值）
+        bonus = compute_link_bonus(actor, enemy, eff, game) if satisfied else 0
         if bonus > 0:
             if t == "poison":
                 poison_resonance += bonus
@@ -294,6 +335,8 @@ def _attack(actor, enemy, game, rng, ev):
             ev("effect_link", {
                 "a": actor.name,
                 "stat": {"ref": "attr", "id": eff["link"]["variable"]},
+                "scope": {"ref": "stat_word", "id": "scope_" + eff["link"].get("source", "own")},
+                "mode": {"ref": "stat_word", "id": "mode_" + eff["link"].get("mode", "ratio")},
                 "damage": bonus,
             })
         if not satisfied:

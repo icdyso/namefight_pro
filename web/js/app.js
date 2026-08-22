@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  var BASE_INTERVAL = 460;      // 每条战报的基础展示间隔（ms）
+  var TICK_MS = 85;           // 每个 tick 的基础演出时长（ms）
   var SPEEDS = [0.5, 1, 2, 4];  // 回放倍速
 
   var state = {
@@ -159,7 +159,9 @@
       .catch(function (e) { showError(errorText(e)); });
   }
 
-  /* ---------------- 战报回放 ---------------- */
+  /* ---------------- 战报逐刻回放（tick 时钟驱动） ----------------
+   * 回放按游戏刻推进：每刻双方行动槽 +速度值，行动槽满时该方的战报条目
+   * 恰好到达并被揭示——由此直观展现双方真实的攻击间隔与出手节奏。 */
 
   function stopPlayback() {
     state.playing = false;
@@ -169,25 +171,53 @@
     }
   }
 
+  function tickDuration() {
+    return Math.max(16, TICK_MS / state.speed);
+  }
+
   function startPlayback() {
     stopPlayback();
+    state.tickPos = 0;
     state.playing = true;
     renderControls();
-    scheduleNext();
+    scheduleTick();
   }
 
-  function scheduleNext() {
-    state.timer = setTimeout(stepEntry, Math.max(40, BASE_INTERVAL / state.speed));
+  function scheduleTick() {
+    state.timer = setTimeout(tickStep, tickDuration());
   }
 
-  function stepEntry() {
+  function tickStep() {
     if (!state.playing || !state.battle) return;
-    var entry = state.battle.log[state.shown];
-    if (!entry) { finishPlayback(); return; }
-    state.shown++;
-    appendLogEntry(entry);
-    if (state.shown >= state.battle.log.length) { finishPlayback(); return; }
-    scheduleNext();
+    var log = state.battle.log;
+    var finalTick = log.length ? log[log.length - 1].tick : 0;
+    if (state.shown >= log.length && state.tickPos >= finalTick) {
+      finishPlayback();
+      return;
+    }
+    state.tickPos++;
+    advanceGauges();
+    while (state.shown < log.length && log[state.shown].tick <= state.tickPos) {
+      appendLogEntry(log[state.shown]);
+      state.shown++;
+    }
+    if (state.shown >= log.length && state.tickPos >= finalTick) {
+      finishPlayback();
+      return;
+    }
+    scheduleTick();
+  }
+
+  /* 客户端行动槽逐刻推进（每刻 +速度%），与服务器快照对齐校正 */
+  function advanceGauges() {
+    ["a", "b"].forEach(function (side) {
+      var refs = els.hud && els.hud[side];
+      if (!refs || refs._dead || !refs._spd) return;
+      var g = Math.min(100, (refs._gauge || 0) + refs._spd);
+      refs._gauge = g;
+      refs.gaugeFill.style.transition = "width " + tickDuration() + "ms linear";
+      refs.gaugeFill.style.width = g + "%";
+    });
   }
 
   function finishPlayback() {
@@ -205,6 +235,7 @@
       appendLogEntry(log[state.shown]);
       state.shown++;
     }
+    state.tickPos = log.length ? log[log.length - 1].tick : 0;
     state.skipping = false;
     showResult();
     renderControls();
@@ -216,10 +247,12 @@
       stopPlayback();
       renderControls();
     } else {
-      if (state.shown >= state.battle.log.length) return;
+      var log = state.battle.log;
+      var finalTick = log.length ? log[log.length - 1].tick : 0;
+      if (state.shown >= log.length && state.tickPos >= finalTick) return;
       state.playing = true;
       renderControls();
-      scheduleNext();
+      scheduleTick();
     }
   }
 
@@ -334,6 +367,8 @@
           NF.h("div", { class: "tip-title" }, s.name),
           s.detail ? NF.h("div", { class: "tip-line" }, s.detail) : null,
           s.description ? NF.h("div", { class: "tip-line muted" }, s.description) : null,
+          s.modifiers && s.modifiers.length
+            ? NF.h("div", { class: "tip-mods" }, s.modifiers.join("；")) : null,
           s.stats && s.stats.length
             ? NF.h("div", { class: "tip-stats" }, s.stats.join(" · ")) : null));
     });
@@ -437,9 +472,11 @@
     refs.atkVal.textContent = String(snap.atk);
     refs.defVal.textContent = String(snap.def);
     refs.spdVal.textContent = String(snap.spd);
+    refs._spd = snap.spd;
+    refs._dead = snap.hp <= 0;
     var boosted = (snap.buffs || []).some(function (b) { return b.id === "last_stand"; });
     refs.atkStat.classList.toggle("atk-boost", boosted);
-    // 行动槽平滑推进：上升时按回放节奏线性过渡，行动消耗时快速回落，跳过时瞬时
+    // 行动槽：服务器快照对齐（行动消耗时快速回落；校正上升按刻节奏；瞬时模式直接应用）
     var gauge = Math.max(0, Math.min(100, snap.gauge));
     var prev = refs._gauge == null ? gauge : refs._gauge;
     refs._gauge = gauge;
@@ -449,7 +486,7 @@
     } else if (gauge < prev) {
       duration = 150;
     } else {
-      duration = Math.max(40, BASE_INTERVAL / state.speed);
+      duration = tickDuration();
     }
     refs.gaugeFill.style.transition = duration > 0
       ? "width " + duration + "ms linear" : "none";

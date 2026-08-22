@@ -14,8 +14,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from namefight.battle import run_battle
 from namefight.config import load_game_config, load_locale
-from namefight.fighter import (derive_fighter, fighter_to_api, link_bonus,
-                               personalized_effects, title_bonus_items)
+from namefight.fighter import (derive_fighter, fighter_to_api,
+                               initial_link_bonus, personalized_effects,
+                               title_bonus_items)
 
 CONFIG_ROOT = REPO_ROOT / "config"
 GAME = load_game_config(CONFIG_ROOT)
@@ -125,26 +126,37 @@ class FighterDeterminism(unittest.TestCase):
                 self.assertGreaterEqual(value, 1)
 
     def test_variable_link_varies_and_matches_display(self):
-        linked_names = []
-        for i in range(30):
+        link_cfg = GAME.skill_variable_link
+        sources = {s for s, _ in link_cfg.source_weights}
+        modes = {m for m, _ in link_cfg.mode_weights}
+        linked = []
+        modded = []
+        for i in range(40):
             f = derive_fighter("linker%02d" % i, GAME)
             for sdef, eff in personalized_effects(f, GAME):
                 if "link" in eff:
-                    self.assertIn(eff["link"]["variable"], f.attrs)
-                    rate = eff["link"]["rate"]
-                    vdef = next(v for v in GAME.skill_variable_link.variables
-                                if v.id == eff["link"]["variable"])
+                    link = eff["link"]
+                    self.assertIn(link["source"], sources)
+                    self.assertIn(link["mode"], modes)
+                    self.assertIn(link["variable"], f.attrs)
+                    vdef = next(v for v in link_cfg.variables
+                                if v.id == link["variable"])
+                    rate = link["rate"]
                     self.assertGreaterEqual(rate, vdef.rate_lo - 1e-9)
                     self.assertLessEqual(rate, vdef.rate_hi + 1e-9)
-                    linked_names.append((f, sdef, eff))
-        self.assertTrue(linked_names, "应有技能获得变量共鸣")
-        # 展示的附伤 = 引擎使用的附伤（同一确定性函数）
-        f, sdef, eff = linked_names[0]
-        self.assertEqual(linked_names[0][2].get("link") and link_bonus(f, eff),
-                         link_bonus(f, eff))
-        api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
-        entry = next(s for s in api["skills"] if s["id"] == sdef.id)
-        self.assertEqual(entry["link"]["bonus"], link_bonus(f, eff))
+                    linked.append((f, sdef, eff))
+                if "prefix" in eff or "suffix" in eff:
+                    modded.append((f, eff))
+        self.assertTrue(linked, "应有技能获得变量共鸣")
+        self.assertTrue(modded, "应有技能获得词缀")
+        # 己方+比例模式的初始参考值可离线计算且与 API 一致
+        for f, sdef, eff in linked:
+            if eff["link"]["source"] == "own" and eff["link"]["mode"] == "ratio":
+                api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+                entry = next(s for s in api["skills"] if s["id"] == sdef.id)
+                self.assertEqual(entry["link"]["bonus_initial"],
+                                 initial_link_bonus(f, eff))
+                break
 
     def test_effect_link_appears_in_battles(self):
         found = 0

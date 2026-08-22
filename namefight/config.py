@@ -87,19 +87,39 @@ class SkillVariance:
 
 @dataclass(frozen=True)
 class VariableLinkDef:
-    """可共鸣变量：变量 id（属性 id，hp 表示生命上限）、抽取权重、共鸣倍率区间。"""
+    """可共鸣变量：变量 id、抽取权重、共鸣倍率区间、差值模式的参照属性。"""
     id: str
     weight: float
     rate_lo: float
     rate_hi: float
+    diff_against: str    # 差值模式：与敌方哪个属性求差
 
 
 @dataclass(frozen=True)
 class SkillLinkCfg:
-    """技能变量共鸣配置：可共鸣的效果类型、共鸣概率、变量池。"""
+    """技能变量共鸣配置：可共鸣效果类型、共鸣概率、来源/模式权重、变量池。"""
     chance: float
     variables: tuple         # (VariableLinkDef, ...)
     linkable_types: frozenset
+    source_weights: tuple    # (("own", w), ("enemy", w))
+    mode_weights: tuple      # (("ratio", w), ("difference", w))
+
+
+@dataclass(frozen=True)
+class NameModifierDef:
+    """技能名称词缀（前缀/后缀）：附带对技能已有参数的小幅修正。"""
+    id: str
+    weight: float
+    mod: dict = field(default_factory=dict)  # {参数名: 增量}，仅作用于技能已有参数
+
+
+@dataclass(frozen=True)
+class SkillNameModCfg:
+    """技能词缀配置：前缀/后缀获得概率与词缀池。"""
+    prefix_chance: float
+    suffix_chance: float
+    prefixes: tuple
+    suffixes: tuple
 
 
 @dataclass(frozen=True)
@@ -144,6 +164,7 @@ class GameCfg:
     skill_count_max: int
     skill_md5_variance: SkillVariance
     skill_variable_link: SkillLinkCfg
+    skill_name_modifiers: SkillNameModCfg
     rarity_scaled_attributes: tuple
     battle: BattleCfg
 
@@ -266,19 +287,67 @@ def load_game_config(config_root) -> GameCfg:
             raise ConfigError("共鸣变量 %s 倍率区间非法" % vid)
         if float(spec.get("weight", 1)) <= 0:
             raise ConfigError("共鸣变量 %s 权重必须为正" % vid)
+        diff_against = str(spec.get("diff_against", vid))
+        if diff_against not in seen_attrs:
+            raise ConfigError("共鸣变量 %s 的差值参照 %s 不是已定义属性" % (vid, diff_against))
         link_variables.append(VariableLinkDef(
             id=str(vid), weight=float(spec.get("weight", 1)),
-            rate_lo=rate_lo, rate_hi=rate_hi,
+            rate_lo=rate_lo, rate_hi=rate_hi, diff_against=diff_against,
         ))
+
+    def _weight_pairs(mapping, name):
+        pairs = []
+        for key, weight in (mapping or {}).items():
+            if float(weight) <= 0:
+                raise ConfigError("%s 权重必须为正: %s" % (name, key))
+            pairs.append((str(key), float(weight)))
+        return tuple(pairs)
+
+    source_weights = _weight_pairs(link_data.get("source_weights", {"own": 1}), "共鸣来源")
+    mode_weights = _weight_pairs(link_data.get("mode_weights", {"ratio": 1}), "共鸣模式")
     skill_variable_link = SkillLinkCfg(
         chance=float(link_data.get("chance", 0)),
         variables=tuple(link_variables),
         linkable_types=frozenset(str(x) for x in link_data.get("linkable_types", [])),
+        source_weights=source_weights or (("own", 1.0),),
+        mode_weights=mode_weights or (("ratio", 1.0),),
     )
     if not 0.0 <= skill_variable_link.chance <= 1.0:
         raise ConfigError("variable_link.chance 必须在 [0, 1]")
     if skill_variable_link.chance > 0 and not link_variables:
         raise ConfigError("variable_link.chance > 0 但变量池为空")
+
+    # 技能名称词缀（前缀/后缀，附带微小参数修正）
+    mod_data = skills_data.get("name_modifiers", {})
+
+    def _load_mod_pool(pool_data, label):
+        pool = []
+        seen_mods = set()
+        for entry in (pool_data or []):
+            mid = str(entry["id"])
+            if mid in seen_mods:
+                raise ConfigError("词缀 id 重复: %s/%s" % (label, mid))
+            seen_mods.add(mid)
+            if float(entry.get("weight", 1)) <= 0:
+                raise ConfigError("词缀权重必须为正: %s/%s" % (label, mid))
+            mod = {}
+            for key, delta in entry.get("mod", {}).items():
+                if not isinstance(delta, (int, float)) or isinstance(delta, bool):
+                    raise ConfigError("词缀 %s/%s 的修正值必须为数字: %s" % (label, mid, key))
+                mod[str(key)] = float(delta)
+            pool.append(NameModifierDef(id=mid, weight=float(entry.get("weight", 1)), mod=mod))
+        return tuple(pool)
+
+    mod_prefixes = _load_mod_pool(mod_data.get("prefixes"), "prefix")
+    mod_suffixes = _load_mod_pool(mod_data.get("suffixes"), "suffix")
+    skill_name_modifiers = SkillNameModCfg(
+        prefix_chance=float(mod_data.get("prefix_chance", 0)),
+        suffix_chance=float(mod_data.get("suffix_chance", 0)),
+        prefixes=mod_prefixes, suffixes=mod_suffixes,
+    )
+    for chance in (skill_name_modifiers.prefix_chance, skill_name_modifiers.suffix_chance):
+        if not 0.0 <= chance <= 1.0:
+            raise ConfigError("name_modifiers 概率必须在 [0, 1]")
 
     # 称号：多字段 + 多结构概率生成
     structures = []
@@ -354,6 +423,7 @@ def load_game_config(config_root) -> GameCfg:
         skill_count_min=sc_min, skill_count_max=sc_max,
         skill_md5_variance=skill_md5_variance,
         skill_variable_link=skill_variable_link,
+        skill_name_modifiers=skill_name_modifiers,
         rarity_scaled_attributes=scaled, battle=battle,
     )
 
@@ -362,7 +432,7 @@ class Locale:
     """某一语言的全部文案（纯文本，不含任何数值规则）。"""
 
     def __init__(self, lang, ui, attributes, elements, rarities, skills, titles,
-                 stats, buffs, battle_log):
+                 stats, buffs, modifiers, battle_log):
         self.lang = lang
         self.ui = ui
         self.attributes = attributes
@@ -370,12 +440,16 @@ class Locale:
         self.rarities = rarities
         self.skills = skills
         self.titles = titles          # {"prefixes": {...}, "cores": {...}, "suffixes": {...}}
-        self.stats = stats            # 技能参数标签模板
+        self.stats = stats            # 技能参数标签模板 + 共鸣标记/词缀修饰模板
         self.buffs = buffs            # buff 名称/说明模板
+        self.modifiers = modifiers    # 技能词缀名称 {"prefixes": {...}, "suffixes": {...}}
         self.battle_log = battle_log
 
     def ref_name(self, registry: str, ref_id: str):
-        """按注册名（skill/title/element/rarity/attr）取显示名；缺失返回 None。"""
+        """按注册名取显示名；缺失返回 None。stat_word 注册名直接返回 stats 字符串。"""
+        if registry == "stat_word":
+            word = self.stats.get(ref_id)
+            return str(word) if word is not None else None
         table = {
             "skill": self.skills, "element": self.elements,
             "rarity": self.rarities, "attr": self.attributes,
@@ -389,7 +463,7 @@ class Locale:
 
 
 LOCALE_FILES = ("ui", "attributes", "elements", "rarities", "skills", "titles",
-                "stats", "buffs", "battle_log")
+                "stats", "buffs", "modifiers", "battle_log")
 
 
 def load_locale(config_root, lang: str) -> Locale:
@@ -399,5 +473,5 @@ def load_locale(config_root, lang: str) -> Locale:
         lang=str(lang), ui=data["ui"], attributes=data["attributes"],
         elements=data["elements"], rarities=data["rarities"], skills=data["skills"],
         titles=data["titles"], stats=data["stats"], buffs=data["buffs"],
-        battle_log=data["battle_log"],
+        modifiers=data["modifiers"], battle_log=data["battle_log"],
     )

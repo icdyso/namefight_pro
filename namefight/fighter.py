@@ -24,7 +24,9 @@ _FIELD_LOCALE = {"prefix": "prefixes", "core": "cores", "core2": "cores", "suffi
 STATS_KEYS_USED = frozenset({
     "chance", "mult", "lifesteal", "poison_damage", "poison_turns", "stun",
     "extra", "reduction", "reflect", "dodge", "crit", "heal", "threshold",
-    "atk_bonus", "link", "link_sep",
+    "atk_bonus", "link", "link_sep", "link_init",
+    "mod_chance", "mod_value", "mod_damage", "mod_turns",
+    "scope_own", "scope_enemy", "mode_ratio", "mode_difference",
 })
 
 
@@ -110,17 +112,31 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
     )
 
 
-def personalized_effects(fighter: Fighter, game: GameCfg):
-    """技能个性化：以 md5(规范化名字:技能id) 为种子，对触发概率与数值施加
-    确定性扰动（区间见 config/game/skills.json 的 md5_variance）。
+def _apply_modifier(eff: dict, mod: dict) -> None:
+    """词缀修正：仅作用于技能已有的参数（chance 截断到 [0.02, 0.95]，turns 至少 1）。"""
+    for key, delta in mod.items():
+        if key not in eff:
+            continue
+        if key == "chance":
+            eff["chance"] = min(0.95, max(0.02, float(eff["chance"]) + float(delta)))
+        elif key == "turns":
+            eff["turns"] = max(1, int(round(float(eff["turns"]))) + int(round(float(delta))))
+        else:
+            eff[key] = round(float(eff[key]) + float(delta), 4)
 
-    消耗顺序固定：chance -> value -> damage ->（仅可共鸣类型）是否共鸣 ->
-    共鸣变量 -> 共鸣倍率。
+
+def personalized_effects(fighter: Fighter, game: GameCfg):
+    """技能个性化：以 md5(规范化名字:技能id) 为种子做确定性扰动。
+
+    消耗顺序固定：
+    chance -> value -> damage -> 前缀(是否 -> 抽取) -> 后缀(是否 -> 抽取)
+    -> 共鸣(是否 -> 来源 -> 模式 -> 变量 -> 倍率)。
 
     返回 [(SkillDef, 个性化后的效果dict), ...]，顺序与 fighter.skill_ids 一致。
     """
     var = game.skill_md5_variance
     link_cfg = game.skill_variable_link
+    name_mod = game.skill_name_modifiers
     out = []
     for sid in fighter.skill_ids:
         sdef = next(s for s in game.skills if s.id == sid)
@@ -135,20 +151,35 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
             if key in eff:
                 factor = var.value_lo + rng.next_float() * (var.value_hi - var.value_lo)
                 eff[key] = round(float(eff[key]) * factor, 4)
+        if name_mod.prefix_chance > 0 and rng.next_float() < name_mod.prefix_chance:
+            eff["prefix"] = rng.pick_weighted((m, m.weight) for m in name_mod.prefixes).id
+        if name_mod.suffix_chance > 0 and rng.next_float() < name_mod.suffix_chance:
+            eff["suffix"] = rng.pick_weighted((m, m.weight) for m in name_mod.suffixes).id
+        for pool, mod_id in ((name_mod.prefixes, eff.get("prefix")),
+                             (name_mod.suffixes, eff.get("suffix"))):
+            if not mod_id:
+                continue
+            mdef = next((m for m in pool if m.id == mod_id), None)
+            if mdef is not None:
+                _apply_modifier(eff, mdef.mod)
         if link_cfg.chance > 0 and eff.get("type") in link_cfg.linkable_types:
             if rng.next_float() < link_cfg.chance:
+                source = rng.pick_weighted(link_cfg.source_weights)
+                mode = rng.pick_weighted(link_cfg.mode_weights)
                 vdef = rng.pick_weighted((v, v.weight) for v in link_cfg.variables)
                 rate = vdef.rate_lo + rng.next_float() * (vdef.rate_hi - vdef.rate_lo)
-                eff["link"] = {"variable": vdef.id, "rate": round(rate, 4)}
+                eff["link"] = {"variable": vdef.id, "rate": round(rate, 4),
+                               "source": source, "mode": mode}
         out.append((sdef, eff))
     return out
 
 
-def link_bonus(fighter: Fighter, eff: dict) -> int:
-    """技能共鸣的附伤数值 = 斗士自身属性值 × 共鸣倍率（确定性、可展示）。"""
+def initial_link_bonus(fighter: Fighter, eff: dict):
+    """共鸣在开战时刻（满状态）的参考值：仅「己方 + 比例」模式可离线计算，
+    其余模式依赖敌方或当前值，返回 None。"""
     link = eff.get("link")
-    if not link:
-        return 0
+    if not link or link.get("source") != "own" or link.get("mode") != "ratio":
+        return None
     stat = fighter.attrs.get(link["variable"], 0)
     return max(0, round(stat * float(link["rate"])))
 
@@ -206,10 +237,48 @@ def _skill_stats(eff: dict, locale, fighter: Fighter = None) -> list:
         stats.append(stat("atk_bonus", format_pct(float(eff.get("value", 0.5)))))
     link = eff.get("link")
     if link and fighter is not None:
-        attr_name = locale.attributes.get(link["variable"], {}).get("name", link["variable"])
-        bonus = link_bonus(fighter, eff)
-        stats.append(render_template(tmpl.get("link", ""), {"stat": attr_name, "v": bonus}, locale))
+        stat_name = locale.attributes.get(link["variable"], {}).get("name", link["variable"])
+        scope = locale.stats.get("scope_" + link.get("source", "own"), "")
+        mode = locale.stats.get("mode_" + link.get("mode", "ratio"), "")
+        stats.append(render_template(
+            tmpl.get("link", ""),
+            {"scope": scope, "stat": stat_name, "mode": mode,
+             "v": format_pct(float(link.get("rate", 0)))}, locale))
+        init = initial_link_bonus(fighter, eff)
+        if init is not None:
+            stats.append(render_template(tmpl.get("link_init", ""), {"v": init}, locale))
     return [s for s in stats if s]
+
+
+_MOD_TEMPLATES = {"chance": "mod_chance", "value": "mod_value",
+                  "damage": "mod_damage", "turns": "mod_turns"}
+
+
+def _mod_texts(eff: dict, game: GameCfg, locale) -> list:
+    """词缀修正的可读文案，如「疾风：触发率 +3%」。"""
+    texts = []
+    for pool, key in ((game.skill_name_modifiers.prefixes, "prefix"),
+                      (game.skill_name_modifiers.suffixes, "suffix")):
+        mod_id = eff.get(key)
+        if not mod_id:
+            continue
+        mdef = next((m for m in pool if m.id == mod_id), None)
+        if mdef is None:
+            continue
+        parts = []
+        for param, delta in mdef.mod.items():
+            template_key = _MOD_TEMPLATES.get(param)
+            if not template_key:
+                continue
+            sign = "+" if delta > 0 else "-"
+            magnitude = (format_pct(abs(delta)) if param in ("chance", "value")
+                         else str(int(round(abs(delta)))))
+            parts.append(render_template(locale.stats.get(template_key, template_key),
+                                         {"v": sign + magnitude}, locale))
+        if parts:
+            name = locale.modifiers.get(key + "es", {}).get(mod_id, {}).get("name", mod_id)
+            texts.append(name + "：" + "，".join(parts))
+    return texts
 
 
 def _find_structure(fighter: Fighter, game: GameCfg):
@@ -295,18 +364,31 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
     skills_api = []
     for sdef, eff in personalized_effects(fighter, game):
         entry = locale.skills.get(sdef.id, {})
+        sep = str(locale.stats.get("link_sep", "·"))
         name = str(entry.get("name", sdef.id))
+        mod_names = locale.modifiers
+        if eff.get("prefix"):
+            pname = mod_names.get("prefixes", {}).get(eff["prefix"], {}).get("name")
+            if pname:
+                name = pname + sep + name
+        if eff.get("suffix"):
+            sname = mod_names.get("suffixes", {}).get(eff["suffix"], {}).get("name")
+            if sname:
+                name = name + sep + sname
         link = eff.get("link")
         if link:
             marker = locale.stats.get("link_" + link["variable"])
             if marker:
-                name = name + str(locale.stats.get("link_sep", "·")) + str(marker)
+                name = name + sep + str(marker)
         link_api = None
         if link:
             link_api = {
                 "variable": link["variable"],
                 "name": locale.attributes.get(link["variable"], {}).get("name", link["variable"]),
-                "bonus": link_bonus(fighter, eff),
+                "source": link.get("source", "own"),
+                "mode": link.get("mode", "ratio"),
+                "rate": link.get("rate", 0),
+                "bonus_initial": initial_link_bonus(fighter, eff),
             }
         skills_api.append({
             "id": sdef.id,
@@ -314,6 +396,7 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
             "description": entry.get("description", ""),
             "detail": entry.get("detail", ""),
             "stats": _skill_stats(eff, locale, fighter),
+            "modifiers": _mod_texts(eff, game, locale),
             "link": link_api,
         })
     rar_def = next(r for r in game.rarities if r.id == fighter.rarity_id)

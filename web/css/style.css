@@ -226,6 +226,7 @@ body {
 .tip-title { font-weight: 800; color: var(--gold); font-size: 13px; margin-bottom: 4px; }
 .tip-line { color: var(--text); }
 .tip-line.muted { color: var(--muted); }
+.tip-mods { color: #9fd0ff; margin-top: 4px; }
 .tip-stats { color: var(--gold); margin-top: 4px; }
 
 /* ---------- 战斗 HUD（实时 HP / 属性 / 行动槽 / buff） ---------- */

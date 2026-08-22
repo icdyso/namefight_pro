@@ -39,10 +39,12 @@
    改变此顺序属于 breaking change（见 3.4）。
    称号字段附带小额属性加成（`game/titles.json` 各字段 `bonus`），在稀有度倍率
    之后查表应用，不消耗随机数。
-   技能个性化（触发概率/数值/变量共鸣随名字扰动）使用**独立种子**
+   技能个性化（触发概率/数值/词缀/变量共鸣随名字扰动）使用**独立种子**
    `md5(规范化名字 + ":" + 技能id)`，与主派生流互不影响；个性化消耗顺序固定：
-   chance -> value -> damage ->（仅可共鸣类型）是否共鸣 -> 共鸣变量 -> 共鸣倍率。
-   扰动与共鸣区间见 `config/game/skills.json` 的 `md5_variance` 与 `variable_link`。
+   chance -> value -> damage -> 前缀(是否 -> 抽取) -> 后缀(是否 -> 抽取)
+   -> 共鸣(是否 -> 来源 -> 模式 -> 变量 -> 倍率)。
+   扰动、词缀与共鸣区间见 `config/game/skills.json` 的 `md5_variance`、
+   `name_modifiers` 与 `variable_link`；全部公式与细则见 `docs/GAME_SPEC.md`。
 6. 镜像对战（两个相同名字）允许，结果同样确定。
 7. 配置文件内容属于「输入」的一部分：修改配置可能改变同名结果，属正常行为，
    但必须在更新文档中显著标注（见 3.4）。
@@ -51,9 +53,9 @@
 
 1. **数值 / 规则**全部位于 `config/game/*.json`：属性区间、技能效果与参数、
    称号权重、元素克制矩阵、稀有度加成、战斗常数、名字归一化规则。
-2. **文案**全部位于 `config/locales/<lang>/*.json`（每语言九个文件）：UI 文案、
+2. **文案**全部位于 `config/locales/<lang>/*.json`（每语言十个文件）：UI 文案、
    属性显示名、技能名与描述、技能参数标签（stats）、称号字段（titles）、
-   元素、稀有度、buff 文案（buffs）、战斗日志模板（battle_log）。
+   元素、稀有度、buff 文案（buffs）、技能词缀（modifiers）、战斗日志模板（battle_log）。
 3. 代码中**禁止硬编码任何面向用户的文案**；技能描述只写风味文本，不重复数值
    （数值的唯一事实来源是 `config/game`）。
 4. 战斗日志以「模板 id + 参数」结构化存储；技能 / 称号 / 元素等参数以
@@ -88,7 +90,10 @@
    版本号唯一维护于 `config/game/system.json` 的 `version` 字段。
 5. **测试**：任何更新前后都必须运行 `python -m unittest discover -s tests -v`
    且全部通过；确定性测试（`tests/test_determinism.py`）失败视为最高优先级事故。
-6. 禁止提交运行时产物（`__pycache__` 等，见 `.gitignore`）。
+6. **规则手册同步**：任何涉及规则、数值、配置结构或文案结构的更新，都必须同步更新
+   `docs/GAME_SPEC.md`（流程图、细则、数值表、JSON 指南），并在该文档头部维护
+   当前版本号；纯代码重构且行为不变时可免。
+7. 禁止提交运行时产物（`__pycache__` 等，见 `.gitignore`）。
 
 ## 4. 目录结构
 
@@ -110,11 +115,11 @@ namefight_pro/
 │   │   ├── attributes.json   # 属性区间与战力权重
 │   │   ├── elements.json     # 元素池（仅身份标识，无克制）
 │   │   ├── rarities.json     # 稀有度权重与属性倍率
-│   │   ├── skills.json       # 技能池（效果/参数/权重）+ md5_variance 个性化区间
-│   │   ├── titles.json       # 称号：结构池（structures）+ 字段池（prefix/cores/suffixes）
+│   │   ├── skills.json       # 技能池 + md5_variance + variable_link + name_modifiers
+│   │   ├── titles.json       # 称号：结构池（structures）+ 字段池（prefix/cores/suffixes，含 bonus）
 │   │   └── battle.json       # 战斗常数（暴击倍率/浮动/行动槽阈值/max_ticks 等）
-│   └── locales/              # 文案（与数值无关），每语言九个文件：
-│       ├── zh/               # ui/attributes/elements/rarities/skills/titles/stats/buffs/battle_log
+│   └── locales/              # 文案（与数值无关），每语言十个文件：
+│       ├── zh/               # ui/attributes/elements/rarities/skills/titles/stats/buffs/modifiers/battle_log
 │       └── en/
 ├── web/                      # 前端（无构建、零依赖）
 │   ├── index.html
@@ -124,7 +129,9 @@ namefight_pro/
 ├── tests/                    # unittest 测试
 │   ├── test_determinism.py   # 核心不变量：同名同命 / 顺序无关 / 跨进程一致
 │   └── test_config.py        # 配置完整性、locale 覆盖、PRNG 金向量
-└── docs/updates/             # 更新文档（每次更新一份）
+└── docs/
+    ├── GAME_SPEC.md          # 完整规则手册：流程图/细则/数值/JSON 指南（更新须同步）
+    └── updates/              # 更新文档（每次更新一份）
 ```
 
 ## 5. 运行与验证

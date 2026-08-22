@@ -1,0 +1,16 @@
+{
+  "prefixes": {
+    "swift":    { "name": "Swift" },
+    "fierce":   { "name": "Fierce" },
+    "venomous": { "name": "Venomous" },
+    "lingering":{ "name": "Lingering" },
+    "vast":     { "name": "Vast" }
+  },
+  "suffixes": {
+    "breaker":   { "name": "Breaker" },
+    "opportune": { "name": "Opportune" },
+    "deep":      { "name": "Deep" },
+    "endless":   { "name": "Endless" },
+    "surging":   { "name": "Surging" }
+  }
+}
