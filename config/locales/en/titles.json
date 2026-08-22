@@ -1,0 +1,14 @@
+{
+  "undefeated": { "name": "Undefeated War God",  "description": "A name said to have never lost." },
+  "rookie":     { "name": "Fresh Rookie",        "description": "A new face in the arena." },
+  "genius":     { "name": "Born Genius",         "description": "Stats too good to be fair." },
+  "lucky":      { "name": "Fortune's Favorite",  "description": "The dice always land your way." },
+  "tragic":     { "name": "Star-Crossed",        "description": "The MD5 was not on your side." },
+  "silent":     { "name": "Silent Lamb",         "description": "Takes the hits quietly, returns them quietly." },
+  "berserker":  { "name": "Berserker Soul",      "description": "Less blood, harder fists." },
+  "phoenix":    { "name": "Undying Phoenix",     "description": "Always rises once more before falling." },
+  "scholar":    { "name": "Battle Scholar",      "description": "Every strike precisely computed." },
+  "joker":      { "name": "Mysterious Challenger", "description": "Nobody knows the next move." },
+  "blade":      { "name": "Unsharpened Blade",   "description": "Great skill needs no sharp edge." },
+  "shadow":     { "name": "Wind Shadow",         "description": "Visible, yet untouchable." }
+}

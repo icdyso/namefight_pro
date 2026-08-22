@@ -1,0 +1,14 @@
+{
+  "heavy_strike": { "name": "重击",     "description": "倾尽全力的一击，重若千钧。" },
+  "execution":    { "name": "斩杀",     "description": "对奄奄一息的敌人毫不留情。" },
+  "bloodthirst":  { "name": "嗜血",     "description": "伤害化作生命的养料。" },
+  "venom":        { "name": "淬毒之刃", "description": "刀锋上的毒液缓慢侵蚀敌人。" },
+  "stun_blow":    { "name": "眩晕重锤", "description": "一记闷锤，让人眼冒金星。" },
+  "combo":        { "name": "连击",     "description": "行云流水的追加一击。" },
+  "iron_hide":    { "name": "铁壁",     "description": "硬化皮肤，抵御刀剑。" },
+  "thorns":       { "name": "荆棘反甲", "description": "伤我者，必被反噬。" },
+  "wind_step":    { "name": "疾风步",   "description": "身形如风，难以捉摸。" },
+  "focus":        { "name": "心眼",     "description": "看破一切破绽。" },
+  "spring_heal":  { "name": "回春术",   "description": "体内涌起温和的暖流。" },
+  "last_stand":   { "name": "背水一战", "description": "绝境之中，爆发潜能。" }
+}

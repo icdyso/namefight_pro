@@ -1,0 +1,8 @@
+{
+  "hp":    { "name": "生命" },
+  "atk":   { "name": "攻击" },
+  "def":   { "name": "防御" },
+  "spd":   { "name": "速度" },
+  "crit":  { "name": "暴击" },
+  "dodge": { "name": "闪避" }
+}

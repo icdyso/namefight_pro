@@ -1,0 +1,8 @@
+{
+  "fire":    { "name": "Blaze",    "emoji": "🔥" },
+  "water":   { "name": "Torrent",  "emoji": "💧" },
+  "wood":    { "name": "Verdant",  "emoji": "🌿" },
+  "thunder": { "name": "Thunder",  "emoji": "⚡" },
+  "light":   { "name": "Radiance", "emoji": "✨" },
+  "dark":    { "name": "Umbra",    "emoji": "🌑" }
+}

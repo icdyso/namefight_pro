@@ -1,0 +1,16 @@
+{
+  "titles": [
+    { "id": "undefeated", "weight": 4 },
+    { "id": "rookie",     "weight": 16 },
+    { "id": "genius",     "weight": 10 },
+    { "id": "lucky",      "weight": 10 },
+    { "id": "tragic",     "weight": 10 },
+    { "id": "silent",     "weight": 10 },
+    { "id": "berserker",  "weight": 8 },
+    { "id": "phoenix",    "weight": 6 },
+    { "id": "scholar",    "weight": 8 },
+    { "id": "joker",      "weight": 8 },
+    { "id": "blade",      "weight": 6 },
+    { "id": "shadow",     "weight": 6 }
+  ]
+}

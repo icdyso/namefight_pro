@@ -1,0 +1,10 @@
+{
+  "attributes": [
+    { "id": "hp",    "min": 80, "max": 120, "format": "int",    "power_weight": 1 },
+    { "id": "atk",   "min": 10, "max": 16,  "format": "int",    "power_weight": 4 },
+    { "id": "def",   "min": 2,  "max": 8,   "format": "int",    "power_weight": 3 },
+    { "id": "spd",   "min": 6,  "max": 14,  "format": "int",    "power_weight": 2 },
+    { "id": "crit",  "min": 5,  "max": 20,  "format": "percent", "power_weight": 2 },
+    { "id": "dodge", "min": 5,  "max": 15,  "format": "percent", "power_weight": 2 }
+  ]
+}

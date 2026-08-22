@@ -1,0 +1,8 @@
+{
+  "hp":    { "name": "HP" },
+  "atk":   { "name": "ATK" },
+  "def":   { "name": "DEF" },
+  "spd":   { "name": "SPD" },
+  "crit":  { "name": "CRIT" },
+  "dodge": { "name": "DODGE" }
+}

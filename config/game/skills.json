@@ -1,0 +1,30 @@
+{
+  "skill_count": { "min": 2, "max": 3 },
+  "skills": [
+    { "id": "heavy_strike", "weight": 10, "trigger": "on_attack",
+      "effect": { "type": "damage_multiplier", "chance": 0.18, "value": 1.6 } },
+    { "id": "execution", "weight": 6, "trigger": "on_attack",
+      "effect": { "type": "damage_multiplier", "chance": 0.3, "value": 2.0,
+                  "condition": { "type": "target_hp_below", "value": 0.35 } } },
+    { "id": "bloodthirst", "weight": 8, "trigger": "on_attack",
+      "effect": { "type": "lifesteal", "chance": 1.0, "value": 0.25 } },
+    { "id": "venom", "weight": 9, "trigger": "on_attack",
+      "effect": { "type": "poison", "chance": 0.3, "damage": 2, "turns": 3 } },
+    { "id": "stun_blow", "weight": 6, "trigger": "on_attack",
+      "effect": { "type": "stun", "chance": 0.12 } },
+    { "id": "combo", "weight": 9, "trigger": "on_attack",
+      "effect": { "type": "extra_strikes", "chance": 0.22, "ratios": [0.5] } },
+    { "id": "iron_hide", "weight": 9, "trigger": "on_defense",
+      "effect": { "type": "damage_reduction", "chance": 1.0, "value": 0.2 } },
+    { "id": "thorns", "weight": 8, "trigger": "on_defense",
+      "effect": { "type": "reflect", "chance": 1.0, "value": 0.3 } },
+    { "id": "wind_step", "weight": 10, "trigger": "passive",
+      "effect": { "type": "dodge_bonus", "value": 8 } },
+    { "id": "focus", "weight": 10, "trigger": "passive",
+      "effect": { "type": "crit_bonus", "value": 10 } },
+    { "id": "spring_heal", "weight": 8, "trigger": "on_turn_start",
+      "effect": { "type": "heal", "chance": 0.25, "value": 6 } },
+    { "id": "last_stand", "weight": 7, "trigger": "passive",
+      "effect": { "type": "low_hp_atk_bonus", "threshold": 0.3, "value": 0.5 } }
+  ]
+}

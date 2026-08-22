@@ -1,0 +1,11 @@
+{
+  "version": "0.1.0",
+  "default_locale": "zh",
+  "available_locales": ["zh", "en"],
+  "name": {
+    "trim": true,
+    "case_sensitive": false,
+    "min_length": 1,
+    "max_length": 32
+  }
+}

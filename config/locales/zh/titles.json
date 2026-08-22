@@ -1,0 +1,14 @@
+{
+  "undefeated": { "name": "不败战神",     "description": "传说中从未败北的名字。" },
+  "rookie":     { "name": "初出茅庐",     "description": "刚踏上竞技场的新面孔。" },
+  "genius":     { "name": "天纵奇才",     "description": "属性天生丽质，令人嫉妒。" },
+  "lucky":      { "name": "欧皇附体",     "description": "骰子永远站在你这边。" },
+  "tragic":     { "name": "时运不济",     "description": "MD5 对你不太友好。" },
+  "silent":     { "name": "沉默羔羊",     "description": "安静地挨打，安静地反击。" },
+  "berserker":  { "name": "狂暴之魂",     "description": "血越少，拳头越硬。" },
+  "phoenix":    { "name": "不死鸟",       "description": "倒下之前总会再站起来一次。" },
+  "scholar":    { "name": "战场学者",     "description": "每一击都经过精确计算。" },
+  "joker":      { "name": "谜之挑战者",   "description": "没人知道下一招是什么。" },
+  "blade":      { "name": "无锋重刃",     "description": "大巧不工，一力降十会。" },
+  "shadow":     { "name": "疾风之影",     "description": "看得见，打不着。" }
+}
