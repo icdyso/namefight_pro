@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -104,7 +105,7 @@ def make_handler(state: AppState):
 
         def do_POST(self):
             path = unquote(urlsplit(self.path).path)
-            if path != "/api/battle":
+            if path not in ("/api/battle", "/api/battle/fast"):
                 self._send_error_json("not_found", 404)
                 return
             try:
@@ -115,14 +116,17 @@ def make_handler(state: AppState):
                 self._send_error_json("bad_request", 400)
                 return
             try:
-                self._api_battle(payload)
+                if path == "/api/battle":
+                    self._api_battle(payload)
+                else:
+                    self._api_battle_fast(payload)
             except _Handled:
                 pass
             except InvalidName as e:
                 self._send_error_json(e.code, 400)
             except Exception as e:  # noqa: BLE001
                 self._send_error_json("internal_error", 500)
-                print("[error] POST /api/battle: %r" % (e,), file=sys.stderr)
+                print("[error] POST %s: %r" % (path, e), file=sys.stderr)
 
         # ---------- API ----------
 
@@ -170,6 +174,55 @@ def make_handler(state: AppState):
                 fighter_to_api(fighter_b, state.game, locale),
             ]
             self._send_json(battle_to_api(outcome, fighters_api, locale))
+
+        def _api_battle_fast(self, payload):
+            """极速对战：不生成快照、不做任何文案渲染，供批量测试/基准使用。
+
+            body: {"a": "...", "b": "...", "runs": 1} 或
+                  {"pairs": [["a","b"], ...], "runs": 1}
+            返回紧凑结果与耗时（ms）。
+            """
+            if not isinstance(payload, dict):
+                self._send_error_json("bad_request", 400)
+                raise _Handled()
+            runs = payload.get("runs", 1)
+            if not isinstance(runs, int) or not 1 <= runs <= 100000:
+                self._send_error_json("bad_request", 400)
+                raise _Handled()
+            pairs = payload.get("pairs")
+            if pairs is None:
+                a, b = payload.get("a"), payload.get("b")
+                if not isinstance(a, str) or not isinstance(b, str):
+                    self._send_error_json("empty_name", 400)
+                    raise _Handled()
+                pairs = [[a, b]]
+            if (not isinstance(pairs, list) or not pairs
+                    or len(pairs) > 10000
+                    or any(not isinstance(p, (list, tuple)) or len(p) != 2
+                           or not isinstance(p[0], str) or not isinstance(p[1], str)
+                           for p in pairs)):
+                self._send_error_json("bad_request", 400)
+                raise _Handled()
+            started = time.perf_counter()
+            results = []
+            for a, b in pairs:
+                fighter_a = derive_fighter(a, state.game)
+                fighter_b = derive_fighter(b, state.game)
+                outcome = None
+                for _ in range(runs):
+                    outcome = run_battle(fighter_a, fighter_b, state.game,
+                                         snapshots=False)
+                results.append({
+                    "a": fighter_a.normalized, "b": fighter_b.normalized,
+                    "winner": outcome.winner_name, "winner_pos": outcome.winner_pos,
+                    "draw": outcome.draw, "ticks": outcome.ticks,
+                    "damage": {"a": outcome.damage[0], "b": outcome.damage[1]},
+                    "seed": outcome.seed,
+                })
+            elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
+            self._send_json({"results": results, "runs": runs,
+                             "elapsed_ms": elapsed_ms,
+                             "version": state.game.system.version})
 
     return Handler
 

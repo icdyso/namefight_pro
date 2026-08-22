@@ -2,7 +2,7 @@
 
 > 本文档是游戏的**完整规则说明书**：流程图、全部细则与数值、每个 JSON 配置文件的
 > 意义与调整指南。按 AGENTS.md 第 3.6 条，**每次更新涉及规则/数值/配置结构时必须
-> 同步更新本文档**。当前版本：**v0.5.0**（与 `config/game/system.json` 的 `version` 一致）。
+> 同步更新本文档**。当前版本：**v0.6.0**（与 `config/game/system.json` 的 `version` 一致）。
 
 ---
 
@@ -112,7 +112,8 @@ flowchart LR
 - **方差扰动 `md5_variance`**（**高斯**）：概率 ×N(1.025, σ0.1625) 区间[0.7,1.35]
   （截断），数值 ×N(1.05, σ0.1) 区间[0.85,1.25]；概率截断到 [2%, 95%]；
 - **名称词缀 `name_modifiers`**：前缀 50% / 后缀 40%；词缀对技能**已有参数**做
-  小幅加法修正（概率截断、持续至少 1）：
+  小幅加法修正，且**修正值按名字个性化高斯缩放**（`mod_variance` = [0.7, 1.3]，
+  即 ±30%）：
 
 | 词缀 | 修正 | | 词缀 | 修正 |
 | --- | --- | --- | --- | --- |
@@ -125,36 +126,41 @@ flowchart LR
 - **变量共鸣 `variable_link`**（重击/斩杀/连击/淬毒/眩晕）：概率 **95%**；
   来源（己方 3 : 敌方 2）、模式（比例 3 : 差值 2）、变量、倍率（**高斯**）依次抽取。
 
-**共鸣公式（触发时刻动态求值）**：
+**共鸣 v3（v0.6.0）：不改变技能逻辑，只按比例修正技能自身的某个参数**
+（目标字段由 `variable_link.targets` 按效果类型指定，如 眩晕重锤 -> chance、
+重击 -> value、淬毒之刃 -> damage），并以**基础值归一化**消除量纲差异：
 
 ```
-比例模式：  bonus = round( 源方[变量].当前值 × rate )
-差值模式：  bonus = round( ( 己方[变量].当前值 − 敌方[参照].当前值 ) × rate )
-bonus = max(0, bonus)      // 负差不提供加成
+共鸣系数 coeff（触发时刻按当前值动态计算）：
+  比例模式：  coeff = rate × ( 源方[变量].当前值 ÷ 变量基础值 )
+  差值模式：  coeff = rate × ( (己方[变量] − 敌方[参照]) ÷ 变量基础值 )   // 可为负
+最终参数 = 基础参数 × (1 + coeff)，并按字段截断：
+  chance ∈ [2%, 95%]；value ∈ [0.05, 5.0]；damage ≥ 0；turns ≥ 1（取整）
 ```
 
 「当前值」：hp = 当前生命（动态），atk = 含背水一战，crit/dodge = 含被动，
-def/spd = 面板。差值参照（`diff_against`）：攻↔防、防↔攻、速↔速、命↔命、
-暴击↔闪避、闪避↔暴击。淬毒类共鸣加在毒伤上，其余加在本次打击上。
+def/spd = 面板；差值参照（`diff_against`）：攻↔防、速↔速、命↔命、暴击↔闪避等。
+所有变量的倍率区间统一为 0.25–0.65（归一化后典型修正幅度 +25%–65%）。
 
-| 变量 | 权重 | 倍率区间（高斯） | 差值参照 |
+| 变量 | 权重 | 倍率区间（高斯，归一化系数） | 差值参照 |
 | --- | --- | --- | --- |
-| atk | 3 | 0.35–0.80 | def |
-| def | 2 | 0.50–1.50 | atk |
-| spd | 3 | 0.40–0.90 | spd |
-| hp | 2 | 0.04–0.10 | hp |
-| crit | 1 | 0.10–0.35 | dodge |
-| dodge | 1 | 0.20–0.50 | crit |
+| atk | 3 | 0.25–0.65 | def |
+| def | 2 | 0.25–0.65 | atk |
+| spd | 3 | 0.25–0.65 | spd |
+| hp | 2 | 0.25–0.65 | hp |
+| crit | 1 | 0.25–0.65 | dodge |
+| dodge | 1 | 0.25–0.65 | crit |
 
 ### 4.3 技能描述（标准化自然语言，v0.5.0 起）
 
 - **描述 = 一句自然语言**，由 `locale/stats.json` 的 `nat_<效果类型>` 模板 +
   个性化真实数值生成，单位随文（点/%/次行动）；
   例：「攻击时有 36% 概率使敌方中毒：其每次行动损失 2 点生命，持续 3 次行动。」；
-- **共鸣描述 = 「XX越XX」句式 + 内联公式**：
-  比例：「{stat}越高，附加伤害越高（+ {stat} × {pct} 点）。」
-  差值：「{own}越高于{enemy}，附加伤害越高（+（{own} − {enemy}）× {pct} 点）。」
-  例：「敌方防御越高，附加伤害越高（+ 敌方防御 × 75% 点）。」；
+- **共鸣描述 = 「XX越XX / XX高于XX越多」句式 + 归一化公式 + 当前最终值**
+  （主句中的数值本身就是共鸣修正后的最终值；敌方按基础值估算）：
+  比例：「{stat}越高，{field}越高（{field} ×（1 + {stat} ÷ {base} × {pct}），当前约 {final}）。」
+  差值：「{own}高于{enemy}越多，{field}越高（{field} ×（1 +（{own} − {enemy}）÷ {base} × {pct}），当前约 {final}）。」
+  实例：「攻击时有 13% 概率眩晕敌方……敌方生命越高，触发率越高（触发率 ×（1 + 敌方生命 ÷ 100 × 30%），当前约 13%）。」；
 - 技能名组装：`[前缀·]技能名[·后缀][·共鸣标记]`（标记：锋/坚/疾/命/锐/影），
   连接符 `link_sep`；风味短句（locale `skills.json` 的 `description`）作为副行展示。
 
@@ -242,7 +248,7 @@ dmg   = max( 1, round( raw + 共鸣附伤 − 敌方DEF × 1.0 ) )
 `{hp, max_hp, atk(有效), def, spd, gauge(0-100), buffs:[{id,name,detail,desc}]}`；
 buff 集合：poison/stun/last_stand/crit_up/dodge_up。
 
-前端逐刻回放：每 `TICK_MS(85ms) ÷ 倍速` 推进一刻；行动槽每刻 +速度%
+前端逐刻回放：每 `TICK_MS(255ms) ÷ 倍速` 推进一刻（v0.6.0 起为原速的 1/3）；行动槽每刻 +速度%
 （客户端模拟 + 快照校正）；条目在其所属刻揭示。
 
 ---
@@ -255,6 +261,7 @@ buff 集合：poison/stun/last_stand/crit_up/dodge_up。
 | `GET /api/text?lang=zh` | UI 全部文案 + 语言列表 + 版本 |
 | `GET /api/fighter?name=X&lang=zh` | 斗士数据（属性、自然语言技能描述、称号加成、共鸣公式） |
 | `POST /api/battle` | `{a,b,lang}` → 双方 + 逐条战报（含快照）+ 胜负 |
+| `POST /api/battle/fast` | `{a,b,runs}` 或 `{pairs:[[a,b],...],runs}` → 极速结果（无快照/无文案渲染，含耗时 ms；实测约 0.25ms/场） |
 
 错误码：empty_name / name_too_long / unknown_locale / bad_request / not_found / internal_error。
 
@@ -281,9 +288,9 @@ buff 集合：poison/stun/last_stand/crit_up/dodge_up。
   伤害倍率类可带 `condition`）；
 - `md5_variance{chance[lo,hi], value[lo,hi]}`：高斯扰动区间（σ = 宽/4）；
 - `variable_link`：`chance` / `linkable_types` / `source_weights` / `mode_weights` /
-  `variables{id→{weight, rate[lo,hi], diff_against}}`；
-- `name_modifiers`：`prefix_chance` / `suffix_chance` / `prefixes[]` / `suffixes[]`
-  （`mod` 键限定 chance/value/damage/turns）。
+  `targets{效果类型→参数字段}` / `variables{id→{weight, rate[lo,hi], diff_against}}`；
+- `name_modifiers`：`prefix_chance` / `suffix_chance` / `mod_variance` /
+  `prefixes[]` / `suffixes[]`（`mod` 键限定 chance/value/damage/turns）。
 
 示例：共鸣必发且全差值 → `"chance": 1.0, "mode_weights": {"ratio":1,"difference":4}`。
 
@@ -327,8 +334,10 @@ buff 集合：poison/stun/last_stand/crit_up/dodge_up。
 ## 12. 数值速查（v0.5.0）
 
 - 属性固定：HP 100 / ATK 13 / DEF 5 / SPD 10 / CRIT 12% / DODGE 10%（+称号加成）
-- 技能数 2–3（高斯）；共鸣概率 95%；词缀 前缀 50% / 后缀 40%
+- 技能数 2–3（高斯）；共鸣概率 95%（修正技能自身参数，归一化 0.25–0.65）；
+  词缀 前缀 50% / 后缀 40%（修正值高斯缩放 [0.7, 1.3]）
 - 数值类随机全部高斯（σ = 区间宽 ÷ 4，截断区间）
 - 行动槽 100 / 最大 600 刻 / 暴击 ×1.8 / 高斯浮动 ±15%（截断）/ 伤害下限 1
+- 回放 255ms/刻（原速 1/3）；极速接口 /api/battle/fast ≈ 0.25ms/场
 - 暴击上限 100%、闪避上限 60%；中毒按行动结算、眩晕消耗一次行动
 - 超时：按剩余生命比例判定，完全相同则平局

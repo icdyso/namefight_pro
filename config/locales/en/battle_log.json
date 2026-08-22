@@ -14,7 +14,7 @@
   "effect_heal": "✦ {a} recovers {heal} HP.",
   "effect_reduction": "　　🛡️ {b} toughs it out - damage reduced by {ratio}!",
   "effect_reflect": "　　🌵 {b}'s thorns reflect {damage} damage back at {a}!",
-  "effect_link": "　　⚡ {a} resonates with {scope} {stat} ({mode}), adding {damage} damage!",
+  "effect_link": "　　⚡ {a} resonates with {scope}{stat} ({mode}); {field} becomes {final}!",
   "low_hp_trigger": "🔥 {a} fights on the brink - attack greatly increased!",
   "attack_crit": "💥 Critical hit!",
   "attack_miss": "💨 {b} slips aside - {a}'s attack misses!",

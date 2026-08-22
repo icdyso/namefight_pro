@@ -16,7 +16,8 @@ import hashlib
 from dataclasses import dataclass, field
 
 from .config import GameCfg
-from .fighter import Fighter, personalized_effects
+from .fighter import (Fighter, apply_resonance, format_resonance_final,
+                      personalized_effects, resonance_coeff, resonance_target)
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
@@ -98,29 +99,6 @@ def _live_value(c: _Combatant, vid: str) -> float:
     return 0.0
 
 
-def compute_link_bonus(actor: _Combatant, enemy: _Combatant, eff: dict, game: GameCfg) -> int:
-    """共鸣附伤（触发时刻的动态值）：
-
-    - 比例模式：bonus = 源方属性当前值 × rate（源方为己方或敌方）；
-    - 差值模式：bonus = (己方变量 − 敌方参照属性) × rate，参照属性见
-      config 中该变量的 diff_against（如 攻↔防、速↔速、暴击↔闪避）；
-    - 结果向下取整到非负整数。
-    """
-    link = eff.get("link")
-    if not link:
-        return 0
-    rate = float(link.get("rate", 0))
-    if link.get("mode") == "difference":
-        vdef = next((v for v in game.skill_variable_link.variables
-                     if v.id == link.get("variable")), None)
-        against = vdef.diff_against if vdef else link.get("variable")
-        raw = _live_value(actor, link.get("variable")) - _live_value(enemy, against)
-    else:
-        src = enemy if link.get("source") == "enemy" else actor
-        raw = _live_value(src, link.get("variable"))
-    return max(0, round(raw * rate))
-
-
 def _make_combatant(f: Fighter, pos: int, game: GameCfg) -> _Combatant:
     bc = game.battle
     skills = personalized_effects(f, game)
@@ -181,7 +159,10 @@ def _snapshot(combatants, threshold: float) -> dict:
     return {"a": one(combatants[0]), "b": one(combatants[1])}
 
 
-def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg) -> BattleOutcome:
+def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
+               snapshots: bool = True) -> BattleOutcome:
+    """运行一场对战。snapshots=False 时不为战报条目附带状态快照（极速模式，
+    供 /api/battle/fast 使用；胜负与事件序列与快照模式完全一致）。"""
     bc = game.battle
     combatants = [_make_combatant(f, pos, game)
                   for pos, f in enumerate((fighter_a, fighter_b))]
@@ -199,13 +180,18 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg) -> BattleO
 
     def ev(template, params=None):
         nonlocal last_logged_tick
+        state = _snapshot(combatants, bc.gauge_threshold) if snapshots else None
         if tick != last_logged_tick:
-            events.append({"tick": tick, "template": "tick_marker",
-                           "params": {"tick": tick},
-                           "state": _snapshot(combatants, bc.gauge_threshold)})
+            marker = {"tick": tick, "template": "tick_marker",
+                      "params": {"tick": tick}}
+            if snapshots:
+                marker["state"] = state
+            events.append(marker)
             last_logged_tick = tick
-        events.append({"tick": tick, "template": template, "params": params or {},
-                       "state": _snapshot(combatants, bc.gauge_threshold)})
+        entry = {"tick": tick, "template": template, "params": params or {}}
+        if snapshots:
+            entry["state"] = state
+        events.append(entry)
 
     first, second = internal[0], internal[1]
     ev("battle_start", {
@@ -311,48 +297,51 @@ def _attack(actor, enemy, game, rng, ev):
     poison = None
     stun = False
     extra_ratios = []
-    resonance = 0        # 共鸣附伤（加在本次主伤害上）
-    poison_resonance = 0  # 淬毒类技能的共鸣（加在毒伤上）
     for sdef, eff in actor.skills:
         if sdef.trigger != "on_attack":
             continue
-        if rng.next_float() > float(eff.get("chance", 1.0)):
+        # 共鸣修正技能自身参数（触发前修正概率类；其余在使用处修正）
+        target = resonance_target(eff, game)
+        live_coeff = 0.0
+        proc_eff = eff
+        if target:
+            live_coeff = resonance_coeff(
+                lambda vid: _live_value(actor, vid),
+                lambda vid: _live_value(enemy, vid),
+                eff["link"], game)
+            proc_eff = apply_resonance(eff, live_coeff, target)
+        roll_chance = float(proc_eff.get("chance", eff.get("chance", 1.0)))
+        if rng.next_float() > roll_chance:
             continue
         ev("skill_proc", {"a": actor.name, "skill": {"ref": "skill", "id": sdef.id}})
+        if target:
+            ev("effect_link", {
+                "a": actor.name,
+                "stat": {"ref": "attr", "id": eff["link"]["variable"]},
+                "scope": {"ref": "stat_word", "id": "scope_" + eff["link"].get("source", "own")},
+                "mode": {"ref": "stat_word", "id": "mode_" + eff["link"].get("mode", "ratio")},
+                "field": {"ref": "stat_word", "id": "field_" + target},
+                "final": format_resonance_final(proc_eff.get(target), target),
+            })
         t = eff.get("type")
         satisfied = True
         if t == "damage_multiplier":
             cond = eff.get("condition")
             if cond and cond.get("type") == "target_hp_below":
                 satisfied = enemy.hp <= enemy.max_hp * float(cond.get("value", 0))
-        # 变量共鸣：触发时按「当前值」动态计算附伤（己方/敌方、比例/差值）
-        bonus = compute_link_bonus(actor, enemy, eff, game) if satisfied else 0
-        if bonus > 0:
-            if t == "poison":
-                poison_resonance += bonus
-            else:
-                resonance += bonus
-            ev("effect_link", {
-                "a": actor.name,
-                "stat": {"ref": "attr", "id": eff["link"]["variable"]},
-                "scope": {"ref": "stat_word", "id": "scope_" + eff["link"].get("source", "own")},
-                "mode": {"ref": "stat_word", "id": "mode_" + eff["link"].get("mode", "ratio")},
-                "damage": bonus,
-            })
         if not satisfied:
             continue
         if t == "damage_multiplier":
-            mult *= float(eff.get("value", 1.0))
+            mult *= float(proc_eff.get("value", eff.get("value", 1.0)))
             if eff.get("condition"):
                 ev("effect_execution", {"mult": format_pct(mult)})
             else:
                 ev("effect_damage_up", {"mult": format_pct(mult)})
         elif t == "lifesteal":
-            lifesteal += float(eff.get("value", 0))
+            lifesteal += float(proc_eff.get("value", eff.get("value", 0)))
         elif t == "poison":
-            poison = (int(round(float(eff.get("damage", 0)))) + poison_resonance,
-                      int(eff.get("turns", 0)))
-            poison_resonance = 0
+            poison = (int(round(float(proc_eff.get("damage", eff.get("damage", 0))))),
+                      int(proc_eff.get("turns", eff.get("turns", 0))))
         elif t == "stun":
             stun = True
         elif t == "extra_strikes":
@@ -367,8 +356,6 @@ def _attack(actor, enemy, game, rng, ev):
     if crit:
         ev("attack_crit", {})
     dmg = _compute_damage(actor, enemy, mult, crit, game, rng)
-    if resonance > 0:
-        dmg = max(bc.min_damage, dmg + resonance)
 
     # 防守方技能（减伤 / 反甲）
     for sdef, eff in enemy.skills:

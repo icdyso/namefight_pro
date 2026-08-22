@@ -68,11 +68,16 @@ class GameConfigTests(unittest.TestCase):
             for t in link.linkable_types:
                 self.assertIn(t, SUPPORTED_EFFECTS,
                               "可共鸣类型 %s 不是引擎支持的效果" % t)
+            for effect_type, param in link.targets.items():
+                self.assertIn(param, ("chance", "value", "damage", "turns"),
+                              "共鸣目标字段非法: %s" % effect_type)
 
     def test_name_modifiers_sane(self):
         mods = GAME.skill_name_modifiers
         for chance in (mods.prefix_chance, mods.suffix_chance):
             self.assertTrue(0.0 <= chance <= 1.0)
+        self.assertLessEqual(mods.scale_lo, mods.scale_hi)
+        self.assertGreater(mods.scale_lo, 0)
         known_params = {"chance", "value", "damage", "turns"}
         for pool in (mods.prefixes, mods.suffixes):
             self.assertTrue(pool)

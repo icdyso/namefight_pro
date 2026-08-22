@@ -163,12 +163,14 @@ class FighterDeterminism(unittest.TestCase):
                     modded.append((f, eff))
         self.assertTrue(linked, "应有技能获得变量共鸣")
         self.assertTrue(modded, "应有技能获得词缀")
-        # 自然语言描述应包含共鸣句式与百分比公式
-        api = fighter_to_api(linked[0][0], GAME, load_locale(CONFIG_ROOT, "zh"))
-        entry = next(s for s in api["skills"] if s["id"] == linked[0][1].id)
-        if linked[0][2].get("link"):
+        # 自然语言描述应包含共鸣句式、字段标识与最终百分比
+        f, sdef, eff = linked[0]
+        api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+        entry = next(s for s in api["skills"] if s["id"] == sdef.id)
+        if eff.get("link"):
             self.assertIn("越", entry["text"])
             self.assertIn("%", entry["text"])
+            self.assertIn("当前约", entry["text"])
 
     def test_effect_link_appears_in_battles(self):
         found = 0
@@ -176,9 +178,27 @@ class FighterDeterminism(unittest.TestCase):
             fa = derive_fighter("linkA%02d" % i, GAME)
             fb = derive_fighter("linkB%02d" % i, GAME)
             outcome = run_battle(fa, fb, GAME)
-            if any(e["template"] == "effect_link" for e in outcome.events):
-                found += 1
+            for e in outcome.events:
+                if e["template"] == "effect_link":
+                    self.assertIn("field", e["params"])
+                    self.assertIn("final", e["params"])
+                    found += 1
+                    break
         self.assertGreater(found, 0, "共鸣事件应在若干场对战中出现")
+
+    def test_snapshots_off_matches_full_run(self):
+        """极速模式（无快照）与完整模式的胜负、tick 与事件序列完全一致。"""
+        fa = derive_fighter("Alice", GAME)
+        fb = derive_fighter("Bob", GAME)
+        full = run_battle(fa, fb, GAME, snapshots=True)
+        fast = run_battle(fa, fb, GAME, snapshots=False)
+        self.assertEqual(full.winner_name, fast.winner_name)
+        self.assertEqual(full.ticks, fast.ticks)
+        self.assertEqual(full.damage, fast.damage)
+        stripped = [{k: v for k, v in e.items() if k != "state"} for e in full.events]
+        self.assertEqual(stripped, fast.events)
+        for e in fast.events:
+            self.assertNotIn("state", e)
 
 
 class BattleDeterminism(unittest.TestCase):

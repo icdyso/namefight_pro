@@ -90,17 +90,19 @@ class VariableLinkDef:
 
 @dataclass(frozen=True)
 class SkillLinkCfg:
-    """技能变量共鸣配置：可共鸣效果类型、共鸣概率、来源/模式权重、变量池。"""
+    """技能变量共鸣配置：可共鸣效果类型、共鸣概率、来源/模式权重、变量池、
+    各效果类型被修正的参数字段（targets，如 stun -> chance 表示修正触发概率）。"""
     chance: float
     variables: tuple         # (VariableLinkDef, ...)
     linkable_types: frozenset
     source_weights: tuple    # (("own", w), ("enemy", w))
     mode_weights: tuple      # (("ratio", w), ("difference", w))
+    targets: dict            # {效果类型: 参数名(chance/value/damage/turns)}
 
 
 @dataclass(frozen=True)
 class NameModifierDef:
-    """技能名称词缀（前缀/后缀）：附带对技能已有参数的小幅修正。"""
+    """技能名称词缀（前缀/后缀）：附带对技能已有参数的小幅修正（数值可个性化缩放）。"""
     id: str
     weight: float
     mod: dict = field(default_factory=dict)  # {参数名: 增量}，仅作用于技能已有参数
@@ -108,11 +110,13 @@ class NameModifierDef:
 
 @dataclass(frozen=True)
 class SkillNameModCfg:
-    """技能词缀配置：前缀/后缀获得概率与词缀池。"""
+    """技能词缀配置：前缀/后缀获得概率、词缀池、修正值的高斯缩放区间。"""
     prefix_chance: float
     suffix_chance: float
     prefixes: tuple
     suffixes: tuple
+    scale_lo: float
+    scale_hi: float
 
 
 @dataclass(frozen=True)
@@ -282,12 +286,19 @@ def load_game_config(config_root) -> GameCfg:
 
     source_weights = _weight_pairs(link_data.get("source_weights", {"own": 1}), "共鸣来源")
     mode_weights = _weight_pairs(link_data.get("mode_weights", {"ratio": 1}), "共鸣模式")
+    valid_params = {"chance", "value", "damage", "turns"}
+    targets = {}
+    for effect_type, param in (link_data.get("targets", {}) or {}).items():
+        if str(param) not in valid_params:
+            raise ConfigError("共鸣目标字段非法: %s -> %s" % (effect_type, param))
+        targets[str(effect_type)] = str(param)
     skill_variable_link = SkillLinkCfg(
         chance=float(link_data.get("chance", 0)),
         variables=tuple(link_variables),
         linkable_types=frozenset(str(x) for x in link_data.get("linkable_types", [])),
         source_weights=source_weights or (("own", 1.0),),
         mode_weights=mode_weights or (("ratio", 1.0),),
+        targets=targets,
     )
     if not 0.0 <= skill_variable_link.chance <= 1.0:
         raise ConfigError("variable_link.chance 必须在 [0, 1]")
@@ -317,10 +328,14 @@ def load_game_config(config_root) -> GameCfg:
 
     mod_prefixes = _load_mod_pool(mod_data.get("prefixes"), "prefix")
     mod_suffixes = _load_mod_pool(mod_data.get("suffixes"), "suffix")
+    mod_scale = mod_data.get("mod_variance", [1.0, 1.0])
+    if float(mod_scale[0]) > float(mod_scale[1]):
+        raise ConfigError("mod_variance 区间非法")
     skill_name_modifiers = SkillNameModCfg(
         prefix_chance=float(mod_data.get("prefix_chance", 0)),
         suffix_chance=float(mod_data.get("suffix_chance", 0)),
         prefixes=mod_prefixes, suffixes=mod_suffixes,
+        scale_lo=float(mod_scale[0]), scale_hi=float(mod_scale[1]),
     )
     for chance in (skill_name_modifiers.prefix_chance, skill_name_modifiers.suffix_chance):
         if not 0.0 <= chance <= 1.0:

@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  var TICK_MS = 85;           // 每个 tick 的基础演出时长（ms）
+  var TICK_MS = 255;          // 每个 tick 的基础演出时长（ms），v0.6.0 起为原速的 1/3
   var SPEEDS = [0.5, 1, 2, 4];  // 回放倍速
 
   var state = {
