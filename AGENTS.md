@@ -1,0 +1,142 @@
+# AGENTS.md — namefight_pro 项目规约（必读）
+
+> 本文件固化「名字竞技场」的底层需求、核心不变量与开发流程。任何开发者 / Agent
+> 在修改本项目之前必须先阅读本文件；**任何更新都不得违背第 2 章的核心不变量**；
+> 第 3 章流程规则同样适用于每次更新。若需求发生变化，应先修订本文件再动代码。
+
+## 1. 项目定位
+
+「名字竞技场」（Name Fight Arena）：
+
+- 用户输入两个名字；
+- 每个名字经 **MD5** 确定该斗士的全部属性、技能、称号、元素、稀有度；
+- 两名斗士进行一场**完全确定**的回合制对战，输出逐条战报与胜负。
+
+技术形态：
+
+- 后端：**纯 Python（仅标准库）**，`python server.py` 直接运行，无任何第三方依赖；
+- 前端：**无构建步骤**的静态 Web UI（原生 JS + 自编写微型框架，见 `web/js/framework.js`），
+  不引入 npm / 打包器 / CDN，保证离线可运行；
+- 无数据库：一切由名字实时推导。
+
+## 2. 核心不变量（任何时候都不可破坏）
+
+### 2.1 同名同命（确定性）
+
+1. 斗士的一切派生数据 = `f(归一化后的名字, 当前配置快照)` 的**纯函数**。
+   名字与配置不变，则属性 / 技能 / 称号 / 元素 / 稀有度**永远不变**，
+   与运行次数、进程、机器无关。
+2. 对战过程与结果 = `g(双方名字, 当前配置快照)` 的**纯函数**。
+   **同样两个名字（无论输入顺序、无论何时查询）永远得到同一场对战、同一份战报、同一胜负。**
+3. 禁止在对战与派生逻辑中使用任何非种子随机源：`random` 模块、时间、网络、
+   全局可变状态等一律禁止。所有"随机"必须来自 `namefight/rng.py` 的确定性
+   PRNG（splitmix64）：
+   - 斗士种子 = `md5(归一化名字)`；
+   - 对战种子 = `md5(按字典序排序后的两个归一化名字，以配置的分隔符连接)`。
+4. 对战内部次序（先后手）只由（速度降序、规范化名字升序）决定，与输入顺序无关。
+5. 派生时 PRNG 的消耗顺序固定为：
+   **稀有度 → 元素 → 属性（按配置顺序）→ 技能数量 → 技能抽取 → 称号**。
+   改变此顺序属于 breaking change（见 3.4）。
+6. 镜像对战（两个相同名字）允许，结果同样确定。
+7. 配置文件内容属于「输入」的一部分：修改配置可能改变同名结果，属正常行为，
+   但必须在更新文档中显著标注（见 3.4）。
+
+### 2.2 功能与文字解耦（可配置性）
+
+1. **数值 / 规则**全部位于 `config/game/*.json`：属性区间、技能效果与参数、
+   称号权重、元素克制矩阵、稀有度加成、战斗常数、名字归一化规则。
+2. **文案**全部位于 `config/locales/<lang>/*.json`：UI 文案、属性显示名、
+   技能名与描述、称号、元素、稀有度、战斗日志模板。
+3. 代码中**禁止硬编码任何面向用户的文案**；技能描述只写风味文本，不重复数值
+   （数值的唯一事实来源是 `config/game`）。
+4. 战斗日志以「模板 id + 参数」结构化存储；技能 / 称号 / 元素等参数以
+   `{"ref": 注册名, "id": 条目id}` 形式传递，渲染时才查当前语言的显示名，
+   保证切换语言不改变战报结构。
+5. 扩展方式：
+   - 新增语言 = 新增 `config/locales/<lang>/` 目录（七个文件齐全）；
+   - 新增技能 = `config/game/skills.json` 增加条目（效果类型必须是引擎
+     `SUPPORTED_EFFECTS` 中已支持的）+ 各语言补充文案；
+   - 新增称号 / 元素 / 稀有度同理。
+
+### 2.3 技术约束
+
+- 后端仅用 Python 标准库；前端零依赖、零构建。
+- 所有 JSON 读写显式 `encoding="utf-8"`；HTTP 响应一律 UTF-8。
+- 前端渲染用户输入一律使用文本节点，禁止 innerHTML 注入用户内容。
+
+## 3. 更新流程（每次更新必须执行）
+
+1. **更新文档**：每次更新必须在 `docs/updates/` 新建 `YYYY-MM-DD-vX.Y.Z.md`
+   （模板见 `docs/updates/_TEMPLATE.md`），包含：变更内容、动机、影响面、
+   对确定性的影响（是否 breaking）、验证方式与结果。
+2. **Git 提交**：更新完成后必须 git commit；若配置了远端且可达则 push 到
+   GitHub；远端不可达 / 未配置时提交到本地 git，并在更新文档中注明。
+3. 提交信息使用 Conventional Commits（feat / fix / docs / refactor / test / config）。
+4. **版本号**：功能新增 → 次版本号 +1；修复 → 修订号 +1；会改变同名结果的
+   数值 / 规则 / 算法变更 → 主版本号 +1 或明确 breaking 标注。
+   版本号唯一维护于 `config/game/system.json` 的 `version` 字段。
+5. **测试**：任何更新前后都必须运行 `python -m unittest discover -s tests -v`
+   且全部通过；确定性测试（`tests/test_determinism.py`）失败视为最高优先级事故。
+6. 禁止提交运行时产物（`__pycache__` 等，见 `.gitignore`）。
+
+## 4. 目录结构
+
+```
+namefight_pro/
+├── AGENTS.md                 # 本文件：需求与规约
+├── README.md                 # 使用与定制说明
+├── server.py                 # 启动入口
+├── namefight/                # 后端核心包（纯标准库）
+│   ├── rng.py                # splitmix64 确定性 PRNG
+│   ├── config.py             # 配置加载与校验
+│   ├── fighter.py            # 名字 -> MD5 -> 斗士派生
+│   ├── battle.py             # 确定性对战引擎
+│   ├── text.py               # 模板渲染（文案与结构解耦）
+│   └── server.py             # HTTP 服务（静态资源 + JSON API）
+├── config/
+│   ├── game/                 # 数值与规则（与语言无关）
+│   │   ├── system.json       # 版本、语言列表、名字归一化规则
+│   │   ├── attributes.json   # 属性区间与战力权重
+│   │   ├── elements.json     # 元素池与克制矩阵
+│   │   ├── rarities.json     # 稀有度权重与属性倍率
+│   │   ├── skills.json       # 技能池（效果类型 + 参数 + 权重）
+│   │   ├── titles.json       # 称号池与权重
+│   │   └── battle.json       # 战斗常数（暴击倍率/浮动/回合上限等）
+│   └── locales/              # 文案（与数值无关）
+│       ├── zh/               # 七个文件：ui/attributes/elements/rarities/skills/titles/battle_log
+│       └── en/
+├── web/                      # 前端（无构建、零依赖）
+│   ├── index.html
+│   ├── css/style.css
+│   └── js/framework.js       # 自编写微型框架（NF.h 等）
+│   └── js/app.js             # 应用逻辑（文案全部来自 /api/text）
+├── tests/                    # unittest 测试
+│   ├── test_determinism.py   # 核心不变量：同名同命 / 顺序无关 / 跨进程一致
+│   └── test_config.py        # 配置完整性、locale 覆盖、PRNG 金向量
+└── docs/updates/             # 更新文档（每次更新一份）
+```
+
+## 5. 运行与验证
+
+- 启动：`python server.py [--host 127.0.0.1] [--port 8000]`
+- 测试：`python -m unittest discover -s tests -v`
+- 冒烟：`GET /api/health`、`GET /api/fighter?name=测试`、`POST /api/battle`
+
+## 6. API 摘要
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/health` | `{status, version}` |
+| `GET /api/text?lang=zh` | 前端所需全部 UI 文案 + 可用语言列表 |
+| `GET /api/fighter?name=X&lang=zh` | 斗士完整数据（含 MD5 摘要、属性、技能、称号） |
+| `POST /api/battle` | body `{"a": "...", "b": "...", "lang": "zh"}`；返回双方数据、逐条战报（结构化事件 + 已渲染文本）与胜负 |
+
+错误以 `{"error": "<code>"}` + 4xx/5xx 返回，错误码文案同样由 locale 提供。
+
+## 7. 设计备忘
+
+- 伤害公式：`max(最小伤害, round(ATK × 浮动 × 暴击倍率 × 元素克制 × 技能倍率 − DEF × 防御系数))`；
+- 回合结构：按初始速度序行动（速度相同按规范化名字升序）；毒在拥有者回合开始时结算；
+  眩晕跳过行动；回合耗尽按剩余生命比例判定，完全相同则平局；
+- `crit` / `dodge` 属性以百分数（整数）存储，判定时除以 100；
+- 战报条目结构：`{"round": n, "template": 模板id, "params": {...}, "text": 渲染后文本}`。
