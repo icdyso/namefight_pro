@@ -145,7 +145,7 @@ def _make_combatant(f: Fighter, pos: int, game: GameCfg) -> _Combatant:
 
 def _compute_damage(actor, enemy, mult, crit, game, rng, ratio=1.0) -> int:
     bc = game.battle
-    variance = bc.variance_lo + rng.next_float() * (bc.variance_hi - bc.variance_lo)
+    variance = rng.next_gaussian(bc.variance_lo, bc.variance_hi)
     crit_mult = bc.crit_multiplier if crit else 1.0
     raw = _eff_atk(actor) * ratio * variance * crit_mult * mult
     return max(bc.min_damage, round(raw - enemy.defense * bc.defense_factor))

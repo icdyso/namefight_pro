@@ -1,6 +1,0 @@
-{
-  "common":    { "name": "凡品" },
-  "rare":      { "name": "稀有" },
-  "epic":      { "name": "史诗" },
-  "legendary": { "name": "传说" }
-}

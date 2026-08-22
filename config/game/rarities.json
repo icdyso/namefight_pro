@@ -1,9 +1,0 @@
-{
-  "scaled_attributes": ["hp", "atk"],
-  "rarities": [
-    { "id": "common",    "weight": 55, "stars": 1, "multipliers": { "hp": 1.0,  "atk": 1.0 } },
-    { "id": "rare",      "weight": 26, "stars": 2, "multipliers": { "hp": 1.08, "atk": 1.06 } },
-    { "id": "epic",      "weight": 14, "stars": 3, "multipliers": { "hp": 1.16, "atk": 1.12 } },
-    { "id": "legendary", "weight": 5,  "stars": 4, "multipliers": { "hp": 1.25, "atk": 1.2 } }
-  ]
-}

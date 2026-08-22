@@ -48,24 +48,17 @@ class SystemCfg:
 @dataclass(frozen=True)
 class AttributeDef:
     id: str
-    min: int
-    max: int
-    format: str          # int / percent，仅影响展示
-    power_weight: float  # 战力权重
+    base: int           # 固定基础值（无随机）
+    min: int            # 展示条下限（仅用于卡牌进度条）
+    max: int            # 展示条上限
+    format: str         # int / percent，仅影响展示
+    power_weight: float # 战力权重
 
 
 @dataclass(frozen=True)
 class ElementDef:
     id: str
     weight: float
-
-
-@dataclass(frozen=True)
-class RarityDef:
-    id: str
-    weight: float
-    stars: int
-    multipliers: dict    # {属性id: 倍率}
 
 
 @dataclass(frozen=True)
@@ -156,7 +149,6 @@ class GameCfg:
     system: SystemCfg
     attributes: tuple    # (AttributeDef, ...)，配置文件顺序
     elements: tuple
-    rarities: tuple
     skills: tuple
     title_structures: tuple
     title_pools: dict    # {"prefix": (TitleFieldDef,..), "core": ..., "suffix": ...}
@@ -165,7 +157,6 @@ class GameCfg:
     skill_md5_variance: SkillVariance
     skill_variable_link: SkillLinkCfg
     skill_name_modifiers: SkillNameModCfg
-    rarity_scaled_attributes: tuple
     battle: BattleCfg
 
     def attr(self, attr_id: str) -> AttributeDef:
@@ -181,7 +172,6 @@ def load_game_config(config_root) -> GameCfg:
     sys_data = _read_json(game / "system.json")
     attrs_data = _read_json(game / "attributes.json")
     elems_data = _read_json(game / "elements.json")
-    rar_data = _read_json(game / "rarities.json")
     skills_data = _read_json(game / "skills.json")
     titles_data = _read_json(game / "titles.json")
     battle_data = _read_json(game / "battle.json")
@@ -204,11 +194,14 @@ def load_game_config(config_root) -> GameCfg:
     for a in attrs_data.get("attributes", []):
         if a["id"] in seen_attrs:
             raise ConfigError("属性 id 重复: %s" % a["id"])
-        if int(a["min"]) > int(a["max"]):
-            raise ConfigError("属性区间非法: %s" % a["id"])
         seen_attrs.add(a["id"])
+        base = int(a["base"])
+        lo = int(a.get("min", base))
+        hi = int(a.get("max", base))
+        if lo > hi:
+            raise ConfigError("属性展示区间非法: %s" % a["id"])
         attributes.append(AttributeDef(
-            id=str(a["id"]), min=int(a["min"]), max=int(a["max"]),
+            id=str(a["id"]), base=base, min=lo, max=hi,
             format=str(a.get("format", "int")), power_weight=float(a.get("power_weight", 0)),
         ))
     missing = [i for i in REQUIRED_ATTRIBUTE_IDS if i not in seen_attrs]
@@ -227,23 +220,6 @@ def load_game_config(config_root) -> GameCfg:
     if not elements:
         raise ConfigError("元素池为空")
 
-    scaled = tuple(str(x) for x in rar_data.get("scaled_attributes", []))
-    rarities = []
-    for r in rar_data.get("rarities", []):
-        mult = {str(k): float(v) for k, v in r.get("multipliers", {}).items()}
-        for attr_id in mult:
-            if attr_id not in seen_attrs:
-                raise ConfigError("稀有度 %s 加成了未定义的属性 %s" % (r["id"], attr_id))
-        if float(r.get("weight", 1)) <= 0:
-            raise ConfigError("稀有度权重必须为正: %s" % r["id"])
-        rarities.append(RarityDef(
-            id=str(r["id"]), weight=float(r.get("weight", 1)),
-            stars=int(r.get("stars", 1)), multipliers=mult,
-        ))
-    if not rarities:
-        raise ConfigError("稀有度池为空")
-
-    skill_count = skills_data.get("skill_count", {})
     skills = []
     seen_skills = set()
     for s in skills_data.get("skills", []):
@@ -258,6 +234,7 @@ def load_game_config(config_root) -> GameCfg:
         ))
     if not skills:
         raise ConfigError("技能池为空")
+    skill_count = skills_data.get("skill_count", {})
     sc_min = int(skill_count.get("min", 1))
     sc_max = int(skill_count.get("max", 1))
     if not (1 <= sc_min <= sc_max <= len(skills)):
@@ -418,26 +395,25 @@ def load_game_config(config_root) -> GameCfg:
 
     return GameCfg(
         system=system, attributes=tuple(attributes), elements=tuple(elements),
-        rarities=tuple(rarities), skills=tuple(skills),
+        skills=tuple(skills),
         title_structures=tuple(structures), title_pools=title_pools,
         skill_count_min=sc_min, skill_count_max=sc_max,
         skill_md5_variance=skill_md5_variance,
         skill_variable_link=skill_variable_link,
         skill_name_modifiers=skill_name_modifiers,
-        rarity_scaled_attributes=scaled, battle=battle,
+        battle=battle,
     )
 
 
 class Locale:
     """某一语言的全部文案（纯文本，不含任何数值规则）。"""
 
-    def __init__(self, lang, ui, attributes, elements, rarities, skills, titles,
+    def __init__(self, lang, ui, attributes, elements, skills, titles,
                  stats, buffs, modifiers, battle_log):
         self.lang = lang
         self.ui = ui
         self.attributes = attributes
         self.elements = elements
-        self.rarities = rarities
         self.skills = skills
         self.titles = titles          # {"prefixes": {...}, "cores": {...}, "suffixes": {...}}
         self.stats = stats            # 技能参数标签模板 + 共鸣标记/词缀修饰模板
@@ -452,7 +428,7 @@ class Locale:
             return str(word) if word is not None else None
         table = {
             "skill": self.skills, "element": self.elements,
-            "rarity": self.rarities, "attr": self.attributes,
+            "attr": self.attributes,
         }.get(registry)
         if table is None:
             return None
@@ -462,7 +438,7 @@ class Locale:
         return None
 
 
-LOCALE_FILES = ("ui", "attributes", "elements", "rarities", "skills", "titles",
+LOCALE_FILES = ("ui", "attributes", "elements", "skills", "titles",
                 "stats", "buffs", "modifiers", "battle_log")
 
 
@@ -471,7 +447,7 @@ def load_locale(config_root, lang: str) -> Locale:
     data = {name: _read_json(root / ("%s.json" % name)) for name in LOCALE_FILES}
     return Locale(
         lang=str(lang), ui=data["ui"], attributes=data["attributes"],
-        elements=data["elements"], rarities=data["rarities"], skills=data["skills"],
+        elements=data["elements"], skills=data["skills"],
         titles=data["titles"], stats=data["stats"], buffs=data["buffs"],
         modifiers=data["modifiers"], battle_log=data["battle_log"],
     )

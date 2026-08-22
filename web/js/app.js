@@ -343,9 +343,6 @@
   }
 
   function fighterCard(f, side) {
-    var stars = "";
-    for (var i = 0; i < (f.rarity.stars || 0); i++) stars += "★";
-
     var statRows = f.attributes.map(function (a) {
       var span = Math.max(1, a.max - a.min);
       var pct = Math.max(0, Math.min(100, (a.value - a.min) / span * 100));
@@ -360,17 +357,14 @@
     var skillNodes = f.skills.map(function (s) {
       return NF.h("div", { class: "skill-chip" },
         NF.h("div", { class: "skill-name" }, s.name),
-        s.description ? NF.h("div", { class: "skill-desc" }, s.description) : null,
-        s.stats && s.stats.length
-          ? NF.h("div", { class: "skill-stats" }, s.stats.join(" · ")) : null,
+        s.text ? NF.h("div", { class: "skill-text" }, s.text) : null,
+        s.flavor ? NF.h("div", { class: "skill-desc" }, s.flavor) : null,
         NF.h("div", { class: "tip" },
           NF.h("div", { class: "tip-title" }, s.name),
-          s.detail ? NF.h("div", { class: "tip-line" }, s.detail) : null,
-          s.description ? NF.h("div", { class: "tip-line muted" }, s.description) : null,
+          s.text ? NF.h("div", { class: "tip-line" }, s.text) : null,
+          s.flavor ? NF.h("div", { class: "tip-line muted" }, s.flavor) : null,
           s.modifiers && s.modifiers.length
-            ? NF.h("div", { class: "tip-mods" }, s.modifiers.join("；")) : null,
-          s.stats && s.stats.length
-            ? NF.h("div", { class: "tip-stats" }, s.stats.join(" · ")) : null));
+            ? NF.h("div", { class: "tip-mods" }, s.modifiers.join("；")) : null));
     });
 
     return NF.h("div", { class: "fighter-card side-" + side },
@@ -387,7 +381,6 @@
           NF.h("div", { class: "power-value" }, String(f.power)),
           NF.h("div", { class: "power-label" }, t("power_label")))),
       NF.h("div", { class: "badges" },
-        NF.h("span", { class: "badge rarity" }, stars + " " + f.rarity.name),
         NF.h("span", { class: "badge element" },
           (f.element.emoji ? f.element.emoji + " " : "") + f.element.name),
         NF.h("span", { class: "badge md5" }, fmt("md5_label", { digest: f.digest_short }))),

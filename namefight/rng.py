@@ -2,8 +2,12 @@
 
 项目核心不变量之一：所有"随机"都必须来自本模块（见 AGENTS.md 2.1.3）。
 - 纯整数运算，不依赖 os / urandom / time / random 等任何外部状态；
-- 同一种子永远得到同一序列，与平台、进程、调用次数无关。
+- 同一种子永远得到同一序列，与平台、进程、调用次数无关；
+- 数值类抽样一律使用 next_gaussian（Box-Muller，每次消耗两个均匀数），
+  离散选择仍用加权均匀抽取。
 """
+
+import math
 
 _MASK64 = (1 << 64) - 1
 _GOLDEN = 0x9E3779B97F4A7C15
@@ -35,10 +39,36 @@ class DetRng:
         return self.next_u64() % n
 
     def next_range(self, lo: int, hi: int) -> int:
-        """返回 [lo, hi] 内的整数（含两端）。"""
+        """返回 [lo, hi] 内的整数（含两端，均匀分布）。"""
         if hi < lo:
             raise ValueError("区间非法: [%s, %s]" % (lo, hi))
         return lo + self.next_int(hi - lo + 1)
+
+    def next_gaussian(self, lo: float, hi: float) -> float:
+        """返回 [lo, hi] 内近似正态分布的浮点数（Box-Muller 变换，
+        每次消耗两个均匀数；均值 = 区间中点，σ = 区间宽 / 4，越界截断）。"""
+        if hi < lo:
+            raise ValueError("区间非法: [%s, %s]" % (lo, hi))
+        if hi == lo:
+            return lo
+        u1 = self.next_float()
+        if u1 <= 0.0:
+            u1 = 1e-16
+        u2 = self.next_float()
+        z = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+        mean = (lo + hi) / 2.0
+        sigma = (hi - lo) / 4.0
+        return max(lo, min(hi, mean + z * sigma))
+
+    def next_gaussian_range(self, lo: int, hi: int) -> int:
+        """返回 [lo, hi] 内近似正态分布的整数（离散数值，如技能数量；
+        以 ±0.5 扩展区间后再取整，保证端点有合理概率）。"""
+        if hi < lo:
+            raise ValueError("区间非法: [%s, %s]" % (lo, hi))
+        if hi == lo:
+            return lo
+        value = round(self.next_gaussian(lo - 0.5, hi + 0.5))
+        return max(lo, min(hi, int(value)))
 
     def pick_weighted(self, weighted_items):
         """按权重挑选一个元素。weighted_items: iterable[(item, weight)]"""

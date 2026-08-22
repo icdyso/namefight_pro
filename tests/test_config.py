@@ -27,9 +27,10 @@ class GameConfigTests(unittest.TestCase):
         for attr_id in REQUIRED_ATTRIBUTE_IDS:
             self.assertIn(attr_id, ids)
 
-    def test_attribute_ranges_sane(self):
+    def test_attribute_base_and_display_range(self):
         for a in GAME.attributes:
             self.assertLessEqual(a.min, a.max)
+            self.assertGreater(a.base, 0)
 
     def test_skill_count_within_pool(self):
         self.assertLessEqual(GAME.skill_count_min, GAME.skill_count_max)
@@ -99,12 +100,6 @@ class GameConfigTests(unittest.TestCase):
         for pool_name in ("prefix", "core", "suffix"):
             self.assertTrue(GAME.title_pools[pool_name], "称号字段池为空: %s" % pool_name)
 
-    def test_rarity_multipliers_reference_known_attributes(self):
-        attr_ids = {a.id for a in GAME.attributes}
-        for r in GAME.rarities:
-            for attr_id in r.multipliers:
-                self.assertIn(attr_id, attr_ids)
-
     def test_battle_constants_sane(self):
         self.assertGreaterEqual(GAME.battle.max_ticks, 1)
         self.assertGreater(GAME.battle.gauge_threshold, 0)
@@ -117,13 +112,9 @@ class LocaleCoverageTests(unittest.TestCase):
                 self.assertIn(a.id, loc.attributes, "[%s] 属性 %s 缺文案" % (lang, a.id))
             for e in GAME.elements:
                 self.assertIn(e.id, loc.elements, "[%s] 元素 %s 缺文案" % (lang, e.id))
-            for r in GAME.rarities:
-                self.assertIn(r.id, loc.rarities, "[%s] 稀有度 %s 缺文案" % (lang, r.id))
             for s in GAME.skills:
                 self.assertIn(s.id, loc.skills, "[%s] 技能 %s 缺文案" % (lang, s.id))
                 self.assertIn("description", loc.skills[s.id])
-                self.assertIn("detail", loc.skills[s.id],
-                              "[%s] 技能 %s 缺详细描述" % (lang, s.id))
             for pool_name, pool_key in _TITLE_POOL_LOCALE.items():
                 for fdef in GAME.title_pools[pool_name]:
                     entry = loc.titles.get(pool_key, {}).get(fdef.id)
@@ -191,6 +182,35 @@ class RngAndTextTests(unittest.TestCase):
         a, b = DetRng(123), DetRng(123)
         self.assertEqual([a.next_u64() for _ in range(10)],
                          [b.next_u64() for _ in range(10)])
+
+    def test_gaussian_deterministic_and_bounded(self):
+        a, b = DetRng(7), DetRng(7)
+        for _ in range(50):
+            x = a.next_gaussian(0.85, 1.15)
+            y = b.next_gaussian(0.85, 1.15)
+            self.assertEqual(x, y)
+            self.assertGreaterEqual(x, 0.85)
+            self.assertLessEqual(x, 1.15)
+
+    def test_gaussian_concentrates_near_midpoint(self):
+        rng = DetRng(99)
+        inside = 0
+        total = 300
+        for _ in range(total):
+            x = rng.next_gaussian(0.0, 1.0)
+            if 0.25 <= x <= 0.75:
+                inside += 1
+        self.assertGreater(inside / total, 0.5,
+                           "高斯抽样应集中在区间中段（实测 %.2f）" % (inside / total))
+
+    def test_gaussian_range_discrete(self):
+        rng = DetRng(42)
+        counts = {2: 0, 3: 0}
+        for _ in range(200):
+            value = rng.next_gaussian_range(2, 3)
+            self.assertIn(value, (2, 3))
+            counts[value] += 1
+        self.assertTrue(counts[2] and counts[3])
 
     def test_render_template_resolves_refs(self):
         loc = LOCALES["zh"]

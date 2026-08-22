@@ -1,6 +1,0 @@
-{
-  "common":    { "name": "Common" },
-  "rare":      { "name": "Rare" },
-  "epic":      { "name": "Epic" },
-  "legendary": { "name": "Legendary" }
-}

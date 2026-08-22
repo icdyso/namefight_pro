@@ -22,11 +22,12 @@ _FIELD_LOCALE = {"prefix": "prefixes", "core": "cores", "core2": "cores", "suffi
 
 # 技能参数标签模板键（测试据此校验每个 locale 都有对应文案）
 STATS_KEYS_USED = frozenset({
-    "chance", "mult", "lifesteal", "poison_damage", "poison_turns", "stun",
-    "extra", "reduction", "reflect", "dodge", "crit", "heal", "threshold",
-    "atk_bonus", "link", "link_sep", "link_init",
-    "mod_chance", "mod_value", "mod_damage", "mod_turns",
+    "link_sep", "link_ratio", "link_difference",
     "scope_own", "scope_enemy", "mode_ratio", "mode_difference",
+    "mod_chance", "mod_value", "mod_damage", "mod_turns",
+    "nat_damage_multiplier", "nat_execution", "nat_lifesteal", "nat_poison",
+    "nat_stun", "nat_extra_strikes", "nat_damage_reduction", "nat_reflect",
+    "nat_dodge_bonus", "nat_crit_bonus", "nat_heal", "nat_low_hp_atk_bonus",
 })
 
 
@@ -43,7 +44,6 @@ class Fighter:
     name: str            # 原始输入（仅用于展示）
     normalized: str      # 归一化名字（MD5 与对战种子的依据）
     digest: str          # md5 hex
-    rarity_id: str
     element_id: str
     attrs: dict          # 属性 id -> 整数值；crit/dodge 以百分数存储
     skill_ids: tuple     # 按抽取顺序
@@ -71,17 +71,12 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
     digest = hashlib.md5(normalized.encode("utf-8")).hexdigest()
     rng = DetRng(int(digest, 16))
 
-    rarity = rng.pick_weighted((r, r.weight) for r in game.rarities)
     element = rng.pick_weighted((e, e.weight) for e in game.elements)
 
-    attrs = {}
-    for a in game.attributes:
-        attrs[a.id] = rng.next_range(a.min, a.max)
-    for attr_id in game.rarity_scaled_attributes:
-        mult = rarity.multipliers.get(attr_id, 1.0)
-        attrs[attr_id] = max(1, round(attrs[attr_id] * mult))
+    # 属性为固定基础值（无随机）；差异来自称号加成与技能个性化
+    attrs = {a.id: a.base for a in game.attributes}
 
-    count = rng.next_range(game.skill_count_min, game.skill_count_max)
+    count = rng.next_gaussian_range(game.skill_count_min, game.skill_count_max)
     skills = rng.sample_weighted(((s, s.weight) for s in game.skills), count)
 
     structure = rng.pick_weighted((s, s.weight) for s in game.title_structures)
@@ -98,7 +93,7 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
         if fname == "core":
             core_id = item.id
 
-    # 称号字段小额加成（不消耗随机数，纯查表；在稀有度倍率之后应用）
+    # 称号字段小额加成（不消耗随机数，纯查表）
     for attr_id, delta in title_bonus_items(title_fields, structure, game):
         attrs[attr_id] = max(1, attrs[attr_id] + delta)
 
@@ -106,7 +101,7 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
     return Fighter(
         name=raw_name if isinstance(raw_name, str) and raw_name else normalized,
         normalized=normalized, digest=digest,
-        rarity_id=rarity.id, element_id=element.id, attrs=attrs,
+        element_id=element.id, attrs=attrs,
         skill_ids=tuple(s.id for s in skills),
         title_structure_id=structure.id, title_fields=title_fields, power=power,
     )
@@ -145,11 +140,11 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
         rng = DetRng(int(seed_hex, 16))
         chance = float(eff.get("chance", 1.0))
         if 0.0 < chance < 1.0:
-            factor = var.chance_lo + rng.next_float() * (var.chance_hi - var.chance_lo)
+            factor = rng.next_gaussian(var.chance_lo, var.chance_hi)
             eff["chance"] = min(0.95, max(0.02, round(chance * factor, 4)))
         for key in ("value", "damage"):
             if key in eff:
-                factor = var.value_lo + rng.next_float() * (var.value_hi - var.value_lo)
+                factor = rng.next_gaussian(var.value_lo, var.value_hi)
                 eff[key] = round(float(eff[key]) * factor, 4)
         if name_mod.prefix_chance > 0 and rng.next_float() < name_mod.prefix_chance:
             eff["prefix"] = rng.pick_weighted((m, m.weight) for m in name_mod.prefixes).id
@@ -167,7 +162,7 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                 source = rng.pick_weighted(link_cfg.source_weights)
                 mode = rng.pick_weighted(link_cfg.mode_weights)
                 vdef = rng.pick_weighted((v, v.weight) for v in link_cfg.variables)
-                rate = vdef.rate_lo + rng.next_float() * (vdef.rate_hi - vdef.rate_lo)
+                rate = rng.next_gaussian(vdef.rate_lo, vdef.rate_hi)
                 eff["link"] = {"variable": vdef.id, "rate": round(rate, 4),
                                "source": source, "mode": mode}
         out.append((sdef, eff))
@@ -176,7 +171,7 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
 
 def initial_link_bonus(fighter: Fighter, eff: dict):
     """共鸣在开战时刻（满状态）的参考值：仅「己方 + 比例」模式可离线计算，
-    其余模式依赖敌方或当前值，返回 None。"""
+    其余模式依赖敌方或当前值，返回 None。（供测试与调试使用，卡牌展示用公式。）"""
     link = eff.get("link")
     if not link or link.get("source") != "own" or link.get("mode") != "ratio":
         return None
@@ -198,56 +193,77 @@ def title_bonus_items(title_fields, structure, game: GameCfg):
     return items
 
 
-def _skill_stats(eff: dict, locale, fighter: Fighter = None) -> list:
-    """把个性化后的技能参数渲染为可读文案列表（模板来自 locale.stats）。"""
+def _natural_text(eff: dict, game: GameCfg, locale) -> str:
+    """把个性化后的技能参数渲染为标准化自然语言描述（带真实数值与单位），
+    共鸣部分追加「XX越XX」句式与计算公式。模板来自 locale.stats 的 nat_* 与 link_*。"""
     tmpl = locale.stats
-
-    def stat(key, value):
-        return render_template(tmpl.get(key, key), {"v": value}, locale)
-
-    stats = []
     ttype = eff.get("type")
     chance = float(eff.get("chance", 1.0))
-    if chance < 1.0:
-        stats.append(stat("chance", format_pct(chance)))
+    key = "nat_" + str(ttype)
+    params = {}
     if ttype == "damage_multiplier":
-        stats.append(stat("mult", format_pct(float(eff.get("value", 1.0)))))
+        cond = eff.get("condition")
+        if cond:
+            key = "nat_execution"
+            params = {"chance": format_pct(chance), "mult": format_pct(float(eff.get("value", 1.0))),
+                      "threshold": format_pct(float(cond.get("value", 0)))}
+        else:
+            params = {"chance": format_pct(chance), "mult": format_pct(float(eff.get("value", 1.0)))}
     elif ttype == "lifesteal":
-        stats.append(stat("lifesteal", format_pct(float(eff.get("value", 0.0)))))
+        params = {"value": format_pct(float(eff.get("value", 0.0)))}
     elif ttype == "poison":
-        stats.append(stat("poison_damage", int(round(float(eff.get("damage", 0))))))
-        stats.append(stat("poison_turns", int(eff.get("turns", 0))))
+        params = {"chance": format_pct(chance),
+                  "damage": int(round(float(eff.get("damage", 0)))),
+                  "turns": int(eff.get("turns", 0))}
     elif ttype == "stun":
-        stats.append(stat("stun", ""))
+        params = {"chance": format_pct(chance)}
     elif ttype == "extra_strikes":
         ratios = eff.get("ratios", [])
-        stats.append(stat("extra", format_pct(float(ratios[0]) if ratios else 0.0)))
+        params = {"chance": format_pct(chance),
+                  "extra": format_pct(float(ratios[0]) if ratios else 0.0)}
     elif ttype == "damage_reduction":
-        stats.append(stat("reduction", format_pct(float(eff.get("value", 0.0)))))
+        params = {"value": format_pct(float(eff.get("value", 0.0)))}
     elif ttype == "reflect":
-        stats.append(stat("reflect", format_pct(float(eff.get("value", 0.0)))))
+        params = {"value": format_pct(float(eff.get("value", 0.0)))}
     elif ttype == "dodge_bonus":
-        stats.append(stat("dodge", format_num(float(eff.get("value", 0.0)))))
+        params = {"value": format_num(float(eff.get("value", 0.0)))}
     elif ttype == "crit_bonus":
-        stats.append(stat("crit", format_num(float(eff.get("value", 0.0)))))
+        params = {"value": format_num(float(eff.get("value", 0.0)))}
     elif ttype == "heal":
-        stats.append(stat("heal", int(round(float(eff.get("value", 0))))))
+        params = {"chance": format_pct(chance),
+                  "value": int(round(float(eff.get("value", 0))))}
     elif ttype == "low_hp_atk_bonus":
-        stats.append(stat("threshold", format_pct(float(eff.get("threshold", 0.3)))))
-        stats.append(stat("atk_bonus", format_pct(float(eff.get("value", 0.5)))))
+        params = {"threshold": format_pct(float(eff.get("threshold", 0.3))),
+                  "value": format_pct(float(eff.get("value", 0.5)))}
+    text = render_template(tmpl.get(key, key), params, locale)
     link = eff.get("link")
-    if link and fighter is not None:
-        stat_name = locale.attributes.get(link["variable"], {}).get("name", link["variable"])
-        scope = locale.stats.get("scope_" + link.get("source", "own"), "")
-        mode = locale.stats.get("mode_" + link.get("mode", "ratio"), "")
-        stats.append(render_template(
-            tmpl.get("link", ""),
-            {"scope": scope, "stat": stat_name, "mode": mode,
-             "v": format_pct(float(link.get("rate", 0)))}, locale))
-        init = initial_link_bonus(fighter, eff)
-        if init is not None:
-            stats.append(render_template(tmpl.get("link_init", ""), {"v": init}, locale))
-    return [s for s in stats if s]
+    if link:
+        clause = _link_clause(link, game, locale)
+        if clause:
+            text = text + clause
+    return text
+
+
+def _link_clause(link: dict, game: GameCfg, locale) -> str:
+    """共鸣描述：「XX越XX，附加伤害越高」句式 + 内联计算公式（单位：点）。"""
+    tmpl = locale.stats
+    var_name = locale.attributes.get(link.get("variable"), {}).get("name", link.get("variable", ""))
+    scope_own = str(tmpl.get("scope_own", ""))
+    scope_enemy = str(tmpl.get("scope_enemy", ""))
+    rate = format_pct(float(link.get("rate", 0)))
+    if link.get("mode") == "difference":
+        vdef = next((v for v in game.skill_variable_link.variables
+                     if v.id == link.get("variable")), None)
+        against = vdef.diff_against if vdef else link.get("variable")
+        against_name = locale.attributes.get(against, {}).get("name", against)
+        return render_template(tmpl.get("link_difference", ""),
+                               {"own": scope_own + var_name,
+                                "enemy": scope_enemy + against_name,
+                                "pct": rate}, locale)
+    scope = scope_enemy if link.get("source") == "enemy" else scope_own
+    stat_full = scope + var_name
+    return render_template(tmpl.get("link_ratio", ""),
+                           {"stat": stat_full, "pct": rate}, locale)
 
 
 _MOD_TEMPLATES = {"chance": "mod_chance", "value": "mod_value",
@@ -388,19 +404,15 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
                 "source": link.get("source", "own"),
                 "mode": link.get("mode", "ratio"),
                 "rate": link.get("rate", 0),
-                "bonus_initial": initial_link_bonus(fighter, eff),
             }
         skills_api.append({
             "id": sdef.id,
             "name": name,
-            "description": entry.get("description", ""),
-            "detail": entry.get("detail", ""),
-            "stats": _skill_stats(eff, locale, fighter),
+            "flavor": entry.get("description", ""),
+            "text": _natural_text(eff, game, locale),
             "modifiers": _mod_texts(eff, game, locale),
             "link": link_api,
         })
-    rar_def = next(r for r in game.rarities if r.id == fighter.rarity_id)
-    rar = locale.rarities.get(fighter.rarity_id, {})
     elem = locale.elements.get(fighter.element_id, {})
     title_bonus = _title_bonus_api(fighter, game, locale)
     return {
@@ -408,7 +420,6 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
         "normalized": fighter.normalized,
         "digest": fighter.digest,
         "digest_short": fighter.digest[:8],
-        "rarity": {"id": fighter.rarity_id, "name": rar.get("name", fighter.rarity_id), "stars": rar_def.stars},
         "element": {"id": fighter.element_id, "name": elem.get("name", fighter.element_id),
                     "emoji": elem.get("emoji", "")},
         "title": {

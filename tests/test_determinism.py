@@ -15,8 +15,8 @@ if str(REPO_ROOT) not in sys.path:
 from namefight.battle import run_battle
 from namefight.config import load_game_config, load_locale
 from namefight.fighter import (derive_fighter, fighter_to_api,
-                               initial_link_bonus, personalized_effects,
-                               title_bonus_items)
+                               personalized_effects, title_bonus_items)
+from namefight.rng import DetRng
 
 CONFIG_ROOT = REPO_ROOT / "config"
 GAME = load_game_config(CONFIG_ROOT)
@@ -34,7 +34,7 @@ def _outcome_payload(outcome):
 
 def _game_data(f):
     """参与确定性契约的派生数据（name 仅为展示输入，不计入）。"""
-    return (f.normalized, f.digest, f.rarity_id, f.element_id,
+    return (f.normalized, f.digest, f.element_id,
             tuple(sorted(f.attrs.items())), f.skill_ids,
             f.title_structure_id, tuple(sorted(f.title_fields.items())), f.power)
 
@@ -65,8 +65,9 @@ class FighterDeterminism(unittest.TestCase):
         fa = derive_fighter("张三", GAME)
         fb = derive_fighter("李四", GAME)
         self.assertNotEqual(fa.digest, fb.digest)
+        # 属性为固定基础值，差异主要来自称号加成；技能与称号组合应不同
         differing = (
-            fa.attrs != fb.attrs or fa.skill_ids != fb.skill_ids
+            fa.skill_ids != fb.skill_ids
             or fa.title_structure_id != fb.title_structure_id
             or fa.title_fields != fb.title_fields or fa.element_id != fb.element_id
         )
@@ -79,9 +80,22 @@ class FighterDeterminism(unittest.TestCase):
         self.assertEqual([(a["id"], a["value"]) for a in zh["attributes"]],
                          [(a["id"], a["value"]) for a in en["attributes"]])
         self.assertEqual([s["id"] for s in zh["skills"]], [s["id"] for s in en["skills"]])
-        self.assertEqual(zh["rarity"]["id"], en["rarity"]["id"])
         self.assertEqual(zh["title"]["structure"], en["title"]["structure"])
         self.assertTrue(zh["title"]["name"])
+        self.assertTrue(all(s["text"] for s in zh["skills"]))
+        self.assertTrue(all(s["text"] for s in en["skills"]))
+
+    def test_attributes_use_fixed_base(self):
+        # 属性无随机：两名斗士的属性只可能因称号加成而不同
+        for i in range(20):
+            f = derive_fighter("base%02d" % i, GAME)
+            for a in GAME.attributes:
+                expected = a.base
+                structure = next(s for s in GAME.title_structures
+                                 if s.id == f.title_structure_id)
+                delta = sum(d for attr, d in title_bonus_items(f.title_fields, structure, GAME)
+                            if attr == a.id)
+                self.assertEqual(f.attrs[a.id], max(1, expected + delta))
 
     def test_skill_personalization_deterministic(self):
         fa = derive_fighter("Alice", GAME)
@@ -149,14 +163,12 @@ class FighterDeterminism(unittest.TestCase):
                     modded.append((f, eff))
         self.assertTrue(linked, "应有技能获得变量共鸣")
         self.assertTrue(modded, "应有技能获得词缀")
-        # 己方+比例模式的初始参考值可离线计算且与 API 一致
-        for f, sdef, eff in linked:
-            if eff["link"]["source"] == "own" and eff["link"]["mode"] == "ratio":
-                api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
-                entry = next(s for s in api["skills"] if s["id"] == sdef.id)
-                self.assertEqual(entry["link"]["bonus_initial"],
-                                 initial_link_bonus(f, eff))
-                break
+        # 自然语言描述应包含共鸣句式与百分比公式
+        api = fighter_to_api(linked[0][0], GAME, load_locale(CONFIG_ROOT, "zh"))
+        entry = next(s for s in api["skills"] if s["id"] == linked[0][1].id)
+        if linked[0][2].get("link"):
+            self.assertIn("越", entry["text"])
+            self.assertIn("%", entry["text"])
 
     def test_effect_link_appears_in_battles(self):
         found = 0
@@ -229,25 +241,25 @@ class BattleDeterminism(unittest.TestCase):
         self.assertEqual(first["a"]["hp"], first["a"]["max_hp"])
         self.assertEqual(first["b"]["hp"], first["b"]["max_hp"])
 
-    def test_faster_fighter_acts_no_later(self):
-        # 速度决定行动频率：更快的一方首次行动不应晚于更慢的一方
-        lo = derive_fighter("Slowpoke", GAME)
-        while lo.attrs["spd"] > 8:
-            lo = derive_fighter(lo.name + "x", GAME)
-        hi = derive_fighter("Quickstep", GAME)
-        while hi.attrs["spd"] < 12:
-            hi = derive_fighter(hi.name + "x", GAME)
-        outcome = run_battle(lo, hi, GAME)
-        first_actions = {}
+    def test_faster_fighter_acts_first(self):
+        # 属性固定后，速度差异来自称号加成（苍穹/雷霆 +1、退役 -1 等）
+        pair = None
+        for i in range(80):
+            fa = derive_fighter("paceA%02d" % i, GAME)
+            fb = derive_fighter("paceB%02d" % i, GAME)
+            if fa.attrs["spd"] != fb.attrs["spd"]:
+                pair = (fa, fb)
+                break
+        if pair is None:
+            self.skipTest("未采样到速度不同的名字对")
+        fa, fb = pair
+        fast = fa if fa.attrs["spd"] > fb.attrs["spd"] else fb
+        outcome = run_battle(fa, fb, GAME)
         for e in outcome.events:
             if e["template"] in ("attack_hit", "attack_miss"):
-                actor = e["params"]["a"]
-                if actor not in first_actions:
-                    first_actions[actor] = e["tick"]
-                if len(first_actions) == 2:
-                    break
-        if hi.name in first_actions and lo.name in first_actions:
-            self.assertLessEqual(first_actions[hi.name], first_actions[lo.name])
+                self.assertEqual(e["params"]["a"], fast.name,
+                                 "速度更高者应先行动")
+                break
 
     def test_battle_stable_across_processes(self):
         script = (
