@@ -211,11 +211,53 @@ body {
   to { opacity: 1; transform: none; }
 }
 
+/* ---------- 战斗 HUD（实时 HP / 属性 / 行动槽 / buff） ---------- */
+.battle-hud { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.hud {
+  border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  background: rgba(0, 0, 0, .25);
+}
+.hud.side-a { border-left: 3px solid var(--red); }
+.hud.side-b { border-left: 3px solid var(--blue); }
+.hud-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.hud-name { font-weight: 800; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-title { color: var(--gold); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-hpwrap {
+  position: relative; height: 22px; border-radius: 8px; overflow: hidden;
+  background: rgba(0, 0, 0, .5); border: 1px solid var(--line); margin-top: 9px;
+}
+.hud-hpfill { height: 100%; transition: width .4s ease; }
+.hud.side-a .hud-hpfill { background: linear-gradient(90deg, #c9405c, #ff5c7a); }
+.hud.side-b .hud-hpfill { background: linear-gradient(90deg, #3f6fd0, #5c9dff); }
+.hud-hptext {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 12.5px; font-weight: 700; text-shadow: 0 1px 2px rgba(0, 0, 0, .7);
+  font-variant-numeric: tabular-nums;
+}
+.hud-stats { display: flex; gap: 14px; margin-top: 9px; font-size: 12.5px; color: var(--muted); }
+.hud-stat b { color: var(--text); font-variant-numeric: tabular-nums; }
+.hud-stat.atk-boost b { color: var(--gold); text-shadow: 0 0 10px rgba(240, 198, 116, .5); }
+.hud-gaugewrap { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.hud-gaugelabel { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+.hud-gauge { flex: 1; height: 6px; background: rgba(0, 0, 0, .5); border-radius: 4px; overflow: hidden; }
+.hud-gaugefill { height: 100%; background: linear-gradient(90deg, #b8860b, #f0c674); transition: width .3s linear; }
+.hud-buffs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; min-height: 4px; }
+.buff-chip {
+  font-size: 11.5px; padding: 3px 10px; border-radius: 999px; cursor: default;
+  border: 1px solid rgba(240, 198, 116, .45); color: var(--gold);
+  background: rgba(240, 198, 116, .08); animation: fadeUp .25s ease both;
+}
+.buff-chip.debuff { border-color: rgba(150, 100, 220, .55); color: #c9a6ff; background: rgba(150, 100, 220, .12); }
+
+/* 技能个性化参数行 */
+.skill-stats { color: var(--gold); font-size: 11.5px; margin-top: 3px; opacity: .9; }
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 760px) {
   .input-panel { grid-template-columns: 1fr; }
   .vs-badge { text-align: center; }
   .arena { grid-template-columns: 1fr; }
+  .battle-hud { grid-template-columns: 1fr; }
   .app-title { font-size: 30px; }
   .lang-row { position: static; justify-content: center; margin-bottom: 12px; }
 }

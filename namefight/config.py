@@ -16,6 +16,9 @@ from typing import Any
 # 引擎依赖的属性 id（battle.py 直接按这些 key 取值，配置必须提供）
 REQUIRED_ATTRIBUTE_IDS = ("hp", "atk", "def", "spd", "crit", "dodge")
 
+# 称号结构允许引用的字段名 -> 数值池名（core2 与 core 共用核心池）
+TITLE_FIELD_POOLS = {"prefix": "prefix", "core": "core", "core2": "core", "suffix": "suffix"}
+
 
 class ConfigError(Exception):
     """配置文件缺失或非法。"""
@@ -55,7 +58,6 @@ class AttributeDef:
 class ElementDef:
     id: str
     weight: float
-    advantage: dict      # {防守方元素id: 克制倍率}
 
 
 @dataclass(frozen=True)
@@ -75,9 +77,26 @@ class SkillDef:
 
 
 @dataclass(frozen=True)
-class TitleDef:
+class SkillVariance:
+    """技能个性化（MD5 扰动）区间：概率与数值各自的倍率范围。"""
+    chance_lo: float
+    chance_hi: float
+    value_lo: float
+    value_hi: float
+
+
+@dataclass(frozen=True)
+class TitleFieldDef:
     id: str
     weight: float
+
+
+@dataclass(frozen=True)
+class TitleStructureDef:
+    id: str
+    weight: float
+    fields: tuple        # (字段名, ...)，取值见 TITLE_FIELD_POOLS
+    connectors: tuple    # 连接符，长度 = len(fields) - 1
 
 
 @dataclass(frozen=True)
@@ -87,9 +106,10 @@ class BattleCfg:
     variance_hi: float
     defense_factor: float
     min_damage: int
-    max_rounds: int
-    crit_cap: float      # 百分数上限
-    dodge_cap: float     # 百分数上限
+    max_ticks: int
+    gauge_threshold: float   # 行动槽阈值：每 tick 累加速度值，满阈值即可行动
+    crit_cap: float          # 百分数上限
+    dodge_cap: float         # 百分数上限
     seed_separator: str
 
 
@@ -100,9 +120,11 @@ class GameCfg:
     elements: tuple
     rarities: tuple
     skills: tuple
-    titles: tuple
+    title_structures: tuple
+    title_pools: dict    # {"prefix": (TitleFieldDef,..), "core": ..., "suffix": ...}
     skill_count_min: int
     skill_count_max: int
+    skill_md5_variance: SkillVariance
     rarity_scaled_attributes: tuple
     battle: BattleCfg
 
@@ -161,16 +183,9 @@ def load_game_config(config_root) -> GameCfg:
         if float(e.get("weight", 1)) <= 0:
             raise ConfigError("元素权重必须为正: %s" % e["id"])
         seen_elems.add(e["id"])
-        elements.append(ElementDef(
-            id=str(e["id"]), weight=float(e.get("weight", 1)),
-            advantage={str(k): float(v) for k, v in e.get("advantage", {}).items()},
-        ))
+        elements.append(ElementDef(id=str(e["id"]), weight=float(e.get("weight", 1))))
     if not elements:
         raise ConfigError("元素池为空")
-    for e in elements:
-        for defender in e.advantage:
-            if defender not in seen_elems:
-                raise ConfigError("元素 %s 克制了未定义的元素 %s" % (e.id, defender))
 
     scaled = tuple(str(x) for x in rar_data.get("scaled_attributes", []))
     rarities = []
@@ -208,13 +223,60 @@ def load_game_config(config_root) -> GameCfg:
     if not (1 <= sc_min <= sc_max <= len(skills)):
         raise ConfigError("技能数量配置非法: [%s, %s]" % (sc_min, sc_max))
 
-    titles = []
-    for ttl in titles_data.get("titles", []):
-        if float(ttl.get("weight", 1)) <= 0:
-            raise ConfigError("称号权重必须为正: %s" % ttl["id"])
-        titles.append(TitleDef(id=str(ttl["id"]), weight=float(ttl.get("weight", 1))))
-    if not titles:
-        raise ConfigError("称号池为空")
+    var = skills_data.get("md5_variance", {})
+    var_chance = var.get("chance", [1.0, 1.0])
+    var_value = var.get("value", [1.0, 1.0])
+    skill_md5_variance = SkillVariance(
+        chance_lo=float(var_chance[0]), chance_hi=float(var_chance[1]),
+        value_lo=float(var_value[0]), value_hi=float(var_value[1]),
+    )
+    if skill_md5_variance.chance_lo > skill_md5_variance.chance_hi:
+        raise ConfigError("md5_variance.chance 区间非法")
+    if skill_md5_variance.value_lo > skill_md5_variance.value_hi:
+        raise ConfigError("md5_variance.value 区间非法")
+
+    # 称号：多字段 + 多结构概率生成
+    structures = []
+    seen_structs = set()
+    for s in titles_data.get("structures", []):
+        sid = str(s["id"])
+        if sid in seen_structs:
+            raise ConfigError("称号结构 id 重复: %s" % sid)
+        seen_structs.add(sid)
+        fields = tuple(str(x) for x in s.get("fields", []))
+        if not fields:
+            raise ConfigError("称号结构 %s 未定义字段" % sid)
+        for fname in fields:
+            if fname not in TITLE_FIELD_POOLS:
+                raise ConfigError("称号结构 %s 引用了未知字段 %s" % (sid, fname))
+        connectors = tuple(str(x) for x in s.get("connectors", []))
+        if connectors and len(connectors) != len(fields) - 1:
+            raise ConfigError("称号结构 %s 连接符数量应为 %d" % (sid, len(fields) - 1))
+        connectors = connectors + ("",) * (len(fields) - 1 - len(connectors))
+        if float(s.get("weight", 1)) <= 0:
+            raise ConfigError("称号结构权重必须为正: %s" % sid)
+        structures.append(TitleStructureDef(
+            id=sid, weight=float(s.get("weight", 1)),
+            fields=fields, connectors=connectors,
+        ))
+    if not structures:
+        raise ConfigError("称号结构池为空")
+
+    title_pools = {}
+    for pool_name, pool_key in (("prefix", "prefixes"), ("core", "cores"), ("suffix", "suffixes")):
+        pool = []
+        seen_ids = set()
+        for entry in titles_data.get(pool_key, []):
+            tid = str(entry["id"])
+            if tid in seen_ids:
+                raise ConfigError("称号字段 id 重复: %s/%s" % (pool_key, tid))
+            seen_ids.add(tid)
+            if float(entry.get("weight", 1)) <= 0:
+                raise ConfigError("称号字段权重必须为正: %s/%s" % (pool_key, tid))
+            pool.append(TitleFieldDef(id=tid, weight=float(entry.get("weight", 1))))
+        if not pool:
+            raise ConfigError("称号字段池为空: %s" % pool_key)
+        title_pools[pool_name] = tuple(pool)
 
     variance = battle_data.get("variance", [1.0, 1.0])
     battle = BattleCfg(
@@ -223,20 +285,25 @@ def load_game_config(config_root) -> GameCfg:
         variance_hi=float(variance[1]),
         defense_factor=float(battle_data.get("defense_factor", 1.0)),
         min_damage=int(battle_data.get("min_damage", 1)),
-        max_rounds=int(battle_data.get("max_rounds", 120)),
+        max_ticks=int(battle_data.get("max_ticks", 600)),
+        gauge_threshold=float(battle_data.get("gauge_threshold", 100)),
         crit_cap=float(battle_data.get("crit_cap", 100)),
         dodge_cap=float(battle_data.get("dodge_cap", 60)),
-        seed_separator=str(battle_data.get("seed_separator", "\u001f")),
+        seed_separator=str(battle_data.get("seed_separator", "")),
     )
-    if battle.max_rounds < 1:
-        raise ConfigError("max_rounds 必须 >= 1")
+    if battle.max_ticks < 1:
+        raise ConfigError("max_ticks 必须 >= 1")
+    if battle.gauge_threshold <= 0:
+        raise ConfigError("gauge_threshold 必须 > 0")
     if battle.variance_lo > battle.variance_hi:
         raise ConfigError("variance 区间非法")
 
     return GameCfg(
         system=system, attributes=tuple(attributes), elements=tuple(elements),
-        rarities=tuple(rarities), skills=tuple(skills), titles=tuple(titles),
+        rarities=tuple(rarities), skills=tuple(skills),
+        title_structures=tuple(structures), title_pools=title_pools,
         skill_count_min=sc_min, skill_count_max=sc_max,
+        skill_md5_variance=skill_md5_variance,
         rarity_scaled_attributes=scaled, battle=battle,
     )
 
@@ -244,20 +311,23 @@ def load_game_config(config_root) -> GameCfg:
 class Locale:
     """某一语言的全部文案（纯文本，不含任何数值规则）。"""
 
-    def __init__(self, lang, ui, attributes, elements, rarities, skills, titles, battle_log):
+    def __init__(self, lang, ui, attributes, elements, rarities, skills, titles,
+                 stats, buffs, battle_log):
         self.lang = lang
         self.ui = ui
         self.attributes = attributes
         self.elements = elements
         self.rarities = rarities
         self.skills = skills
-        self.titles = titles
+        self.titles = titles          # {"prefixes": {...}, "cores": {...}, "suffixes": {...}}
+        self.stats = stats            # 技能参数标签模板
+        self.buffs = buffs            # buff 名称/说明模板
         self.battle_log = battle_log
 
     def ref_name(self, registry: str, ref_id: str):
         """按注册名（skill/title/element/rarity/attr）取显示名；缺失返回 None。"""
         table = {
-            "skill": self.skills, "title": self.titles, "element": self.elements,
+            "skill": self.skills, "element": self.elements,
             "rarity": self.rarities, "attr": self.attributes,
         }.get(registry)
         if table is None:
@@ -268,7 +338,8 @@ class Locale:
         return None
 
 
-LOCALE_FILES = ("ui", "attributes", "elements", "rarities", "skills", "titles", "battle_log")
+LOCALE_FILES = ("ui", "attributes", "elements", "rarities", "skills", "titles",
+                "stats", "buffs", "battle_log")
 
 
 def load_locale(config_root, lang: str) -> Locale:
@@ -277,5 +348,6 @@ def load_locale(config_root, lang: str) -> Locale:
     return Locale(
         lang=str(lang), ui=data["ui"], attributes=data["attributes"],
         elements=data["elements"], rarities=data["rarities"], skills=data["skills"],
-        titles=data["titles"], battle_log=data["battle_log"],
+        titles=data["titles"], stats=data["stats"], buffs=data["buffs"],
+        battle_log=data["battle_log"],
     )

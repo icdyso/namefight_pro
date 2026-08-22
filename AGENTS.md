@@ -34,9 +34,12 @@
    - 斗士种子 = `md5(归一化名字)`；
    - 对战种子 = `md5(按字典序排序后的两个归一化名字，以配置的分隔符连接)`。
 4. 对战内部次序（先后手）只由（速度降序、规范化名字升序）决定，与输入顺序无关。
-5. 派生时 PRNG 的消耗顺序固定为：
-   **稀有度 → 元素 → 属性（按配置顺序）→ 技能数量 → 技能抽取 → 称号**。
+5. 派生时主 PRNG 的消耗顺序固定为：
+   **稀有度 -> 元素 -> 属性（按配置顺序）-> 技能数量 -> 技能抽取 -> 称号结构 -> 称号字段（按结构字段顺序）**。
    改变此顺序属于 breaking change（见 3.4）。
+   技能个性化（触发概率/数值随名字扰动）使用**独立种子**
+   `md5(规范化名字 + ":" + 技能id)`，与主派生流互不影响；扰动区间见
+   `config/game/skills.json` 的 `md5_variance`。
 6. 镜像对战（两个相同名字）允许，结果同样确定。
 7. 配置文件内容属于「输入」的一部分：修改配置可能改变同名结果，属正常行为，
    但必须在更新文档中显著标注（见 3.4）。
@@ -45,18 +48,23 @@
 
 1. **数值 / 规则**全部位于 `config/game/*.json`：属性区间、技能效果与参数、
    称号权重、元素克制矩阵、稀有度加成、战斗常数、名字归一化规则。
-2. **文案**全部位于 `config/locales/<lang>/*.json`：UI 文案、属性显示名、
-   技能名与描述、称号、元素、稀有度、战斗日志模板。
+2. **文案**全部位于 `config/locales/<lang>/*.json`（每语言九个文件）：UI 文案、
+   属性显示名、技能名与描述、技能参数标签（stats）、称号字段（titles）、
+   元素、稀有度、buff 文案（buffs）、战斗日志模板（battle_log）。
 3. 代码中**禁止硬编码任何面向用户的文案**；技能描述只写风味文本，不重复数值
    （数值的唯一事实来源是 `config/game`）。
 4. 战斗日志以「模板 id + 参数」结构化存储；技能 / 称号 / 元素等参数以
    `{"ref": 注册名, "id": 条目id}` 形式传递，渲染时才查当前语言的显示名，
    保证切换语言不改变战报结构。
 5. 扩展方式：
-   - 新增语言 = 新增 `config/locales/<lang>/` 目录（七个文件齐全）；
+   - 新增语言 = 新增 `config/locales/<lang>/` 目录（九个文件齐全）；
    - 新增技能 = `config/game/skills.json` 增加条目（效果类型必须是引擎
-     `SUPPORTED_EFFECTS` 中已支持的）+ 各语言补充文案；
-   - 新增称号 / 元素 / 稀有度同理。
+     `SUPPORTED_EFFECTS` 中已支持的）+ 各语言补充文案与 stats 标签；
+   - 新增称号字段 = `game/titles.json` 对应池（prefixes/cores/suffixes）加条目
+     + 各语言补 name/desc；
+   - 新增称号结构 = `game/titles.json` 的 structures 加条目（字段名限定
+     prefix / core / core2 / suffix，连接符数量为字段数减一）；
+   - 新增元素 / 稀有度同理。元素仅为身份标识，不参与任何数值计算。
 
 ### 2.3 技术约束
 
@@ -97,13 +105,13 @@ namefight_pro/
 │   ├── game/                 # 数值与规则（与语言无关）
 │   │   ├── system.json       # 版本、语言列表、名字归一化规则
 │   │   ├── attributes.json   # 属性区间与战力权重
-│   │   ├── elements.json     # 元素池与克制矩阵
+│   │   ├── elements.json     # 元素池（仅身份标识，无克制）
 │   │   ├── rarities.json     # 稀有度权重与属性倍率
-│   │   ├── skills.json       # 技能池（效果类型 + 参数 + 权重）
-│   │   ├── titles.json       # 称号池与权重
-│   │   └── battle.json       # 战斗常数（暴击倍率/浮动/回合上限等）
-│   └── locales/              # 文案（与数值无关）
-│       ├── zh/               # 七个文件：ui/attributes/elements/rarities/skills/titles/battle_log
+│   │   ├── skills.json       # 技能池（效果/参数/权重）+ md5_variance 个性化区间
+│   │   ├── titles.json       # 称号：结构池（structures）+ 字段池（prefix/cores/suffixes）
+│   │   └── battle.json       # 战斗常数（暴击倍率/浮动/行动槽阈值/max_ticks 等）
+│   └── locales/              # 文案（与数值无关），每语言九个文件：
+│       ├── zh/               # ui/attributes/elements/rarities/skills/titles/stats/buffs/battle_log
 │       └── en/
 ├── web/                      # 前端（无构建、零依赖）
 │   ├── index.html
@@ -129,14 +137,26 @@ namefight_pro/
 | `GET /api/health` | `{status, version}` |
 | `GET /api/text?lang=zh` | 前端所需全部 UI 文案 + 可用语言列表 |
 | `GET /api/fighter?name=X&lang=zh` | 斗士完整数据（含 MD5 摘要、属性、技能、称号） |
-| `POST /api/battle` | body `{"a": "...", "b": "...", "lang": "zh"}`；返回双方数据、逐条战报（结构化事件 + 已渲染文本）与胜负 |
+| `POST /api/battle` | body `{"a": "...", "b": "...", "lang": "zh"}`；返回双方数据、逐条战报（结构化事件 + 已渲染文本 + 双方状态快照）与胜负 |
 
 错误以 `{"error": "<code>"}` + 4xx/5xx 返回，错误码文案同样由 locale 提供。
 
 ## 7. 设计备忘
 
-- 伤害公式：`max(最小伤害, round(ATK × 浮动 × 暴击倍率 × 元素克制 × 技能倍率 − DEF × 防御系数))`；
-- 回合结构：按初始速度序行动（速度相同按规范化名字升序）；毒在拥有者回合开始时结算；
-  眩晕跳过行动；回合耗尽按剩余生命比例判定，完全相同则平局；
+- **tick 战斗模型**：战斗以 tick 推进；每个 tick 双方行动槽（gauge）累加自身速度值，
+  达到阈值（`battle.json` 的 `gauge_threshold`，默认 100）即可行动一次并扣回阈值。
+  速度决定行动频率（速度 12 ≈ 每 9 tick 行动一次，速度 9 ≈ 每 12 tick 一次）。
+  同一 tick 多人可行动时按（gauge 余量降序、内部序）执行；内部序 = 速度降序、
+  规范化名字升序，与输入顺序无关；
+- 伤害公式：`max(最小伤害, round(ATK × 浮动 × 暴击倍率 × 技能倍率 − DEF × 防御系数))`；
+  元素不参与计算（仅身份标识）；
+- 技能参数按斗士 MD5 个性化：`md5(规范化名字 + ":" + 技能id)` 为种子的确定性扰动，
+  区间为 `skills.json` 的 `md5_variance`（chance/value 各自的倍率范围）；
+- 毒在拥有者的行动时机结算；眩晕消耗一次行动；tick 耗尽（max_ticks）按剩余生命
+  比例判定，完全相同则平局；
 - `crit` / `dodge` 属性以百分数（整数）存储，判定时除以 100；
-- 战报条目结构：`{"round": n, "template": 模板id, "params": {...}, "text": 渲染后文本}`。
+- 称号为多字段组合：结构（core / prefix+core / core+suffix / 双core / 全结构）
+  与各字段均按权重概率抽取，显示名按结构连接符拼接，描述由字段描述片段以「，」拼接；
+- 战报条目结构：`{tick, template, params, state, text}`；`state` 为双方快照
+  （HP/ATK/DEF/SPD/行动槽百分比/buff 列表），buff 以 id+params 存储、渲染时查
+  locale 的 buffs 模板；快照按输入位置 a/b 记录。

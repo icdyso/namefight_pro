@@ -6,7 +6,8 @@
   ],
   "defense_factor": 1.0,
   "min_damage": 1,
-  "max_rounds": 120,
+  "max_ticks": 600,
+  "gauge_threshold": 100,
   "crit_cap": 100,
   "dodge_cap": 60,
   "seed_separator": "\u001f"

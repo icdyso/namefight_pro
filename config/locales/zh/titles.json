@@ -1,14 +1,38 @@
 {
-  "undefeated": { "name": "不败战神",     "description": "传说中从未败北的名字。" },
-  "rookie":     { "name": "初出茅庐",     "description": "刚踏上竞技场的新面孔。" },
-  "genius":     { "name": "天纵奇才",     "description": "属性天生丽质，令人嫉妒。" },
-  "lucky":      { "name": "欧皇附体",     "description": "骰子永远站在你这边。" },
-  "tragic":     { "name": "时运不济",     "description": "MD5 对你不太友好。" },
-  "silent":     { "name": "沉默羔羊",     "description": "安静地挨打，安静地反击。" },
-  "berserker":  { "name": "狂暴之魂",     "description": "血越少，拳头越硬。" },
-  "phoenix":    { "name": "不死鸟",       "description": "倒下之前总会再站起来一次。" },
-  "scholar":    { "name": "战场学者",     "description": "每一击都经过精确计算。" },
-  "joker":      { "name": "谜之挑战者",   "description": "没人知道下一招是什么。" },
-  "blade":      { "name": "无锋重刃",     "description": "大巧不工，一力降十会。" },
-  "shadow":     { "name": "疾风之影",     "description": "看得见，打不着。" }
+  "prefixes": {
+    "dark_night": { "name": "暗夜", "desc": "行于暗夜" },
+    "blood_moon": { "name": "血月", "desc": "生于血月之下" },
+    "abyss":      { "name": "深渊", "desc": "自深渊归来" },
+    "sky":        { "name": "苍穹", "desc": "仰望苍穹" },
+    "flame":      { "name": "烈焰", "desc": "浴于烈焰" },
+    "frost":      { "name": "寒霜", "desc": "饮尽寒霜" },
+    "thunder":    { "name": "雷霆", "desc": "雷霆加身" },
+    "boundless":  { "name": "无极", "desc": "踏入无极" },
+    "aloof":      { "name": "孤高", "desc": "生性孤高" },
+    "silent":     { "name": "缄默", "desc": "缄默不语" }
+  },
+  "cores": {
+    "sword_saint": { "name": "剑圣",   "desc": "剑之圣者" },
+    "fist_king":   { "name": "拳王",   "desc": "拳台之王" },
+    "warlock":     { "name": "术士",   "desc": "禁忌术士" },
+    "berserker":   { "name": "狂战",   "desc": "狂怒战士" },
+    "assassin":    { "name": "刺客",   "desc": "影中刺客" },
+    "sage":        { "name": "贤者",   "desc": "战场贤者" },
+    "ranger":      { "name": "游侠",   "desc": "浪迹游侠" },
+    "war_god":     { "name": "武神",   "desc": "不灭武神" },
+    "drunkard":    { "name": "酒仙",   "desc": "醉里仙人" },
+    "phantom":     { "name": "幻影",   "desc": "无形幻影" },
+    "medic":       { "name": "神医",   "desc": "起死回生" },
+    "gambler":     { "name": "赌徒",   "desc": "命运赌徒" }
+  },
+  "suffixes": {
+    "peerless":   { "name": "无双",   "desc": "举世无双" },
+    "awakened":   { "name": "觉醒",   "desc": "已然觉醒" },
+    "returned":   { "name": "再临",   "desc": "再度降临" },
+    "legend":     { "name": "传说",   "desc": "活着的传说" },
+    "guard":      { "name": "亲卫",   "desc": "亲卫队员" },
+    "trainee":    { "name": "见习",   "desc": "尚在见习" },
+    "substitute": { "name": "候补",   "desc": "勉强候补" },
+    "retired":    { "name": "退役",   "desc": "光荣退役" }
+  }
 }

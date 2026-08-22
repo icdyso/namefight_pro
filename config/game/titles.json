@@ -1,16 +1,45 @@
 {
-  "titles": [
-    { "id": "undefeated", "weight": 4 },
-    { "id": "rookie",     "weight": 16 },
-    { "id": "genius",     "weight": 10 },
-    { "id": "lucky",      "weight": 10 },
-    { "id": "tragic",     "weight": 10 },
-    { "id": "silent",     "weight": 10 },
-    { "id": "berserker",  "weight": 8 },
-    { "id": "phoenix",    "weight": 6 },
-    { "id": "scholar",    "weight": 8 },
-    { "id": "joker",      "weight": 8 },
-    { "id": "blade",      "weight": 6 },
-    { "id": "shadow",     "weight": 6 }
+  "structures": [
+    { "id": "core",          "weight": 20, "fields": ["core"] },
+    { "id": "prefix_core",   "weight": 26, "fields": ["prefix", "core"],   "connectors": [""] },
+    { "id": "core_suffix",   "weight": 22, "fields": ["core", "suffix"],   "connectors": ["·"] },
+    { "id": "dual_core",     "weight": 18, "fields": ["core", "core2"],    "connectors": ["·"] },
+    { "id": "full",          "weight": 14, "fields": ["prefix", "core", "suffix"], "connectors": ["", "·"] }
+  ],
+  "prefixes": [
+    { "id": "dark_night", "weight": 10 },
+    { "id": "blood_moon", "weight": 9 },
+    { "id": "abyss",      "weight": 9 },
+    { "id": "sky",        "weight": 10 },
+    { "id": "flame",      "weight": 10 },
+    { "id": "frost",      "weight": 10 },
+    { "id": "thunder",    "weight": 10 },
+    { "id": "boundless",  "weight": 8 },
+    { "id": "aloof",      "weight": 8 },
+    { "id": "silent",     "weight": 8 }
+  ],
+  "cores": [
+    { "id": "sword_saint", "weight": 10 },
+    { "id": "fist_king",   "weight": 8 },
+    { "id": "warlock",     "weight": 8 },
+    { "id": "berserker",   "weight": 9 },
+    { "id": "assassin",    "weight": 9 },
+    { "id": "sage",        "weight": 7 },
+    { "id": "ranger",      "weight": 9 },
+    { "id": "war_god",     "weight": 4 },
+    { "id": "drunkard",    "weight": 7 },
+    { "id": "phantom",     "weight": 8 },
+    { "id": "medic",       "weight": 5 },
+    { "id": "gambler",     "weight": 8 }
+  ],
+  "suffixes": [
+    { "id": "peerless",    "weight": 4 },
+    { "id": "awakened",    "weight": 5 },
+    { "id": "returned",    "weight": 5 },
+    { "id": "legend",      "weight": 3 },
+    { "id": "guard",       "weight": 6 },
+    { "id": "trainee",     "weight": 10 },
+    { "id": "substitute",  "weight": 12 },
+    { "id": "retired",     "weight": 8 }
   ]
 }

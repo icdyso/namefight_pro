@@ -1,0 +1,16 @@
+{
+  "chance": "Trigger {v}",
+  "mult": "Damage x{v}",
+  "lifesteal": "Lifesteal {v}",
+  "poison_damage": "{v} poison per action",
+  "poison_turns": "for {v} actions",
+  "stun": "Stuns the target",
+  "extra": "Follow-up strike at {v}",
+  "reduction": "Damage taken -{v}",
+  "reflect": "Reflect {v}",
+  "dodge": "Dodge +{v}",
+  "crit": "Crit +{v}",
+  "heal": "Heal {v} HP",
+  "threshold": "Below {v} HP",
+  "atk_bonus": "ATK +{v}"
+}

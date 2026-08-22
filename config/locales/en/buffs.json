@@ -1,0 +1,7 @@
+{
+  "poison":     { "name": "Poisoned",   "detail": "Loses {damage} HP per action ({turns} left)" },
+  "stun":       { "name": "Stunned",    "detail": "Next action skipped" },
+  "last_stand": { "name": "Last Stand", "detail": "ATK +{value}" },
+  "crit_up":    { "name": "Focus",      "detail": "Crit +{value}" },
+  "dodge_up":   { "name": "Wind Step",  "detail": "Dodge +{value}" }
+}

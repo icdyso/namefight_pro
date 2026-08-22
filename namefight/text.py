@@ -11,6 +11,17 @@ class _SafeFormatDict(dict):
         return "{" + key + "}"
 
 
+def format_pct(x: float) -> str:
+    """0.213 -> '21%'；用于面向用户的百分比展示。"""
+    return "%s%%" % round(x * 100)
+
+
+def format_num(x: float) -> str:
+    """10.0 -> '10'；12.5 -> '12.5'（最多保留 1 位小数）。"""
+    text = ("%.1f" % float(x)).rstrip("0").rstrip(".")
+    return text if text else "0"
+
+
 def resolve_params(params, locale):
     """把参数中的 ref 引用解析为 locale 显示名，其余原样返回。"""
     resolved = {}

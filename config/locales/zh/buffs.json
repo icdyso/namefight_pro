@@ -1,0 +1,7 @@
+{
+  "poison":     { "name": "中毒",     "detail": "每次行动损失 {damage} 点生命（剩 {turns} 次）" },
+  "stun":       { "name": "眩晕",     "detail": "下次行动被跳过" },
+  "last_stand": { "name": "背水一战", "detail": "攻击 +{value}" },
+  "crit_up":    { "name": "会心",     "detail": "暴击 +{value}" },
+  "dodge_up":   { "name": "轻灵",     "detail": "闪避 +{value}" }
+}

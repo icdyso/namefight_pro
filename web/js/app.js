@@ -325,7 +325,9 @@
     var skillNodes = f.skills.map(function (s) {
       return NF.h("div", { class: "skill-chip", title: s.description },
         NF.h("div", { class: "skill-name" }, s.name),
-        s.description ? NF.h("div", { class: "skill-desc" }, s.description) : null);
+        s.description ? NF.h("div", { class: "skill-desc" }, s.description) : null,
+        s.stats && s.stats.length
+          ? NF.h("div", { class: "skill-stats" }, s.stats.join(" · ")) : null);
     });
 
     return NF.h("div", { class: "fighter-card side-" + side },
@@ -367,12 +369,80 @@
     els.controls = NF.h("div", { class: "playback" });
     els.logBox = NF.h("div", { class: "battle-log" });
     els.resultBox = NF.h("div", { class: "result-slot" });
+    els.hud = {
+      a: buildHud(state.fighters[0], "a"),
+      b: buildHud(state.fighters[1], "b")
+    };
     els.battlePanel.appendChild(NF.h("div", { class: "battle-head" },
       NF.h("h3", { class: "battle-title" }, t("battle_title")),
       els.controls));
+    els.battlePanel.appendChild(NF.h("div", { class: "battle-hud" }, els.hud.a.root, els.hud.b.root));
     els.battlePanel.appendChild(els.logBox);
     els.battlePanel.appendChild(els.resultBox);
     renderControls();
+    // 开战前的初始状态（满血 + 常驻被动）
+    if (state.battle.log.length && state.battle.log[0].state) {
+      applyBattleState(state.battle.log[0].state);
+    }
+  }
+
+  /* ---------- 战斗 HUD：HP / 属性 / 行动槽 / buff 实时渲染 ---------- */
+
+  function buildHud(f, side) {
+    var attrName = function (id) {
+      var found = f.attributes.filter(function (a) { return a.id === id; })[0];
+      return found ? found.name : id.toUpperCase();
+    };
+    var refs = {};
+    refs.hpFill = NF.h("div", { class: "hud-hpfill" });
+    refs.hpText = NF.h("span", { class: "hud-hptext" }, "");
+    refs.atkVal = NF.h("b", null, "");
+    refs.defVal = NF.h("b", null, "");
+    refs.spdVal = NF.h("b", null, "");
+    refs.atkStat = NF.h("span", { class: "hud-stat" }, attrName("atk") + " ", refs.atkVal);
+    refs.gaugeFill = NF.h("div", { class: "hud-gaugefill" });
+    refs.buffs = NF.h("div", { class: "hud-buffs" });
+    refs.root = NF.h("div", { class: "hud side-" + side },
+      NF.h("div", { class: "hud-head" },
+        NF.h("span", { class: "hud-name" }, f.name),
+        NF.h("span", { class: "hud-title" }, f.title.name)),
+      NF.h("div", { class: "hud-hpwrap" }, refs.hpFill, refs.hpText),
+      NF.h("div", { class: "hud-stats" },
+        refs.atkStat,
+        NF.h("span", { class: "hud-stat" }, attrName("def") + " ", refs.defVal),
+        NF.h("span", { class: "hud-stat" }, attrName("spd") + " ", refs.spdVal)),
+      NF.h("div", { class: "hud-gaugewrap" },
+        NF.h("span", { class: "hud-gaugelabel" }, t("gauge_label")),
+        NF.h("div", { class: "hud-gauge" }, refs.gaugeFill)),
+      refs.buffs);
+    return refs;
+  }
+
+  function applyHudState(refs, snap) {
+    if (!refs || !snap) return;
+    var hpPct = snap.max_hp > 0 ? (snap.hp / snap.max_hp * 100) : 0;
+    refs.hpFill.style.width = Math.max(0, Math.min(100, hpPct)) + "%";
+    refs.hpText.textContent = snap.hp + " / " + snap.max_hp;
+    refs.atkVal.textContent = String(snap.atk);
+    refs.defVal.textContent = String(snap.def);
+    refs.spdVal.textContent = String(snap.spd);
+    var boosted = (snap.buffs || []).some(function (b) { return b.id === "last_stand"; });
+    refs.atkStat.classList.toggle("atk-boost", boosted);
+    refs.gaugeFill.style.width = Math.max(0, Math.min(100, snap.gauge)) + "%";
+    NF.clear(refs.buffs);
+    (snap.buffs || []).forEach(function (b) {
+      var debuff = b.id === "poison" || b.id === "stun";
+      refs.buffs.appendChild(NF.h("span", {
+        class: "buff-chip" + (debuff ? " debuff" : ""),
+        title: b.detail
+      }, b.name));
+    });
+  }
+
+  function applyBattleState(battleState) {
+    if (!battleState || !els.hud) return;
+    applyHudState(els.hud.a, battleState.a);
+    applyHudState(els.hud.b, battleState.b);
   }
 
   function renderControls() {
@@ -396,12 +466,13 @@
   function appendLogEntry(entry) {
     if (!els.logBox) return;
     var cls = "log-entry";
-    if (entry.template === "round_start") cls += " log-round";
+    if (entry.template === "tick_marker") cls += " log-round";
     else if (entry.template === "skill_proc") cls += " log-skill";
     else if (entry.template === "death" || entry.template === "poison_death") cls += " log-death";
     else if (entry.template === "victory" || entry.template === "draw") cls += " log-result";
     els.logBox.appendChild(NF.h("div", { class: cls }, entry.text));
     els.logBox.scrollTop = els.logBox.scrollHeight;
+    if (entry.state) applyBattleState(entry.state);
   }
 
   function showResult() {
@@ -413,7 +484,7 @@
     els.resultBox.appendChild(NF.h("div", { class: "result-banner " + bannerClass },
       NF.h("div", { class: "result-winner" }, headline),
       NF.h("div", { class: "result-summary" }, fmt("summary_text", {
-        rounds: r.rounds,
+        ticks: r.ticks,
         dmg_a: r.damage.a,
         dmg_b: r.damage.b
       }))));

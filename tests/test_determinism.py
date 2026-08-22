@@ -14,7 +14,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from namefight.battle import run_battle
 from namefight.config import load_game_config, load_locale
-from namefight.fighter import derive_fighter, fighter_to_api
+from namefight.fighter import (derive_fighter, fighter_to_api,
+                               personalized_effects)
 
 CONFIG_ROOT = REPO_ROOT / "config"
 GAME = load_game_config(CONFIG_ROOT)
@@ -24,7 +25,7 @@ def _outcome_payload(outcome):
     return {
         "winner": outcome.winner_name,
         "draw": outcome.draw,
-        "rounds": outcome.rounds,
+        "ticks": outcome.ticks,
         "events": outcome.events,
         "damage": outcome.damage,
     }
@@ -33,7 +34,17 @@ def _outcome_payload(outcome):
 def _game_data(f):
     """参与确定性契约的派生数据（name 仅为展示输入，不计入）。"""
     return (f.normalized, f.digest, f.rarity_id, f.element_id,
-            tuple(sorted(f.attrs.items())), f.skill_ids, f.title_id, f.power)
+            tuple(sorted(f.attrs.items())), f.skill_ids,
+            f.title_structure_id, tuple(sorted(f.title_fields.items())), f.power)
+
+
+def _swap_state(event):
+    """把事件快照的 a/b 键互换（用于输入顺序无关性比较）。"""
+    e = dict(event)
+    if "state" in e:
+        st = e["state"]
+        e["state"] = {"a": st.get("b"), "b": st.get("a")}
+    return e
 
 
 class FighterDeterminism(unittest.TestCase):
@@ -55,7 +66,8 @@ class FighterDeterminism(unittest.TestCase):
         self.assertNotEqual(fa.digest, fb.digest)
         differing = (
             fa.attrs != fb.attrs or fa.skill_ids != fb.skill_ids
-            or fa.title_id != fb.title_id or fa.element_id != fb.element_id
+            or fa.title_structure_id != fb.title_structure_id
+            or fa.title_fields != fb.title_fields or fa.element_id != fb.element_id
         )
         self.assertTrue(differing, "两个不同名字的派生结果不应完全相同")
 
@@ -67,7 +79,34 @@ class FighterDeterminism(unittest.TestCase):
                          [(a["id"], a["value"]) for a in en["attributes"]])
         self.assertEqual([s["id"] for s in zh["skills"]], [s["id"] for s in en["skills"]])
         self.assertEqual(zh["rarity"]["id"], en["rarity"]["id"])
-        self.assertEqual(zh["title"]["id"], en["title"]["id"])
+        self.assertEqual(zh["title"]["structure"], en["title"]["structure"])
+        self.assertTrue(zh["title"]["name"])
+
+    def test_skill_personalization_deterministic(self):
+        fa = derive_fighter("Alice", GAME)
+        self.assertEqual(personalized_effects(fa, GAME), personalized_effects(fa, GAME))
+
+    def test_skill_personalization_varies_by_name(self):
+        from collections import defaultdict
+        values = defaultdict(set)
+        for i in range(30):
+            f = derive_fighter("fighter%02d" % i, GAME)
+            for sdef, eff in personalized_effects(f, GAME):
+                values[sdef.id].add((eff.get("chance"), eff.get("value"), eff.get("damage")))
+        varied = [sid for sid, vs in values.items() if len(vs) > 1]
+        self.assertTrue(varied, "技能个性化参数应随名字（MD5）变化")
+
+    def test_title_composition(self):
+        f = derive_fighter("TitleTest", GAME)
+        loc = load_locale(CONFIG_ROOT, "zh")
+        api = fighter_to_api(f, GAME, loc)
+        name = api["title"]["name"]
+        self.assertTrue(name)
+        self.assertTrue(api["title"]["description"].endswith("。"))
+        pool_key = {"prefix": "prefixes", "core": "cores", "core2": "cores", "suffix": "suffixes"}
+        for fname, fid in f.title_fields.items():
+            expected = loc.titles[pool_key[fname]][fid]["name"]
+            self.assertIn(expected, name)
 
 
 class BattleDeterminism(unittest.TestCase):
@@ -83,9 +122,10 @@ class BattleDeterminism(unittest.TestCase):
         fb = derive_fighter("李四", GAME)
         o1 = run_battle(fa, fb, GAME)
         o2 = run_battle(fb, fa, GAME)
-        self.assertEqual(o1.events, o2.events)
+        # 快照按输入位置 a/b 记录，交换输入顺序需把 a/b 互换后再比较
+        self.assertEqual(o1.events, [_swap_state(e) for e in o2.events])
         self.assertEqual(o1.winner_name, o2.winner_name)
-        self.assertEqual(o1.rounds, o2.rounds)
+        self.assertEqual(o1.ticks, o2.ticks)
         self.assertEqual(o1.seed, o2.seed)
         self.assertEqual(o1.damage[0], o2.damage[1])
         self.assertEqual(o1.damage[1], o2.damage[0])
@@ -106,9 +146,48 @@ class BattleDeterminism(unittest.TestCase):
         else:
             self.assertIn(outcome.winner_name, (fa.name, fb.name))
             self.assertIn(outcome.winner_pos, (0, 1))
-        self.assertGreaterEqual(outcome.rounds, 1)
-        self.assertLessEqual(outcome.rounds, GAME.battle.max_rounds)
+        self.assertGreaterEqual(outcome.ticks, 1)
+        self.assertLessEqual(outcome.ticks, GAME.battle.max_ticks)
         self.assertTrue(outcome.events)
+
+    def test_battle_events_carry_state_snapshots(self):
+        fa = derive_fighter("Alice", GAME)
+        fb = derive_fighter("Bob", GAME)
+        outcome = run_battle(fa, fb, GAME)
+        for e in outcome.events:
+            self.assertIn("state", e)
+            for side in ("a", "b"):
+                snap = e["state"][side]
+                self.assertIn("hp", snap)
+                self.assertIn("max_hp", snap)
+                self.assertIn("atk", snap)
+                self.assertIn("gauge", snap)
+                self.assertIn("buffs", snap)
+                self.assertGreaterEqual(snap["hp"], 0)
+        # 首个事件应为满血初始状态
+        first = outcome.events[0]["state"]
+        self.assertEqual(first["a"]["hp"], first["a"]["max_hp"])
+        self.assertEqual(first["b"]["hp"], first["b"]["max_hp"])
+
+    def test_faster_fighter_acts_no_later(self):
+        # 速度决定行动频率：更快的一方首次行动不应晚于更慢的一方
+        lo = derive_fighter("Slowpoke", GAME)
+        while lo.attrs["spd"] > 8:
+            lo = derive_fighter(lo.name + "x", GAME)
+        hi = derive_fighter("Quickstep", GAME)
+        while hi.attrs["spd"] < 12:
+            hi = derive_fighter(hi.name + "x", GAME)
+        outcome = run_battle(lo, hi, GAME)
+        first_actions = {}
+        for e in outcome.events:
+            if e["template"] in ("attack_hit", "attack_miss"):
+                actor = e["params"]["a"]
+                if actor not in first_actions:
+                    first_actions[actor] = e["tick"]
+                if len(first_actions) == 2:
+                    break
+        if hi.name in first_actions and lo.name in first_actions:
+            self.assertLessEqual(first_actions[hi.name], first_actions[lo.name])
 
     def test_battle_stable_across_processes(self):
         script = (
@@ -118,7 +197,7 @@ class BattleDeterminism(unittest.TestCase):
             "from namefight.battle import run_battle;"
             "g=load_game_config({cfg!r});"
             "o=run_battle(derive_fighter('Alice',g),derive_fighter('Bob',g),g);"
-            "print(json.dumps({{'w':o.winner_name,'r':o.rounds,'e':o.events}},"
+            "print(json.dumps({{'w':o.winner_name,'t':o.ticks,'e':o.events}},"
             "ensure_ascii=False,sort_keys=True))"
         ).format(root=str(REPO_ROOT), cfg=str(CONFIG_ROOT))
         env = dict(os.environ, PYTHONIOENCODING="utf-8")

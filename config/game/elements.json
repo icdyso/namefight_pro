@@ -1,10 +1,10 @@
 {
   "elements": [
-    { "id": "fire",    "weight": 1,   "advantage": { "wood": 1.2 } },
-    { "id": "water",   "weight": 1,   "advantage": { "fire": 1.2 } },
-    { "id": "wood",    "weight": 1,   "advantage": { "water": 1.2 } },
-    { "id": "thunder", "weight": 1,   "advantage": { "water": 1.15 } },
-    { "id": "light",   "weight": 0.8, "advantage": { "dark": 1.15 } },
-    { "id": "dark",    "weight": 0.8, "advantage": { "light": 1.15 } }
+    { "id": "fire",    "weight": 1 },
+    { "id": "water",   "weight": 1 },
+    { "id": "wood",    "weight": 1 },
+    { "id": "thunder", "weight": 1 },
+    { "id": "light",   "weight": 0.8 },
+    { "id": "dark",    "weight": 0.8 }
   ]
 }

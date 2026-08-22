@@ -1,6 +1,6 @@
 {
-  "battle_start": "⚔️ {a}（{title_a}·{element_a}）对阵 {b}（{title_b}·{element_b}）！",
-  "round_start": "—— 第 {round} 回合 ——",
+  "battle_start": "⚔️ {a}（{element_a}）对阵 {b}（{element_b}）！",
+  "tick_marker": "-- 第 {tick} 刻 --",
   "turn_stun": "😵 {a} 眩晕未醒，无法行动。",
   "poison_tick": "☠️ {a} 毒发，损失 {damage} 点生命。",
   "poison_death": "☠️ {a} 毒发身亡！",
@@ -21,5 +21,5 @@
   "death": "☠️ {b} 倒下了！",
   "victory": "🏆 {winner} 赢得了战斗！",
   "draw": "⚖️ 双方战成平手。",
-  "timeout": "⏳ 回合耗尽，按剩余生命比例判定——"
+  "timeout": "⏳ 行动刻耗尽，按剩余生命比例判定--"
 }

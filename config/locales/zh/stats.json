@@ -1,0 +1,16 @@
+{
+  "chance": "触发率 {v}",
+  "mult": "伤害倍率 {v}",
+  "lifesteal": "吸血 {v}",
+  "poison_damage": "毒伤 {v}/次",
+  "poison_turns": "持续 {v} 次行动",
+  "stun": "眩晕目标",
+  "extra": "追加 {v} 伤害的一击",
+  "reduction": "减伤 {v}",
+  "reflect": "反弹 {v}",
+  "dodge": "闪避 +{v}",
+  "crit": "暴击 +{v}",
+  "heal": "回复 {v} 生命",
+  "threshold": "生命低于 {v} 时",
+  "atk_bonus": "攻击 +{v}"
+}

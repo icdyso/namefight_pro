@@ -1,14 +1,38 @@
 {
-  "undefeated": { "name": "Undefeated War God",  "description": "A name said to have never lost." },
-  "rookie":     { "name": "Fresh Rookie",        "description": "A new face in the arena." },
-  "genius":     { "name": "Born Genius",         "description": "Stats too good to be fair." },
-  "lucky":      { "name": "Fortune's Favorite",  "description": "The dice always land your way." },
-  "tragic":     { "name": "Star-Crossed",        "description": "The MD5 was not on your side." },
-  "silent":     { "name": "Silent Lamb",         "description": "Takes the hits quietly, returns them quietly." },
-  "berserker":  { "name": "Berserker Soul",      "description": "Less blood, harder fists." },
-  "phoenix":    { "name": "Undying Phoenix",     "description": "Always rises once more before falling." },
-  "scholar":    { "name": "Battle Scholar",      "description": "Every strike precisely computed." },
-  "joker":      { "name": "Mysterious Challenger", "description": "Nobody knows the next move." },
-  "blade":      { "name": "Unsharpened Blade",   "description": "Great skill needs no sharp edge." },
-  "shadow":     { "name": "Wind Shadow",         "description": "Visible, yet untouchable." }
+  "prefixes": {
+    "dark_night": { "name": "Dark Night", "desc": "Walks in the dark night" },
+    "blood_moon": { "name": "Blood Moon", "desc": "Born under the blood moon" },
+    "abyss":      { "name": "Abyssal", "desc": "Returned from the abyss" },
+    "sky":        { "name": "Sky", "desc": "Gazes at the firmament" },
+    "flame":      { "name": "Blazing", "desc": "Bathed in flame" },
+    "frost":      { "name": "Frost", "desc": "Drank the frost" },
+    "thunder":    { "name": "Thunder", "desc": "Struck by thunder" },
+    "boundless":  { "name": "Boundless", "desc": "Stepped into the boundless" },
+    "aloof":      { "name": "Lone", "desc": "Proud and alone" },
+    "silent":     { "name": "Silent", "desc": "Speaks not" }
+  },
+  "cores": {
+    "sword_saint": { "name": "Sword Saint", "desc": "Saint of the blade" },
+    "fist_king":   { "name": "Fist King", "desc": "King of the ring" },
+    "warlock":     { "name": "Warlock", "desc": "Forbidden warlock" },
+    "berserker":   { "name": "Berserker", "desc": "Fury-filled warrior" },
+    "assassin":    { "name": "Assassin", "desc": "Assassin in the shadows" },
+    "sage":        { "name": "Sage", "desc": "Sage of the battlefield" },
+    "ranger":      { "name": "Ranger", "desc": "Wandering ranger" },
+    "war_god":     { "name": "War God", "desc": "Undying war god" },
+    "drunkard":    { "name": "Drunken Immortal", "desc": "Immortal in wine" },
+    "phantom":     { "name": "Phantom", "desc": "Formless phantom" },
+    "medic":       { "name": "Miracle Medic", "desc": "Raises the dead" },
+    "gambler":     { "name": "Gambler", "desc": "Gambler with fate" }
+  },
+  "suffixes": {
+    "peerless":   { "name": "Peerless", "desc": "Without equal" },
+    "awakened":   { "name": "Awakened", "desc": "Already awakened" },
+    "returned":   { "name": "Reborn", "desc": "Returned once more" },
+    "legend":     { "name": "Living Legend", "desc": "A legend alive" },
+    "guard":      { "name": "Honor Guard", "desc": "Of the honor guard" },
+    "trainee":    { "name": "Trainee", "desc": "Still in training" },
+    "substitute": { "name": "Substitute", "desc": "Barely a substitute" },
+    "retired":    { "name": "Retired", "desc": "Honorably retired" }
+  }
 }
