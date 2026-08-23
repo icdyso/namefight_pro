@@ -31,6 +31,9 @@ class GameConfigTests(unittest.TestCase):
         for a in GAME.attributes:
             self.assertLessEqual(a.min, a.max)
             self.assertGreater(a.base, 0)
+            # 显示层换算参照（v0.9.1）：满投掷 = 100；百分比属性不参与
+            if a.display_ref > 0:
+                self.assertEqual(a.display_ref, a.max)
 
     def test_skill_count_within_pool(self):
         self.assertLessEqual(GAME.skill_count_min, GAME.skill_count_max)
@@ -119,8 +122,6 @@ class LocaleCoverageTests(unittest.TestCase):
         for lang, loc in LOCALES.items():
             for a in GAME.attributes:
                 self.assertIn(a.id, loc.attributes, "[%s] 属性 %s 缺文案" % (lang, a.id))
-            for e in GAME.elements:
-                self.assertIn(e.id, loc.elements, "[%s] 元素 %s 缺文案" % (lang, e.id))
             for s in GAME.skills:
                 self.assertIn(s.id, loc.skills, "[%s] 技能 %s 缺文案" % (lang, s.id))
                 self.assertIn("description", loc.skills[s.id])

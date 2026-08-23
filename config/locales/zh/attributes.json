@@ -2,7 +2,7 @@
   "hp":    { "name": "生命", "emoji": "❤️" },
   "atk":   { "name": "攻击", "emoji": "⚔️" },
   "def":   { "name": "防御", "emoji": "🛡️" },
-  "spd":   { "name": "速度", "emoji": "💨" },
+  "spd":   { "name": "速度", "emoji": "👟" },
   "crit":  { "name": "暴击", "emoji": "🎯" },
   "dodge": { "name": "闪避", "emoji": "🌀" }
 }

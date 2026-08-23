@@ -1,5 +1,5 @@
 {
-  "battle_start": "⚔️ {a} ({element_a}) vs {b} ({element_b})!",
+  "battle_start": "⚔️ {a} vs {b}!",
   "tick_marker": "-- Tick {tick} --",
   "turn_stun": "😵 {a} is stunned and cannot act.",
   "poison_tick": "☠️ {a} suffers {damage} poison damage.",

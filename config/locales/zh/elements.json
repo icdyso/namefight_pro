@@ -1,8 +1,0 @@
-{
-  "fire":    { "name": "烈焰", "emoji": "🔥" },
-  "water":   { "name": "洪流", "emoji": "💧" },
-  "wood":    { "name": "青木", "emoji": "🌿" },
-  "thunder": { "name": "惊雷", "emoji": "⚡" },
-  "light":   { "name": "圣光", "emoji": "✨" },
-  "dark":    { "name": "暗影", "emoji": "🌑" }
-}

@@ -173,7 +173,7 @@ def make_handler(state: AppState):
                 fighter_to_api(fighter_a, state.game, locale),
                 fighter_to_api(fighter_b, state.game, locale),
             ]
-            self._send_json(battle_to_api(outcome, fighters_api, locale))
+            self._send_json(battle_to_api(outcome, fighters_api, locale, state.game))
 
         def _api_battle_fast(self, payload):
             """极速对战：不生成快照、不做任何文案渲染，供批量测试/基准使用。

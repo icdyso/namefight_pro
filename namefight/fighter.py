@@ -1,9 +1,12 @@
-"""斗士派生：名字 -> MD5 -> 属性 / 技能 / 称号 / 元素。
+"""斗士派生：名字 -> MD5 -> 属性 / 技能 / 称号。
 
 确定性契约（AGENTS.md 2.1.1）：派生结果是 (归一化名字, 配置快照) 的纯函数。
 
-- 主派生 PRNG 消耗顺序固定：元素 -> 属性（配置顺序，白板 100 基准）-> 技能数量
+- 主派生 PRNG 消耗顺序固定（v0.9.1）：属性（配置顺序，正态投掷）-> 技能数量
   -> 技能抽取 -> 称号结构 -> 称号字段（按结构字段顺序）。
+- 属性在 [min, max] 内正态投掷（均值 = 区间中点，σ = 宽 / 4，截断到区间）；
+  引擎与配置一律使用原始量纲（攻 13 / 防 5 / 速 10 / 命 100），
+  显示层经 display_ref 换算为「满投掷 = 100」的白板单位（见 display_factor）。
 - 技能个性化（熟练度/数值/词缀/变数随 MD5 扰动）使用独立种子
   md5(规范化名字 + ":" + 技能id)，与主派生流互不影响。
 - v0.9.0 起每个技能附带一个熟练度（0~100）与至多两个变数槽位：
@@ -32,7 +35,8 @@ STATS_KEYS_USED = frozenset({
     "field_crit_value", "field_ratio", "field_cap", "field_cost",
     "field_convert", "field_per", "field_regen", "field_spd", "field_penalty",
     "mod_chance", "mod_value", "mod_damage", "mod_turns", "mod_ticks",
-    "final_damage", "final_turns", "mastery_text", "mastery_text_value",
+    "final_damage", "final_turns",
+    "mastery_text", "mastery_text_value", "mastery_text_immune",
     "nat_charge", "nat_execution", "nat_lifesteal", "nat_poison",
     "nat_concussive", "nat_thunder", "nat_sever", "nat_gauge_surge",
     "nat_damage_reduction", "nat_reflect", "nat_bulwark", "nat_retribution",
@@ -103,6 +107,54 @@ RESONANCE_SPECS = {
 # 熟练度作用字段 -> 实际缩放的参数列表（条件触发型技能缩放效果值而非概率）
 _MASTERY_PARAMS = {"chance": ("chance",), "value": ("value", "spd"), "immune": ("immune",)}
 
+# 数值字段的量纲表：(效果类型, 字段) -> 属性 id 或 "gauge"。
+# 显示层按 display_factor 把这些字段的原始量纲换算为白板 100 显示单位，
+# 与属性面板 / 快照 / 共鸣公式的显示口径保持一致；
+# 不在表中的字段为纯倍率 / 百分比 / 刻数，直接展示。
+_FIELD_UNITS = {
+    ("poison", "damage"): "hp",
+    ("heal", "value"): "hp",
+    ("heal", "regen"): "hp",
+    ("cleanse", "value"): "hp",
+    ("cleanse", "per"): "hp",
+    ("armor_shred", "value"): "def",
+    ("sever", "delay"): "gauge",
+    ("gauge_surge", "value"): "gauge",
+    ("gauge_surge", "crit_value"): "gauge",
+    ("tempo", "value"): "spd",
+}
+
+
+def display_factor(game: GameCfg, unit: str) -> float:
+    """显示层换算系数：满投掷（或满行动槽）= 100，无量纲属性为 1。
+
+    引擎计算永远使用原始量纲，本函数只用于展示（AGENTS.md 2.1.5）。
+    """
+    if unit == "gauge":
+        return 100.0 / float(game.battle.gauge_threshold)
+    try:
+        a = game.attr(unit)
+    except Exception:
+        return 1.0
+    return 100.0 / a.display_ref if a.display_ref > 0 else 1.0
+
+
+def display_value(game: GameCfg, unit: str, raw) -> float:
+    """原始量纲数值 -> 显示值（无 display_ref 的属性原值直显）。"""
+    return float(raw) * display_factor(game, unit)
+
+
+def display_units(game: GameCfg) -> dict:
+    """全部量纲的显示换算系数（对战中一次计算、全程复用）。"""
+    units = {a.id: display_factor(game, a.id) for a in game.attributes}
+    units["gauge"] = display_factor(game, "gauge")
+    return units
+
+
+def field_unit(eff: dict, field: str):
+    """效果数值字段的量纲（None = 无量纲，直接展示）。"""
+    return _FIELD_UNITS.get((str(eff.get("type")), field))
+
 
 class InvalidName(Exception):
     """名字不合法。code 用于映射 locale 错误文案。"""
@@ -117,8 +169,7 @@ class Fighter:
     name: str            # 原始输入（仅用于展示）
     normalized: str      # 归一化名字（MD5 与对战种子的依据）
     digest: str          # md5 hex
-    element_id: str
-    attrs: dict          # 属性 id -> 整数值；crit/dodge 以百分数存储
+    attrs: dict          # 属性 id -> 正态投掷值（浮点）；crit/dodge 以百分数存储
     skill_ids: tuple     # 按抽取顺序
     title_structure_id: str
     title_fields: dict   # 字段名 -> 字段 id
@@ -144,10 +195,9 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
     digest = hashlib.md5(normalized.encode("utf-8")).hexdigest()
     rng = DetRng(int(digest, 16))
 
-    element = rng.pick_weighted((e, e.weight) for e in game.elements)
-
-    # 属性为固定基础值（无随机）；差异来自称号加成与技能个性化
-    attrs = {a.id: a.base for a in game.attributes}
+    # 属性正态投掷：[min, max] 内近似正态（均值 = 区间中点，σ = 宽 / 4，截断），
+    # 消耗顺序 = 配置顺序；引擎使用原始量纲，展示层另行换算
+    attrs = {a.id: rng.next_gaussian(a.min, a.max) for a in game.attributes}
 
     count = rng.next_gaussian_range(game.skill_count_min, game.skill_count_max)
     skills = rng.sample_weighted(((s, s.weight) for s in game.skills), count)
@@ -168,13 +218,13 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
 
     # 称号字段小额加成（不消耗随机数，纯查表）
     for attr_id, delta in title_bonus_items(title_fields, structure, game):
-        attrs[attr_id] = max(1, attrs[attr_id] + delta)
+        attrs[attr_id] = max(1.0, attrs[attr_id] + delta)
 
     power = round(sum(attrs[a.id] * a.power_weight for a in game.attributes))
     return Fighter(
         name=raw_name if isinstance(raw_name, str) and raw_name else normalized,
         normalized=normalized, digest=digest,
-        element_id=element.id, attrs=attrs,
+        attrs=attrs,
         skill_ids=tuple(s.id for s in skills),
         title_structure_id=structure.id, title_fields=title_fields, power=power,
     )
@@ -383,12 +433,20 @@ def title_bonus_items(title_fields, structure, game: GameCfg):
     return items
 
 
-def _nat_params(display_eff: dict):
-    """效果类型 -> (模板键, 模板参数)。数值均为共鸣估算后的展示值：
+def _nat_params(display_eff: dict, game: GameCfg):
+    """效果类型 -> (模板键, 模板参数)。数值为共鸣估算后的显示值：
+    按字段量纲（_FIELD_UNITS）换算为白板 100 显示单位后输出--
     百分数 2 位小数（format_pct），其余取整（format_num）。
     模板参数名与效果字段名一致，便于共鸣公式内联注入。"""
     ttype = display_eff.get("type")
     chance = float(display_eff.get("chance", 1.0))
+
+    def num(field, default=0.0):
+        """整数类数值字段：先按量纲换算为显示单位再取整。"""
+        unit = field_unit(display_eff, field)
+        factor = display_factor(game, unit) if unit else 1.0
+        return format_num(float(display_eff.get(field, default)) * factor)
+
     if ttype == "charge":
         return "nat_charge", {
             "chance": format_pct(chance),
@@ -407,7 +465,7 @@ def _nat_params(display_eff: dict):
     if ttype == "poison":
         return "nat_poison", {
             "chance": format_pct(chance),
-            "damage": format_num(float(display_eff.get("damage", 0))),
+            "damage": num("damage"),
             "ticks": int(display_eff.get("ticks", 0))}
     if ttype == "concussive":
         return "nat_concussive", {
@@ -424,12 +482,12 @@ def _nat_params(display_eff: dict):
         return "nat_sever", {
             "chance": format_pct(chance),
             "value": format_pct(float(display_eff.get("value", 0.0))),
-            "delay": format_num(float(display_eff.get("delay", 0)))}
+            "delay": num("delay")}
     if ttype == "gauge_surge":
         return "nat_gauge_surge", {
             "chance": format_pct(chance),
-            "value": format_num(float(display_eff.get("value", 0))),
-            "crit_value": format_num(float(display_eff.get("crit_value", 0)))}
+            "value": num("value"),
+            "crit_value": num("crit_value")}
     if ttype == "damage_reduction":
         return "nat_damage_reduction", {
             "chance": format_pct(chance),
@@ -458,15 +516,15 @@ def _nat_params(display_eff: dict):
     if ttype == "heal":
         return "nat_heal", {
             "chance": format_pct(chance),
-            "value": format_num(float(display_eff.get("value", 0))),
-            "regen": format_num(float(display_eff.get("regen", 0))),
+            "value": num("value"),
+            "regen": num("regen"),
             "tick": int(display_eff.get("tick", 0)),
             "duration": int(display_eff.get("duration", 0))}
     if ttype == "cleanse":
         return "nat_cleanse", {
             "chance": format_pct(chance),
-            "value": format_num(float(display_eff.get("value", 0))),
-            "per": format_num(float(display_eff.get("per", 0)))}
+            "value": num("value"),
+            "per": num("per")}
     if ttype == "low_hp_atk_bonus":
         return "nat_low_hp_atk_bonus", {
             "threshold": format_pct(float(display_eff.get("threshold", 0.3))),
@@ -485,7 +543,7 @@ def _nat_params(display_eff: dict):
     if ttype == "armor_shred":
         return "nat_armor_shred", {
             "chance": format_pct(chance),
-            "value": format_num(float(display_eff.get("value", 0))),
+            "value": num("value"),
             "ticks": int(display_eff.get("ticks", 0)),
             "max_stacks": int(display_eff.get("max_stacks", 0))}
     if ttype == "bleed":
@@ -501,7 +559,7 @@ def _nat_params(display_eff: dict):
     if ttype == "tempo":
         return "nat_tempo", {
             "chance": format_pct(chance),
-            "value": format_num(float(display_eff.get("value", 0)))}
+            "value": num("value")}
     if ttype == "armor_pen":
         return "nat_armor_pen", {
             "chance": format_pct(chance),
@@ -521,11 +579,13 @@ def _nat_params(display_eff: dict):
 
 
 def _link_formula(eff: dict, link: dict, field: str, game: GameCfg, locale):
-    """共鸣描述两部分（v0.9.0）：
+    """共鸣描述两部分（v0.9.1）：
 
     1. 内联最简线性公式（紧跟对应数值）：最终值 = 基数 + 变量式 * 合并系数；
-       变量式以属性 emoji 表示——own 省略范围词、enemy 前缀「对方」、
+       变量式以属性 emoji 表示--own 省略范围词、enemy 前缀「对方」、
        difference「【己方-对方】」、sum「【己方+对方】」；
+       基数与系数均按 display_factor 换算为白板 100 显示单位，
+       与属性面板 / 快照显示口径一致（引擎计算仍用原始量纲）；
     2. 尾句依赖描述（使用属性全名，如「己方攻击越高，效果值越高。」）。
     """
     tmpl = locale.stats
@@ -533,17 +593,17 @@ def _link_formula(eff: dict, link: dict, field: str, game: GameCfg, locale):
     attr_loc = locale.attributes.get(var_id, {})
     var_name = str(attr_loc.get("name", var_id))
     var_emoji = str(attr_loc.get("emoji", var_name))
-    try:
-        base = max(1, game.attr(var_id).base)
-    except Exception:
-        base = 1
+    base = max(1.0, display_value(game, var_id, game.attr(var_id).base))
+    unit = field_unit(eff, field)
+    field_factor = display_factor(game, unit) if unit else 1.0
     mode = str(link.get("mode", "own"))
     scope_own = str(tmpl.get("scope_own", ""))
     scope_enemy = str(tmpl.get("scope_enemy", ""))
     field_word = str(tmpl.get("field_" + field, field))
     fmt = _res_spec(eff, field)[0]
-    base_display = format_field(eff.get(field, 0.0), fmt)
-    merged = format_pct(float(eff.get(field, 0.0)) * float(link.get("rate", 0.0)) / base)
+    eff_disp = float(eff.get(field, 0.0)) * field_factor
+    base_display = format_field(eff_disp, fmt)
+    merged = format_pct(eff_disp * float(link.get("rate", 0.0)) / base)
     against = var_id
     if mode in ("difference", "sum"):
         vdef = next((v for v in game.skill_variable_link.variables if v.id == var_id), None)
@@ -582,7 +642,7 @@ def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale,
     - live=True 时共鸣数值位替换为 LIVE_MARKER，供前端按快照实时填充。
     """
     display_eff, _ = estimated_resonanced_eff(fighter, eff, game)
-    key, params = _nat_params(display_eff)
+    key, params = _nat_params(display_eff, game)
     params = dict(params)
     tails = []
     for link in eff.get("links", ()):
@@ -610,17 +670,15 @@ def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale,
 def _link_calc(eff: dict, game: GameCfg) -> list:
     """对战实时技能数据（每个共鸣变数一条）：前端按公式
     最终值 = base + 变量式 × coeff（含上下限）用双方快照逐刻重算，
-    与引擎 resonance_coeff + apply_resonance 完全一致，按槽位顺序排列。"""
+    与引擎 resonance_coeff + apply_resonance 完全一致，按槽位顺序排列。
+    v0.9.1 起 base/coeff/clamp 均为白板 100 显示单位，与快照属性口径一致。"""
     out = []
     for link in eff.get("links", ()):
         field = str(link.get("field"))
         if field not in eff:
             continue
         var_id = str(link.get("variable"))
-        try:
-            base = max(1, game.attr(var_id).base)
-        except Exception:
-            base = 1
+        base = max(1.0, display_value(game, var_id, game.attr(var_id).base))
         mode = str(link.get("mode", "own"))
         against = var_id
         if mode in ("difference", "sum"):
@@ -628,7 +686,9 @@ def _link_calc(eff: dict, game: GameCfg) -> list:
                          if v.id == var_id), None)
             against = vdef.diff_against if vdef else var_id
         fmt, lo, hi = _res_spec(eff, field)
-        value = float(eff.get(field, 0.0))
+        unit = field_unit(eff, field)
+        field_factor = display_factor(game, unit) if unit else 1.0
+        value = float(eff.get(field, 0.0)) * field_factor
         out.append({
             "field": field,
             "fmt": fmt,
@@ -637,7 +697,8 @@ def _link_calc(eff: dict, game: GameCfg) -> list:
             "mode": mode,
             "variable": var_id,
             "against": against,
-            "clamp": [lo, hi],
+            "clamp": [None if lo is None else lo * field_factor,
+                      None if hi is None else hi * field_factor],
         })
     return out
 
@@ -647,7 +708,8 @@ _MOD_TEMPLATES = {"chance": "mod_chance", "value": "mod_value",
 
 
 def _mod_texts(eff: dict, game: GameCfg, locale) -> list:
-    """词缀修正的可读文案（显示个性化缩放后的实际值），如「疾风：触发率 +3%」。"""
+    """词缀修正的可读文案（显示个性化缩放后的实际值），如「疾风：触发率 +3%」。
+    数值类修正按字段量纲换算为白板 100 显示单位。"""
     texts = []
     for pool, key, scale_key in ((game.skill_name_modifiers.prefixes, "prefix", "prefix_scale"),
                                  (game.skill_name_modifiers.suffixes, "suffix", "suffix_scale")):
@@ -664,9 +726,15 @@ def _mod_texts(eff: dict, game: GameCfg, locale) -> list:
             if not template_key:
                 continue
             scaled = float(delta) * scale
+            if param == "chance":
+                magnitude = format_pct(abs(scaled))
+            elif param == "value" and not field_unit(eff, "value"):
+                magnitude = format_pct(abs(scaled))  # 纯倍率字段：增量以百分数展示
+            else:
+                unit = field_unit(eff, param) if param in ("value", "damage") else None
+                factor = display_factor(game, unit) if unit else 1.0
+                magnitude = format_num(abs(scaled) * factor)
             sign = "+" if scaled > 0 else "-"
-            magnitude = (format_pct(abs(scaled)) if param in ("chance", "value")
-                         else format_num(abs(scaled)))
             parts.append(render_template(locale.stats.get(template_key, template_key),
                                          {"v": sign + magnitude}, locale))
         if parts:
@@ -676,14 +744,25 @@ def _mod_texts(eff: dict, game: GameCfg, locale) -> list:
 
 
 def _mastery_text(eff: dict, sdef, locale) -> str:
-    """熟练度文案：「熟练度 63：触发率 ×121.00%」（条件型技能为效果值）。"""
+    """熟练度文案（v0.9.1）：直接给出该技能实例的最终触发率，
+    如「熟练度 63：触发率 36.52%」--永远不超过 100%；
+    条件型技能给出效果倍率（×1.21），壁垒类给出免疫触发率。"""
     mastery = eff.get("mastery")
     if mastery is None:
         return ""
-    key = "mastery_text_value" if sdef.mastery_on != "chance" else "mastery_text"
-    return render_template(locale.stats.get(key, ""),
+    if sdef.mastery_on == "immune":
+        rate = min(0.5, max(0.01, float(eff.get("immune", 0.0))))
+        return render_template(locale.stats.get("mastery_text_immune", ""),
+                               {"v": int(mastery), "rate": format_pct(rate)},
+                               locale)
+    if sdef.mastery_on == "chance":
+        rate = min(0.95, max(0.02, float(eff.get("chance", 0.0))))
+        return render_template(locale.stats.get("mastery_text", ""),
+                               {"v": int(mastery), "rate": format_pct(rate)},
+                               locale)
+    return render_template(locale.stats.get("mastery_text_value", ""),
                            {"v": int(mastery),
-                            "mult": format_pct(float(eff.get("mastery_mult", 1.0)))},
+                            "mult": "%.2f" % float(eff.get("mastery_mult", 1.0))},
                            locale)
 
 
@@ -694,15 +773,17 @@ def _find_structure(fighter: Fighter, game: GameCfg):
     return None
 
 
-def _format_bonus(value: int, attr_format: str) -> str:
+def _format_bonus(value: float, attr_format: str) -> str:
     sign = "+" if value > 0 else ""
     if attr_format == "percent":
-        return "%s%s%%" % (sign, value)
-    return "%s%s" % (sign, value)
+        return "%s%s%%" % (sign, format_num(value))
+    return "%s%s" % (sign, format_num(value))
 
 
 def _title_bonus_api(fighter: Fighter, game: GameCfg, locale) -> dict:
-    """称号加成的对外表示：按属性配置顺序聚合，供卡牌展示。"""
+    """称号加成的对外表示：按属性配置顺序聚合，供卡牌展示。
+    增量按 display_factor 换算为白板 100 显示单位（与属性面板口径一致）；
+    value 保留原始量纲增量。"""
     structure = _find_structure(fighter, game)
     if structure is None:
         return {"bonuses": [], "bonuses_text": ""}
@@ -715,8 +796,10 @@ def _title_bonus_api(fighter: Fighter, game: GameCfg, locale) -> dict:
         if a.id not in sums or sums[a.id] == 0:
             continue
         name = locale.attributes.get(a.id, {}).get("name", a.id)
-        text = _format_bonus(sums[a.id], a.format)
-        bonuses.append({"attr": a.id, "name": name, "value": sums[a.id], "format": a.format})
+        display = display_value(game, a.id, sums[a.id])
+        text = _format_bonus(display, a.format)
+        bonuses.append({"attr": a.id, "name": name, "value": sums[a.id],
+                        "display": text, "format": a.format})
         parts.append("%s %s" % (name, text))
     return {"bonuses": bonuses, "bonuses_text": " · ".join(parts)}
 
@@ -756,17 +839,21 @@ def compose_title_desc(fighter: Fighter, game: GameCfg, locale) -> str:
 
 
 def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
-    """斗士数据的对外表示：数值来自 Fighter/个性化效果，显示名全部来自 locale。"""
+    """斗士数据的对外表示：数值来自 Fighter/个性化效果，显示名全部来自 locale。
+    属性 value/min/max 为白板 100 显示单位（满投掷 = 100），
+    raw 为引擎原始量纲值；两者仅展示口径不同，计算一律使用 raw。"""
     attrs_api = []
     for a in game.attributes:
         a_loc = locale.attributes.get(a.id, {})
+        raw = fighter.attrs[a.id]
         attrs_api.append({
             "id": a.id,
             "name": a_loc.get("name", a.id),
             "emoji": a_loc.get("emoji", ""),
-            "value": fighter.attrs[a.id],
-            "min": a.min,
-            "max": a.max,
+            "value": round(display_value(game, a.id, raw), 4),
+            "raw": round(float(raw), 4),
+            "min": round(display_value(game, a.id, a.min), 4),
+            "max": round(display_value(game, a.id, a.max), 4),
             "format": a.format,
         })
     skills_api = []
@@ -813,15 +900,12 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
                 eff, fighter, game, locale, simple=True, live=True)
             skill_entry["link_calc"] = _link_calc(eff, game)
         skills_api.append(skill_entry)
-    elem = locale.elements.get(fighter.element_id, {})
     title_bonus = _title_bonus_api(fighter, game, locale)
     return {
         "name": fighter.name,
         "normalized": fighter.normalized,
         "digest": fighter.digest,
         "digest_short": fighter.digest[:8],
-        "element": {"id": fighter.element_id, "name": elem.get("name", fighter.element_id),
-                    "emoji": elem.get("emoji", "")},
         "title": {
             "structure": fighter.title_structure_id,
             "name": compose_title_name(fighter, game, locale),

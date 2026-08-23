@@ -1,5 +1,5 @@
 {
-  "battle_start": "⚔️ {a}（{element_a}）对阵 {b}（{element_b}）！",
+  "battle_start": "⚔️ {a} 对阵 {b}！",
   "tick_marker": "-- 第 {tick} 刻 --",
   "turn_stun": "😵 {a} 眩晕未醒，无法行动。",
   "poison_tick": "☠️ {a} 毒发，损失 {damage} 点生命。",

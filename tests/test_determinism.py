@@ -34,7 +34,7 @@ def _outcome_payload(outcome):
 
 def _game_data(f):
     """参与确定性契约的派生数据（name 仅为展示输入，不计入）。"""
-    return (f.normalized, f.digest, f.element_id,
+    return (f.normalized, f.digest,
             tuple(sorted(f.attrs.items())), f.skill_ids,
             f.title_structure_id, tuple(sorted(f.title_fields.items())), f.power)
 
@@ -65,11 +65,12 @@ class FighterDeterminism(unittest.TestCase):
         fa = derive_fighter("张三", GAME)
         fb = derive_fighter("李四", GAME)
         self.assertNotEqual(fa.digest, fb.digest)
-        # 属性为固定基础值，差异主要来自称号加成；技能与称号组合应不同
+        # 属性正态投掷（v0.9.1）+ 技能与称号组合应不同
         differing = (
             fa.skill_ids != fb.skill_ids
             or fa.title_structure_id != fb.title_structure_id
-            or fa.title_fields != fb.title_fields or fa.element_id != fb.element_id
+            or fa.title_fields != fb.title_fields
+            or fa.attrs != fb.attrs
         )
         self.assertTrue(differing, "两个不同名字的派生结果不应完全相同")
 
@@ -85,17 +86,40 @@ class FighterDeterminism(unittest.TestCase):
         self.assertTrue(all(s["text"] for s in zh["skills"]))
         self.assertTrue(all(s["text"] for s in en["skills"]))
 
-    def test_attributes_use_fixed_base(self):
-        # 属性无随机：两名斗士的属性只可能因称号加成而不同
-        for i in range(20):
-            f = derive_fighter("base%02d" % i, GAME)
-            for a in GAME.attributes:
-                expected = a.base
+    def test_attributes_gaussian_rolled(self):
+        """属性正态投掷契约（v0.9.1）：[min, max] 内、同名一致、
+        不同名显著变化且集中于区间中点附近。"""
+        base = derive_fighter("attrRoll", GAME)
+        self.assertEqual(derive_fighter("attrRoll", GAME).attrs, base.attrs)
+        names = ["gauss%03d" % i for i in range(60)]
+        for a in GAME.attributes:
+            values = set()
+            inside = 0
+            mid = (a.min + a.max) / 2.0
+            half = (a.max - a.min) / 4.0  # σ = 区间宽 / 4
+            for n in names:
+                f = derive_fighter(n, GAME)
                 structure = next(s for s in GAME.title_structures
                                  if s.id == f.title_structure_id)
-                delta = sum(d for attr, d in title_bonus_items(f.title_fields, structure, GAME)
-                            if attr == a.id)
-                self.assertEqual(f.attrs[a.id], max(1, expected + delta))
+                delta = sum(d for aid, d in title_bonus_items(
+                    f.title_fields, structure, GAME) if aid == a.id)
+                # 投掷值 = 面板值 − 称号加成（称号可把面板推过区间，属设计预期）
+                rolled = f.attrs[a.id] - delta if f.attrs[a.id] > 1.0 else f.attrs[a.id]
+                self.assertGreaterEqual(rolled, a.min - 1e-9)
+                self.assertLessEqual(rolled, a.max + 1e-9)
+                values.add(round(rolled, 4))
+                if abs(rolled - mid) <= half:
+                    inside += 1
+            self.assertGreater(len(values), 8,
+                               "属性 %s 应随名字显著变化" % a.id)
+            self.assertGreater(inside / len(names), 0.55,
+                               "属性 %s 应集中于区间中点附近（实测 %.2f）"
+                               % (a.id, inside / len(names)))
+        # 称号加成叠加在投掷值上（不消耗随机数），下限保护不低于 1
+        for i in range(10):
+            f = derive_fighter("bonus%02d" % i, GAME)
+            for aid, value in f.attrs.items():
+                self.assertGreaterEqual(value, 1.0)
 
     def test_skill_personalization_deterministic(self):
         fa = derive_fighter("Alice", GAME)
@@ -195,7 +219,8 @@ class FighterDeterminism(unittest.TestCase):
         self.assertLess(rate, 0.58, "变数出现率过高: %.3f" % rate)
 
     def test_mastery_present_and_scales_chance(self):
-        """每个技能实例都有熟练度：0~100，触发概率按各自区间缩放并截断。"""
+        """每个技能实例都有熟练度：0~100，触发概率按各自区间缩放并截断；
+        熟练度文案直接给出最终触发率（v0.9.1，无倍率写法，永不超过 100%）。"""
         seen = 0
         for i in range(60):
             f = derive_fighter("mastery%02d" % i, GAME)
@@ -208,8 +233,30 @@ class FighterDeterminism(unittest.TestCase):
                 if sdef.mastery_on == "chance" and "chance" in eff:
                     self.assertGreaterEqual(eff["chance"], 0.02)
                     self.assertLessEqual(eff["chance"], 0.95)
+                if sdef.mastery_on != "value":
+                    # 触发率类文案为最终概率（含百分号），不再是 >100% 的倍率
+                    self.assertIn("%", entry["mastery_text"])
+                    self.assertNotIn("×", entry["mastery_text"])
                 seen += 1
         self.assertGreater(seen, 100)
+
+    def test_trigger_chances_distinct_and_capped(self):
+        """触发率契约（v0.9.1）：各技能基础触发率按强度互不相同；
+        个性化后的触发率始终不超过 100%。"""
+        chances = {}
+        for s in GAME.skills:
+            if "chance" in s.effect:
+                self.assertGreater(s.effect["chance"], 0)
+                self.assertLessEqual(s.effect["chance"], 0.95)
+                chances[s.id] = round(float(s.effect["chance"]), 6)
+        self.assertGreater(len(chances), 10)
+        self.assertEqual(len(chances), len(set(chances.values())),
+                         "技能基础触发率应互不相同: %s" % sorted(chances.items()))
+        for i in range(40):
+            f = derive_fighter("cap%02d" % i, GAME)
+            for sdef, eff in personalized_effects(f, GAME):
+                if "chance" in eff:
+                    self.assertLessEqual(eff["chance"], 0.95)
 
     def test_effect_link_appears_in_battles(self):
         found = 0
@@ -264,11 +311,14 @@ class FighterDeterminism(unittest.TestCase):
             self.assertNotIn("当前", entry["text"])
 
     def test_link_calc_matches_engine_resonance(self):
-        """前端实时公式（base + 变量式 × coeff + 上下限）与引擎
-        resonance_coeff + apply_resonance 逐点一致（含双变数技能）。"""
+        """前端实时公式（base + 变量式 × coeff + 上下限，v0.9.1 起均为
+        白板 100 显示单位）与引擎 resonance_coeff + apply_resonance
+        按量纲换算后逐点一致（含双变数技能）。"""
         from namefight.battle import _live_value, _make_combatant
-        from namefight.fighter import RESONANCE_SPECS, apply_resonance, resonance_coeff
+        from namefight.fighter import (apply_resonance, display_units,
+                                       field_unit, resonance_coeff)
         zh = load_locale(CONFIG_ROOT, "zh")
+        units = display_units(GAME)
         linked = self._collect_linked(25)
         enemy = _make_combatant(derive_fighter("对照者", GAME), 1, GAME)
         checked = 0
@@ -282,21 +332,22 @@ class FighterDeterminism(unittest.TestCase):
             proc = dict(eff)
             for lc in entry["link_calc"]:
                 field = lc["field"]
-                # 引擎路径：按当前值计算系数并修正参数
+                # 引擎路径：按当前原始值计算系数并修正参数
                 coeff = resonance_coeff(lambda vid: _live_value(actor, vid),
                                         lambda vid: _live_value(enemy, vid),
                                         next(l for l in links if l["field"] == field),
                                         GAME)
                 proc = apply_resonance(proc, coeff, field)
-                # 前端路径：base + 变量式 × coeff（+ 截断）
+                # 前端路径（显示单位）：base + 显示变量式 × 显示系数（+ 显示上下限）
+                var_factor = units[lc["variable"]]
                 if lc["mode"] in ("difference", "sum"):
-                    own = _live_value(actor, lc["variable"])
-                    other = _live_value(enemy, lc["against"])
+                    own = _live_value(actor, lc["variable"]) * var_factor
+                    other = _live_value(enemy, lc["against"]) * units[lc["against"]]
                     expr = own - other if lc["mode"] == "difference" else own + other
                 elif lc["mode"] == "enemy":
-                    expr = _live_value(enemy, lc["variable"])
+                    expr = _live_value(enemy, lc["variable"]) * var_factor
                 else:
-                    expr = _live_value(actor, lc["variable"])
+                    expr = _live_value(actor, lc["variable"]) * var_factor
                 value = lc["base"] + expr * lc["coeff"]
                 lo, hi = lc["clamp"]
                 if lo is not None:
@@ -305,9 +356,12 @@ class FighterDeterminism(unittest.TestCase):
                     value = min(hi, value)
                 if lc["fmt"] == "turns":
                     value = max(1, int(round(value)))
-                self.assertAlmostEqual(proc[field], value, places=9,
-                                       msg="技能 %s 字段 %s 实时公式与引擎不一致"
-                                           % (sdef.id, field))
+                    self.assertEqual(int(proc[field]), value)
+                else:
+                    field_u = units.get(field_unit(eff, field), 1.0)
+                    self.assertAlmostEqual(proc[field] * field_u, value, places=5,
+                                           msg="技能 %s 字段 %s 实时公式与引擎不一致"
+                                               % (sdef.id, field))
                 checked += 1
         self.assertGreater(checked, 15)
 
@@ -325,20 +379,53 @@ class FighterDeterminism(unittest.TestCase):
                     self.assertIn(key, snap)
 
     def test_whiteboard_baseline_and_scale(self):
-        """数值缩放契约：白板基准 100（hp/atk/def/spd 基础值均为 100），
-        战斗常数按同比例折算（atk_factor / defense_factor / gauge_threshold）。"""
+        """量纲契约（v0.9.1）：引擎使用原始量纲（命 100 / 攻 13 / 防 5 / 速 10），
+        display_ref = 满投掷（max）；API 的 value/min/max 为白板 100 显示单位
+        （满投掷 = 100，称号加成可超过 100），raw 为引擎原始值。"""
+        expect_base = {"hp": 100, "atk": 13, "def": 5, "spd": 10,
+                       "crit": 12, "dodge": 10}
         for a in GAME.attributes:
+            self.assertEqual(a.base, expect_base[a.id],
+                             "属性 %s 基准值应为原始量纲" % a.id)
             if a.id in ("hp", "atk", "def", "spd"):
-                self.assertEqual(a.base, 100, "白板属性 %s 基准应为 100" % a.id)
+                self.assertEqual(a.display_ref, a.max,
+                                 "白板满投掷（max）应为显示参照")
+            else:
+                self.assertEqual(a.display_ref, 0, "百分比属性不参与显示换算")
         f = derive_fighter("白板测试", GAME)
+        api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+        by_id = {a["id"]: a for a in api["attributes"]}
         for a in GAME.attributes:
-            expect = a.base + sum(
-                d for aid, d in title_bonus_items(
-                    f.title_fields,
-                    next(s for s in GAME.title_structures
-                         if s.id == f.title_structure_id), GAME)
-                if aid == a.id)
-            self.assertEqual(f.attrs[a.id], max(1, expect))
+            entry = by_id[a.id]
+            factor = 100.0 / a.display_ref if a.display_ref > 0 else 1.0
+            self.assertAlmostEqual(entry["value"], f.attrs[a.id] * factor, places=3)
+            self.assertAlmostEqual(entry["raw"], f.attrs[a.id], places=3)
+            self.assertAlmostEqual(entry["min"], a.min * factor, places=3)
+            self.assertAlmostEqual(entry["max"], a.max * factor, places=3)
+
+    def test_snapshot_uses_display_units(self):
+        """快照属性与战报数值均为白板 100 显示单位：开局快照等于卡牌显示值，
+        gauge_gain = 原始速度 × 100 / 阈值。"""
+        from namefight.fighter import display_units
+        fa = derive_fighter("显示甲", GAME)
+        fb = derive_fighter("显示乙", GAME)
+        outcome = run_battle(fa, fb, GAME)
+        units = display_units(GAME)
+        first = outcome.events[0]["state"]
+        for side, f in (("a", fa), ("b", fb)):
+            snap = first[side]
+            self.assertAlmostEqual(snap["max_hp"], f.attrs["hp"] * units["hp"],
+                                   places=1)
+            self.assertAlmostEqual(snap["atk"], f.attrs["atk"] * units["atk"],
+                                   places=1)
+            self.assertAlmostEqual(snap["def"], f.attrs["def"] * units["def"],
+                                   places=1)
+            self.assertAlmostEqual(snap["spd"], f.attrs["spd"] * units["spd"],
+                                   places=1)
+            self.assertAlmostEqual(
+                snap["gauge_gain"],
+                f.attrs["spd"] * 100.0 / GAME.battle.gauge_threshold, places=1)
+            self.assertAlmostEqual(snap["crit"], f.attrs["crit"], places=1)
 
     def test_snapshots_off_matches_full_run(self):
         """极速模式（无快照）与完整模式的胜负、tick 与事件序列完全一致。"""
@@ -416,7 +503,7 @@ class BattleDeterminism(unittest.TestCase):
         self.assertEqual(first["b"]["hp"], first["b"]["max_hp"])
 
     def test_faster_fighter_acts_first(self):
-        # 属性固定后，速度差异来自称号加成（苍穹/雷霆 +1、退役 -1 等）
+        # 属性正态投掷（v0.9.1），速度差异普遍存在
         pair = None
         for i in range(80):
             fa = derive_fighter("paceA%02d" % i, GAME)

@@ -1,13 +1,14 @@
 """确定性对战引擎（核心不变量见 AGENTS.md 2.1）。
 
-tick 战斗模型（v0.9.0）：
+tick 战斗模型：
 - 每个 tick 双方行动槽（gauge）累加自身有效速度，达到阈值
-  （battle.json 的 gauge_threshold，白板速度 100 / 阈值 1000 ≈ 每 10 刻一动）
+  （battle.json 的 gauge_threshold，白板速度 10 / 阈值 100 ≈ 每 10 刻一动）
   即可行动一次并扣回阈值；速度决定行动频率。
   同一 tick 多人可行动时，按（gauge 余量降序、内部序）依次执行；
 - 内部序 = 速度降序、规范化名字升序，与输入顺序无关；
-- 属性白板基准 100：伤害公式使用 atk_factor / defense_factor 把面板值
-  折算为与旧数值体系等价的实际攻防当量（数值实际不变，量纲归一）；
+- 引擎一律使用原始属性量纲（攻 13 / 防 5 / 速 10 / 命 100，正态投掷）；
+  快照与战报中的数值经 fighter.display_units 换算为「满投掷 = 100」的
+  白板显示单位（仅影响展示，计算不变，见 AGENTS.md 2.1.5）；
 - 行动开始时依次结算：斩断打断 -> 毒发 -> 流血 -> 行动开始技能（血契/回春/净化）
   -> 眩晕判定 -> 背水一战 -> 攻击；行动结束后结算：大器晚成叠速、
   嗜血增益递减、血契吸血转化；
@@ -15,7 +16,6 @@ tick 战斗模型（v0.9.0）：
   于每刻开始时统一结算与过期；
 - 技能参数经 fighter.personalized_effects 按斗士 MD5 个性化
   （熟练度影响触发概率，共鸣变数修正其余数值字段）；
-- 元素仅为身份标识，不参与伤害计算；
 - 对战种子 = md5(字典序排序后的双方规范化名字，以配置分隔符连接)；
 - 每条战报附带双方状态快照（HP/属性/暴击/闪避/行动槽/buff），
   前端据此实时渲染 HUD 与技能实时数值。
@@ -26,8 +26,9 @@ import hashlib
 from dataclasses import dataclass, field
 
 from .config import GameCfg
-from .fighter import (Fighter, apply_resonance, format_resonance_final,
-                      personalized_effects, resonance_coeff)
+from .fighter import (Fighter, apply_resonance, display_units, field_unit,
+                      format_resonance_final, personalized_effects,
+                      resonance_coeff)
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
@@ -79,14 +80,13 @@ class _Combatant:
     fighter: Fighter
     pos: int                 # 在输入中的位置 0/1（快照键 a/b 与此对应）
     name: str
-    max_hp: int
+    max_hp: float
     hp: float
     atk: float
     defense: float
     spd: float
     dodge: float             # 百分数
     crit: float              # 百分数
-    element_id: str
     skills: list             # [(SkillDef, 个性化效果dict), ...] 按派生顺序
     gauge: float = 0.0       # 行动槽
     seq: int = 0             # 内部序（速度降序、名字升序）
@@ -191,7 +191,7 @@ def _skill_param(c: _Combatant, effect_type: str, key: str, default=0.0):
     return default
 
 
-def _hurt(c: _Combatant, amount: float, ev, rng) -> None:
+def _hurt(c: _Combatant, amount: float, ev, rng, units: dict) -> None:
     """扣除生命；若致命且不屈意志仍可触发，按当前概率判定：
     成功则回复一定百分比最大生命，且触发概率按指数衰减。"""
     c.hp -= amount
@@ -200,7 +200,8 @@ def _hurt(c: _Combatant, amount: float, ev, rng) -> None:
             c.hp = c.max_hp * c.will_heal
             c.will_chance *= c.will_decay
             c.will_used += 1
-            ev("will_trigger", {"a": c.name, "heal": format_num(c.hp)})
+            ev("will_trigger", {"a": c.name,
+                                "heal": format_num(c.hp * units["hp"])})
 
 
 def _make_combatant(f: Fighter, pos: int, game: GameCfg) -> _Combatant:
@@ -208,11 +209,11 @@ def _make_combatant(f: Fighter, pos: int, game: GameCfg) -> _Combatant:
     skills = personalized_effects(f, game)
     c = _Combatant(
         fighter=f, pos=pos, name=f.name,
-        max_hp=f.attrs["hp"], hp=float(f.attrs["hp"]),
+        max_hp=float(f.attrs["hp"]), hp=float(f.attrs["hp"]),
         atk=float(f.attrs["atk"]), defense=float(f.attrs["def"]),
         spd=float(f.attrs["spd"]), dodge=float(f.attrs["dodge"]),
         crit=float(f.attrs["crit"]),
-        element_id=f.element_id, skills=skills,
+        skills=skills,
     )
     for sdef, eff in skills:
         if sdef.trigger == "passive" and eff.get("type") == "iron_will":
@@ -233,25 +234,28 @@ def _compute_damage(actor, enemy, mult, crit, game, rng, pen=0.0) -> float:
     return max(float(bc.min_damage), raw - armor)
 
 
-def _snapshot(combatants, threshold: float, tick: int) -> dict:
+def _snapshot(combatants, threshold: float, tick: int, units: dict) -> dict:
     """双方状态快照（按输入位置 a/b），buff 以 id+params 存储、渲染时查 locale。
-    参数均为展示格式（百分数 2 位小数 / 其余取整）；
-    gauge_gain 为每刻行动槽推进百分比（前端逐刻动画用）。"""
+    属性与数值参数均为白板 100 显示单位（满投掷 = 100；crit/dodge 为百分数）、
+    展示格式（百分数 2 位小数 / 其余取整）；
+    gauge_gain 为每刻行动槽推进百分比（前端逐刻动画用）。
+    引擎内部仍以原始量纲计算，换算只发生在此展示边界。"""
     def one(c):
         buffs = []
         if c.poison_until > tick:
             buffs.append({"id": "poison",
-                          "params": {"damage": format_num(c.poison_damage),
+                          "params": {"damage": format_num(c.poison_damage * units["hp"]),
                                      "turns": max(0, c.poison_until - tick)}})
         if c.bleed_until > tick:
             buffs.append({"id": "bleed",
-                          "params": {"damage": format_num(c.bleed_damage),
+                          "params": {"damage": format_num(c.bleed_damage * units["hp"]),
                                      "turns": max(0, c.bleed_until - tick)}})
         if c.stun_until > tick:
             buffs.append({"id": "stun", "params": {"turns": c.stun_until - tick}})
         if c.shred_until > tick and c.shred_stacks > 0:
             buffs.append({"id": "shred",
-                          "params": {"value": format_num(c.shred_value * c.shred_stacks),
+                          "params": {"value": format_num(
+                                         c.shred_value * c.shred_stacks * units["def"]),
                                      "stacks": c.shred_stacks,
                                      "turns": c.shred_until - tick}})
         if c.charging:
@@ -278,10 +282,10 @@ def _snapshot(combatants, threshold: float, tick: int) -> dict:
         if c.ret_records:
             buffs.append({"id": "retribution", "params": {
                 "stacks": len(c.ret_records),
-                "value": format_num(sum(c.ret_records))}})
+                "value": format_num(sum(c.ret_records) * units["hp"])}})
         if c.regen_until > tick:
             buffs.append({"id": "regen", "params": {
-                "value": format_num(c.regen_value),
+                "value": format_num(c.regen_value * units["hp"]),
                 "tick": c.regen_interval,
                 "turns": c.regen_until - tick}})
         if c.ls_turns > 0:
@@ -297,7 +301,7 @@ def _snapshot(combatants, threshold: float, tick: int) -> dict:
                 buffs.append({"id": "tempo", "params": {
                     "stacks": c.tempo_stacks,
                     "value": format_num(
-                        c.tempo_stacks * float(eff.get("value", 0.0)))}})
+                        c.tempo_stacks * float(eff.get("value", 0.0)) * units["spd"])}})
             elif sdef.trigger == "on_turn_start" and t == "blood_pact":
                 buffs.append({"id": "blood_pact",
                               "params": {"value": format_pct(float(eff.get("value", 0.0))),
@@ -305,11 +309,11 @@ def _snapshot(combatants, threshold: float, tick: int) -> dict:
                                              float(eff.get("convert", 0.0)))}})
         spd = _eff_spd(c)
         return {
-            "hp": round(max(0.0, float(c.hp)), 2),
-            "max_hp": c.max_hp,
-            "atk": round(_eff_atk(c), 2),
-            "def": round(_eff_def(c), 2),
-            "spd": round(spd, 2),
+            "hp": round(max(0.0, float(c.hp)) * units["hp"], 2),
+            "max_hp": round(float(c.max_hp) * units["hp"], 2),
+            "atk": round(_eff_atk(c) * units["atk"], 2),
+            "def": round(_eff_def(c) * units["def"], 2),
+            "spd": round(spd * units["spd"], 2),
             "crit": round(float(c.crit), 2),
             "dodge": round(float(c.dodge), 2),
             "gauge": max(0.0, min(100.0, round(c.gauge * 100.0 / threshold, 2))),
@@ -337,18 +341,19 @@ def _proc_eff_of(actor, enemy, eff, game):
     return proc
 
 
-def _emit_link_events(actor, eff, proc, ev):
+def _emit_link_events(actor, eff, proc, ev, units):
     for link in eff.get("links", ()):
         field = str(link.get("field"))
         if field not in proc:
             continue
         mode = str(link.get("mode", "own"))
+        factor = units.get(field_unit(eff, field), 1.0)
         ev("effect_link", {
             "a": actor.name,
             "stat": {"ref": "attr", "id": link.get("variable")},
             "scope": {"ref": "stat_word", "id": "scope_" + mode},
             "field": {"ref": "stat_word", "id": "field_" + field},
-            "final": format_resonance_final(proc.get(field), field, eff),
+            "final": format_resonance_final(float(proc[field]) * factor, field, eff),
         })
 
 
@@ -357,6 +362,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
     """运行一场对战。snapshots=False 时不为战报条目附带状态快照（极速模式，
     供 /api/battle/fast 使用；胜负与事件序列与快照模式完全一致）。"""
     bc = game.battle
+    units = display_units(game)
     combatants = [_make_combatant(f, pos, game)
                   for pos, f in enumerate((fighter_a, fighter_b))]
     internal = sorted(combatants,
@@ -373,7 +379,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
 
     def ev(template, params=None):
         nonlocal last_logged_tick
-        state = _snapshot(combatants, bc.gauge_threshold, tick) if snapshots else None
+        state = _snapshot(combatants, bc.gauge_threshold, tick, units) if snapshots else None
         if tick != last_logged_tick:
             marker = {"tick": tick, "template": "tick_marker",
                       "params": {"tick": tick}}
@@ -387,11 +393,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
         events.append(entry)
 
     first, second = internal[0], internal[1]
-    ev("battle_start", {
-        "a": first.name, "b": second.name,
-        "element_a": {"ref": "element", "id": first.element_id},
-        "element_b": {"ref": "element", "id": second.element_id},
-    })
+    ev("battle_start", {"a": first.name, "b": second.name})
 
     winner = None
     draw = False
@@ -419,7 +421,8 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                 gained = min(c.regen_value, c.max_hp - c.hp)
                 if gained > 0:
                     c.hp += gained
-                    ev("regen_tick", {"a": c.name, "heal": format_num(gained)})
+                    ev("regen_tick", {"a": c.name,
+                                      "heal": format_num(gained * units["hp"])})
                 c.regen_next += max(1, c.regen_interval)
             c.grudge_exp = [t for t in c.grudge_exp if t > tick - 1]
             c.guard_exp = [t for t in c.guard_exp if t > tick - 1]
@@ -446,11 +449,11 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                     proc = _proc_eff_of(enemy, actor, eff, game)
                     ev("skill_proc", {"a": enemy.name,
                                       "skill": {"ref": "skill", "id": sdef.id}})
-                    _emit_link_events(enemy, eff, proc, ev)
+                    _emit_link_events(enemy, eff, proc, ev, units)
                     ev("sever_proc", {"a": enemy.name, "b": actor.name})
                     actor.gauge = max(0.0, actor.gauge - float(proc.get("delay", 0.0)))
                     _quick_strike(enemy, actor, float(proc.get("value", 0.5)),
-                                  game, rng, ev, tick)
+                                  game, rng, ev, tick, units)
                     interrupted = True
                     break
             if interrupted:
@@ -460,8 +463,9 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
             # ---- 毒发（拥有者行动时机；眩晕与打断不影响毒的到期，仅跳过行动） ----
             if actor.poison_until > tick:
                 dmg = actor.poison_damage
-                _hurt(actor, dmg, ev, rng)
-                ev("poison_tick", {"a": actor.name, "damage": format_num(dmg)})
+                _hurt(actor, dmg, ev, rng, units)
+                ev("poison_tick", {"a": actor.name,
+                                   "damage": format_num(dmg * units["hp"])})
                 if actor.hp <= 0:
                     ev("poison_death", {"a": actor.name})
                     winner = enemy
@@ -469,8 +473,9 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
             # ---- 流血 ----
             if actor.bleed_until > tick:
                 dmg = actor.bleed_damage
-                _hurt(actor, dmg, ev, rng)
-                ev("bleed_tick", {"a": actor.name, "damage": format_num(dmg)})
+                _hurt(actor, dmg, ev, rng, units)
+                ev("bleed_tick", {"a": actor.name,
+                                  "damage": format_num(dmg * units["hp"])})
                 if actor.hp <= 0:
                     ev("bleed_death", {"a": actor.name})
                     winner = enemy
@@ -487,7 +492,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                 proc = _proc_eff_of(actor, enemy, eff, game)
                 ev("skill_proc", {"a": actor.name,
                                   "skill": {"ref": "skill", "id": sdef.id}})
-                _emit_link_events(actor, eff, proc, ev)
+                _emit_link_events(actor, eff, proc, ev, units)
                 if t == "blood_pact":
                     cost = actor.max_hp * float(proc.get("cost", 0.0))
                     actor.hp = max(1.0, actor.hp - cost)
@@ -495,20 +500,23 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                     actor.pact_steal = float(proc.get("value", 0.0))
                     actor.pact_convert = float(proc.get("convert", 0.0))
                     actor.pact_stolen = 0.0
-                    ev("pact_proc", {"a": actor.name, "cost": format_num(cost),
+                    ev("pact_proc", {"a": actor.name,
+                                     "cost": format_num(cost * units["hp"]),
                                      "value": format_pct(actor.pact_steal)})
                 elif t == "heal":
                     gained = min(float(proc.get("value", 0.0)),
                                  actor.max_hp - actor.hp)
                     if gained > 0:
                         actor.hp += gained
-                        ev("effect_heal", {"a": actor.name, "heal": format_num(gained)})
+                        ev("effect_heal", {"a": actor.name,
+                                           "heal": format_num(gained * units["hp"])})
                     actor.regen_value = float(proc.get("regen", 0.0))
                     actor.regen_interval = max(1, int(proc.get("tick", 1)))
                     actor.regen_next = tick + actor.regen_interval
                     actor.regen_until = tick + max(1, int(proc.get("duration", 1)))
                     ev("regen_mark", {"a": actor.name,
-                                      "value": format_num(actor.regen_value),
+                                      "value": format_num(
+                                          actor.regen_value * units["hp"]),
                                       "tick": actor.regen_interval,
                                       "turns": actor.regen_until - tick})
                 elif t == "cleanse":
@@ -519,7 +527,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                     if healed > 0:
                         actor.hp += healed
                     ev("purify_cleanse", {"a": actor.name, "count": count,
-                                          "heal": format_num(healed)})
+                                          "heal": format_num(healed * units["hp"])})
             if winner is not None:
                 break
             # ---- 眩晕：消耗本次行动 ----
@@ -539,7 +547,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                     ev("low_hp_trigger", {
                         "a": actor.name, "value": format_pct(actor.last_stand_bonus),
                         "spd": format_pct(actor.last_stand_spd)})
-            _attack(actor, enemy, game, rng, ev, tick)
+            _attack(actor, enemy, game, rng, ev, tick, units)
             if _settle_deaths(actor, enemy):
                 break
             # ---- 行动结束后：大器晚成叠速 / 嗜血增益递减 / 血契转化 ----
@@ -554,7 +562,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                     actor.spd += gain
                     actor.tempo_stacks += 1
                     ev("tempo_stack", {"a": actor.name, "stacks": actor.tempo_stacks,
-                                       "spd": format_num(actor.spd)})
+                                       "spd": format_num(actor.spd * units["spd"])})
                     break
             if actor.ls_turns > 0:
                 actor.ls_turns -= 1
@@ -565,8 +573,9 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                 gain = actor.pact_stolen * actor.pact_convert
                 if gain > 0:
                     actor.atk += gain
-                    ev("pact_gain", {"a": actor.name, "value": format_num(gain),
-                                     "atk": format_num(actor.atk)})
+                    ev("pact_gain", {"a": actor.name,
+                                     "value": format_num(gain * units["atk"]),
+                                     "atk": format_num(actor.atk * units["atk"])})
 
     if winner is None and not draw:
         ev("timeout", {})
@@ -641,7 +650,7 @@ def _dispel_all(combatants, tick: int) -> int:
     return count
 
 
-def _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick):
+def _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick, units):
     """一次命中后的反应式结算（乘胜追击叠层 / 怨念积攒 / 以牙还牙记录）。"""
     if dmg <= 0 or enemy.hp <= 0:
         return
@@ -680,12 +689,13 @@ def _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick):
         enemy.ret_ratio = float(proc.get("ratio", 1.0))
         enemy.ret_cap = int(proc.get("cap", 0))
         enemy.ret_records.append(dmg)
-        ev("retribution_record", {"a": enemy.name, "damage": format_num(dmg),
+        ev("retribution_record", {"a": enemy.name,
+                                  "damage": format_num(dmg * units["hp"]),
                                   "stacks": len(enemy.ret_records)})
         break
 
 
-def _defend(enemy, actor, dmg, game, rng, ev, tick):
+def _defend(enemy, actor, dmg, game, rng, ev, tick, units):
     """防守方结算：锻痕减伤 -> 坚守壁垒（免疫/减伤）-> 荆棘反甲（免伤+反弹）
     -> 锻痕叠层。返回最终伤害（反弹伤害直接作用于攻击方）。"""
     bc = game.battle
@@ -721,9 +731,9 @@ def _defend(enemy, actor, dmg, game, rng, ev, tick):
             reflected = avoided * float(proc.get("ratio", 1.0))
             dmg -= avoided
             enemy.damage_dealt += reflected
-            _hurt(actor, reflected, ev, rng)
+            _hurt(actor, reflected, ev, rng, units)
             ev("effect_reflect", {"a": actor.name, "b": enemy.name,
-                                  "damage": format_num(reflected)})
+                                  "damage": format_num(reflected * units["hp"])})
     if dmg > 0:
         for sdef, eff in enemy.skills:
             if (sdef.trigger != "on_defense"
@@ -742,7 +752,7 @@ def _defend(enemy, actor, dmg, game, rng, ev, tick):
     return dmg
 
 
-def _apply_lifesteal(actor, dmg, ev):
+def _apply_lifesteal(actor, dmg, ev, units):
     """命中后的吸血结算（嗜血增益 + 血契献祭共享同一口吸血）。"""
     steal = 0.0
     if actor.ls_turns > 0:
@@ -755,10 +765,11 @@ def _apply_lifesteal(actor, dmg, ev):
     if gained > 0:
         actor.hp += gained
         actor.pact_stolen += gained
-        ev("effect_lifesteal", {"a": actor.name, "heal": format_num(gained)})
+        ev("effect_lifesteal", {"a": actor.name,
+                                "heal": format_num(gained * units["hp"])})
 
 
-def _quick_strike(attacker, victim, mult, game, rng, ev, tick):
+def _quick_strike(attacker, victim, mult, game, rng, ev, tick, units):
     """斩断反击：一次小倍率的普通打击（可闪避可暴击，不吃攻击技能链）。"""
     if rng.next_float() < victim.dodge / 100.0:
         ev("attack_miss", {"a": attacker.name, "b": victim.name})
@@ -767,18 +778,18 @@ def _quick_strike(attacker, victim, mult, game, rng, ev, tick):
     if crit:
         ev("attack_crit", {})
     dmg = _compute_damage(attacker, victim, mult, crit, game, rng)
-    dmg = _defend(victim, attacker, dmg, game, rng, ev, tick)
+    dmg = _defend(victim, attacker, dmg, game, rng, ev, tick, units)
     if dmg > 0:
-        _hurt(victim, dmg, ev, rng)
+        _hurt(victim, dmg, ev, rng, units)
         attacker.damage_dealt += dmg
         ev("attack_hit", {"a": attacker.name, "b": victim.name,
-                          "damage": format_num(dmg),
-                          "hp": format_num(max(0, victim.hp))})
-        _apply_lifesteal(attacker, dmg, ev)
-        _on_hit_reactions(attacker, victim, dmg, crit, game, rng, ev, tick)
+                          "damage": format_num(dmg * units["hp"]),
+                          "hp": format_num(max(0, victim.hp) * units["hp"])})
+        _apply_lifesteal(attacker, dmg, ev, units)
+        _on_hit_reactions(attacker, victim, dmg, crit, game, rng, ev, tick, units)
 
 
-def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
+def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int, units):
     bc = game.battle
 
     # ---- 蓄力释放：必定命中、暴击率提升的巨大一击（替换常规攻击） ----
@@ -795,15 +806,15 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
         if crit:
             ev("attack_crit", {})
         dmg = _compute_damage(actor, enemy, mult, crit, game, rng)
-        dmg = _defend(enemy, actor, dmg, game, rng, ev, tick)
+        dmg = _defend(enemy, actor, dmg, game, rng, ev, tick, units)
         if dmg > 0:
-            _hurt(enemy, dmg, ev, rng)
+            _hurt(enemy, dmg, ev, rng, units)
             actor.damage_dealt += dmg
             ev("attack_hit", {"a": actor.name, "b": enemy.name,
-                              "damage": format_num(dmg),
-                              "hp": format_num(max(0, enemy.hp))})
-            _apply_lifesteal(actor, dmg, ev)
-            _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick)
+                              "damage": format_num(dmg * units["hp"]),
+                              "hp": format_num(max(0, enemy.hp) * units["hp"])})
+            _apply_lifesteal(actor, dmg, ev, units)
+            _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick, units)
         return
 
     # ---- 攻击技能链 ----
@@ -825,7 +836,7 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
         t = eff.get("type")
         if t in _PROC_LOGGED:
             ev("skill_proc", {"a": actor.name, "skill": {"ref": "skill", "id": sdef.id}})
-        _emit_link_events(actor, eff, proc, ev)
+        _emit_link_events(actor, eff, proc, ev, units)
         if t == "charge":
             actor.charging = True
             actor.charge_eff = eff
@@ -845,7 +856,8 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
             mult *= boost
             cost = actor.max_hp * float(proc.get("cost", 0.0))
             actor.hp = max(1.0, actor.hp - cost)
-            ev("overload_cost", {"a": actor.name, "cost": format_num(cost),
+            ev("overload_cost", {"a": actor.name,
+                                 "cost": format_num(cost * units["hp"]),
                                  "mult": format_pct(boost)})
         elif t == "gamble":
             if rng.next_float() < float(proc.get("chance", 0.5)):
@@ -904,13 +916,14 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
             dmg = max(float(bc.min_damage),
                       _eff_atk(actor) * bc.atk_factor * value
                       * rng.next_gaussian(bc.variance_lo, bc.variance_hi))
-            _hurt(enemy, dmg, ev, rng)
+            _hurt(enemy, dmg, ev, rng, units)
             actor.damage_dealt += dmg
             landed += 1
             ev("thunder_hit", {"a": actor.name, "b": enemy.name,
-                               "damage": format_num(dmg), "hit": i,
-                               "hp": format_num(max(0, enemy.hp))})
-            _on_hit_reactions(actor, enemy, dmg, False, game, rng, ev, tick)
+                               "damage": format_num(dmg * units["hp"]),
+                               "hit": i,
+                               "hp": format_num(max(0, enemy.hp) * units["hp"])})
+            _on_hit_reactions(actor, enemy, dmg, False, game, rng, ev, tick, units)
             if enemy.hp <= 0:
                 break
         return  # 攻击已被替换：不结算吸血/上毒/眩晕等
@@ -928,7 +941,7 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
     if crit:
         ev("attack_crit", {})
     dmg = _compute_damage(actor, enemy, mult, crit, game, rng, pen=pen)
-    dmg = _defend(enemy, actor, dmg, game, rng, ev, tick)
+    dmg = _defend(enemy, actor, dmg, game, rng, ev, tick, units)
 
     # 以牙还牙：下次攻击时把记录的伤害按倍率追加打出
     if actor.ret_records:
@@ -937,17 +950,17 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
         if bonus > 0:
             dmg += bonus
             ev("retribution_release", {"a": actor.name,
-                                       "value": format_num(bonus),
+                                       "value": format_num(bonus * units["hp"]),
                                        "ratio": format_pct(actor.ret_ratio)})
 
     if dmg > 0:
-        _hurt(enemy, dmg, ev, rng)
+        _hurt(enemy, dmg, ev, rng, units)
         actor.damage_dealt += dmg
     ev("attack_hit", {"a": actor.name, "b": enemy.name,
-                      "damage": format_num(dmg),
-                      "hp": format_num(max(0, enemy.hp))})
-    _apply_lifesteal(actor, dmg, ev)
-    _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick)
+                      "damage": format_num(dmg * units["hp"]),
+                      "hp": format_num(max(0, enemy.hp) * units["hp"])})
+    _apply_lifesteal(actor, dmg, ev, units)
+    _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick, units)
 
     if shred_data is not None and enemy.hp > 0:
         value, sticks, max_stacks = shred_data
@@ -956,16 +969,19 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
         enemy.shred_value = max(enemy.shred_value, value)
         enemy.shred_until = tick + sticks
         ev("shred_apply", {"b": enemy.name,
-                           "value": format_num(enemy.shred_value * enemy.shred_stacks),
-                           "def": format_num(_eff_def(enemy))})
+                           "value": format_num(
+                               enemy.shred_value * enemy.shred_stacks * units["def"]),
+                           "def": format_num(_eff_def(enemy) * units["def"])})
     if poison_data is not None and enemy.hp > 0 and poison_data[0] > 0:
         enemy.poison_damage, enemy.poison_until = (poison_data[0], tick + poison_data[1])
-        ev("effect_poison", {"b": enemy.name, "damage": format_num(poison_data[0]),
+        ev("effect_poison", {"b": enemy.name,
+                             "damage": format_num(poison_data[0] * units["hp"]),
                              "turns": poison_data[1]})
     if bleed_data is not None and enemy.hp > 0 and bleed_data[0] > 0:
         enemy.bleed_damage = _eff_atk(actor) * bc.atk_factor * bleed_data[0]
         enemy.bleed_until = tick + bleed_data[1]
-        ev("bleed_apply", {"b": enemy.name, "damage": format_num(enemy.bleed_damage),
+        ev("bleed_apply", {"b": enemy.name,
+                           "damage": format_num(enemy.bleed_damage * units["hp"]),
                            "turns": bleed_data[1]})
     if stun_ticks > 0 and enemy.hp > 0:
         enemy.stun_until = tick + stun_ticks
@@ -997,7 +1013,10 @@ def _render_state(state, locale) -> dict:
     return out
 
 
-def battle_to_api(outcome: BattleOutcome, fighters_api: list, locale) -> dict:
+def battle_to_api(outcome: BattleOutcome, fighters_api: list, locale,
+                  game: GameCfg = None) -> dict:
+    """战报的对外表示：战报文本 + 渲染后的快照 + 结果汇总。
+    传入 game 时总伤害按生命量纲换算为白板 100 显示单位（与逐次伤害一致）。"""
     texts = render_events(outcome.events, locale)
     log = []
     for e, text in zip(outcome.events, texts):
@@ -1006,6 +1025,7 @@ def battle_to_api(outcome: BattleOutcome, fighters_api: list, locale) -> dict:
         if "state" in entry:
             entry["state"] = _render_state(entry["state"], locale)
         log.append(entry)
+    hp_factor = display_units(game)["hp"] if game is not None else 1.0
     return {
         "fighters": fighters_api,
         "result": {
@@ -1013,7 +1033,8 @@ def battle_to_api(outcome: BattleOutcome, fighters_api: list, locale) -> dict:
             "winner_pos": outcome.winner_pos,
             "draw": outcome.draw,
             "ticks": outcome.ticks,
-            "damage": {"a": outcome.damage[0], "b": outcome.damage[1]},
+            "damage": {"a": round(outcome.damage[0] * hp_factor, 2),
+                       "b": round(outcome.damage[1] * hp_factor, 2)},
         },
         "seed": outcome.seed,
         "log": log,

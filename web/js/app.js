@@ -383,9 +383,11 @@
 
   function fighterCard(f, side) {
     var statRows = f.attributes.map(function (a) {
-      var span = Math.max(1, a.max - a.min);
+      var span = Math.max(0.001, a.max - a.min);
       var pct = Math.max(0, Math.min(100, (a.value - a.min) / span * 100));
-      var valueText = a.format === "percent" ? a.value + "%" : String(a.value);
+      // 属性值均为白板 100 显示单位（满投掷 = 100）；百分比属性保留 2 位小数
+      var valueText = a.format === "percent"
+        ? fmtPct(a.value / 100) : fmtInt(a.value);
       var icon = a.emoji ? a.emoji + " " : "";
       return NF.h("div", { class: "stat-row" },
         NF.h("span", { class: "stat-name" }, icon + a.name),
@@ -429,8 +431,6 @@
           NF.h("div", { class: "power-value" }, String(f.power)),
           NF.h("div", { class: "power-label" }, t("power_label")))),
       NF.h("div", { class: "badges" },
-        NF.h("span", { class: "badge element" },
-          (f.element.emoji ? f.element.emoji + " " : "") + f.element.name),
         NF.h("span", { class: "badge md5" }, fmt("md5_label", { digest: f.digest_short }))),
       NF.h("div", { class: "section-title" }, t("stats_title")),
       statRows,

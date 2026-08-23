@@ -48,17 +48,12 @@ class SystemCfg:
 @dataclass(frozen=True)
 class AttributeDef:
     id: str
-    base: int           # 固定基础值（无随机）
-    min: int            # 展示条下限（仅用于卡牌进度条）
-    max: int            # 展示条上限
+    base: float         # 名义基准值（共鸣归一化等使用；投掷以 min/max 区间为准）
+    min: float          # 正态投掷区间下限
+    max: float          # 正态投掷区间上限（display_ref 缺省时的显示换算参照）
     format: str         # int / percent，仅影响展示
     power_weight: float # 战力权重
-
-
-@dataclass(frozen=True)
-class ElementDef:
-    id: str
-    weight: float
+    display_ref: float  # 显示层换算参照（满投掷 = 100）；0 表示原值直显
 
 
 @dataclass(frozen=True)
@@ -158,7 +153,6 @@ class BattleCfg:
 class GameCfg:
     system: SystemCfg
     attributes: tuple    # (AttributeDef, ...)，配置文件顺序
-    elements: tuple
     skills: tuple
     title_structures: tuple
     title_pools: dict    # {"prefix": (TitleFieldDef,..), "core": ..., "suffix": ...}
@@ -181,7 +175,6 @@ def load_game_config(config_root) -> GameCfg:
     game = root / "game"
     sys_data = _read_json(game / "system.json")
     attrs_data = _read_json(game / "attributes.json")
-    elems_data = _read_json(game / "elements.json")
     skills_data = _read_json(game / "skills.json")
     titles_data = _read_json(game / "titles.json")
     battle_data = _read_json(game / "battle.json")
@@ -205,30 +198,22 @@ def load_game_config(config_root) -> GameCfg:
         if a["id"] in seen_attrs:
             raise ConfigError("属性 id 重复: %s" % a["id"])
         seen_attrs.add(a["id"])
-        base = int(a["base"])
-        lo = int(a.get("min", base))
-        hi = int(a.get("max", base))
+        base = float(a["base"])
+        lo = float(a.get("min", base))
+        hi = float(a.get("max", base))
         if lo > hi:
-            raise ConfigError("属性展示区间非法: %s" % a["id"])
+            raise ConfigError("属性投掷区间非法: %s" % a["id"])
+        display_ref = float(a.get("display_ref", 0))
+        if display_ref < 0:
+            raise ConfigError("属性 display_ref 非法: %s" % a["id"])
         attributes.append(AttributeDef(
             id=str(a["id"]), base=base, min=lo, max=hi,
             format=str(a.get("format", "int")), power_weight=float(a.get("power_weight", 0)),
+            display_ref=display_ref,
         ))
     missing = [i for i in REQUIRED_ATTRIBUTE_IDS if i not in seen_attrs]
     if missing:
         raise ConfigError("attributes.json 缺少引擎必需属性: %s" % missing)
-
-    elements = []
-    seen_elems = set()
-    for e in elems_data.get("elements", []):
-        if e["id"] in seen_elems:
-            raise ConfigError("元素 id 重复: %s" % e["id"])
-        if float(e.get("weight", 1)) <= 0:
-            raise ConfigError("元素权重必须为正: %s" % e["id"])
-        seen_elems.add(e["id"])
-        elements.append(ElementDef(id=str(e["id"]), weight=float(e.get("weight", 1))))
-    if not elements:
-        raise ConfigError("元素池为空")
 
     skills = []
     seen_skills = set()
@@ -424,7 +409,7 @@ def load_game_config(config_root) -> GameCfg:
         raise ConfigError("variance 区间非法")
 
     return GameCfg(
-        system=system, attributes=tuple(attributes), elements=tuple(elements),
+        system=system, attributes=tuple(attributes),
         skills=tuple(skills),
         title_structures=tuple(structures), title_pools=title_pools,
         skill_count_min=sc_min, skill_count_max=sc_max,
@@ -438,12 +423,11 @@ def load_game_config(config_root) -> GameCfg:
 class Locale:
     """某一语言的全部文案（纯文本，不含任何数值规则）。"""
 
-    def __init__(self, lang, ui, attributes, elements, skills, titles,
+    def __init__(self, lang, ui, attributes, skills, titles,
                  stats, buffs, modifiers, battle_log):
         self.lang = lang
         self.ui = ui
         self.attributes = attributes
-        self.elements = elements
         self.skills = skills
         self.titles = titles          # {"prefixes": {...}, "cores": {...}, "suffixes": {...}}
         self.stats = stats            # 技能参数标签模板 + 共鸣标记/词缀修饰模板
@@ -457,8 +441,7 @@ class Locale:
             word = self.stats.get(ref_id)
             return str(word) if word is not None else None
         table = {
-            "skill": self.skills, "element": self.elements,
-            "attr": self.attributes,
+            "skill": self.skills, "attr": self.attributes,
         }.get(registry)
         if table is None:
             return None
@@ -468,7 +451,7 @@ class Locale:
         return None
 
 
-LOCALE_FILES = ("ui", "attributes", "elements", "skills", "titles",
+LOCALE_FILES = ("ui", "attributes", "skills", "titles",
                 "stats", "buffs", "modifiers", "battle_log")
 
 
@@ -477,7 +460,7 @@ def load_locale(config_root, lang: str) -> Locale:
     data = {name: _read_json(root / ("%s.json" % name)) for name in LOCALE_FILES}
     return Locale(
         lang=str(lang), ui=data["ui"], attributes=data["attributes"],
-        elements=data["elements"], skills=data["skills"],
+        skills=data["skills"],
         titles=data["titles"], stats=data["stats"], buffs=data["buffs"],
         modifiers=data["modifiers"], battle_log=data["battle_log"],
     )

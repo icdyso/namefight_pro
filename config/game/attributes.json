@@ -1,9 +1,9 @@
 {
   "attributes": [
-    { "id": "hp",    "base": 100, "min": 80, "max": 120, "format": "int",     "power_weight": 1 },
-    { "id": "atk",   "base": 100, "min": 80, "max": 120, "format": "int",     "power_weight": 0.5 },
-    { "id": "def",   "base": 100, "min": 80, "max": 120, "format": "int",     "power_weight": 0.3 },
-    { "id": "spd",   "base": 100, "min": 80, "max": 120, "format": "int",     "power_weight": 0.2 },
+    { "id": "hp",    "base": 100, "min": 80, "max": 120, "format": "int",     "power_weight": 1, "display_ref": 120 },
+    { "id": "atk",   "base": 13,  "min": 10, "max": 16,  "format": "int",     "power_weight": 4, "display_ref": 16 },
+    { "id": "def",   "base": 5,   "min": 2,  "max": 8,   "format": "int",     "power_weight": 3, "display_ref": 8 },
+    { "id": "spd",   "base": 10,  "min": 6,  "max": 14,  "format": "int",     "power_weight": 2, "display_ref": 14 },
     { "id": "crit",  "base": 12,  "min": 5,  "max": 20,  "format": "percent", "power_weight": 2 },
     { "id": "dodge", "base": 10,  "min": 5,  "max": 15,  "format": "percent", "power_weight": 2 }
   ]
