@@ -12,8 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from namefight.battle import run_battle
-from namefight.config import load_game_config, load_locale
+from namefight.battle import (_Combatant, _compute_damage, _make_combatant,
+                              _snapshot, battle_to_api, run_battle)
+from namefight.config import load_game_config
 from namefight.fighter import (derive_fighter, fighter_to_api,
                                personalized_effects, title_bonus_items)
 from namefight.rng import DetRng
@@ -74,21 +75,9 @@ class FighterDeterminism(unittest.TestCase):
         )
         self.assertTrue(differing, "两个不同名字的派生结果不应完全相同")
 
-    def test_derivation_independent_of_locale(self):
-        f = derive_fighter("张三", GAME)
-        zh = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
-        en = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "en"))
-        self.assertEqual([(a["id"], a["value"]) for a in zh["attributes"]],
-                         [(a["id"], a["value"]) for a in en["attributes"]])
-        self.assertEqual([s["id"] for s in zh["skills"]], [s["id"] for s in en["skills"]])
-        self.assertEqual(zh["title"]["structure"], en["title"]["structure"])
-        self.assertTrue(zh["title"]["name"])
-        self.assertTrue(all(s["text"] for s in zh["skills"]))
-        self.assertTrue(all(s["text"] for s in en["skills"]))
-
     def test_attributes_gaussian_rolled(self):
-        """属性正态投掷契约（v0.9.1）：[min, max] 内、同名一致、
-        不同名显著变化且集中于区间中点附近。"""
+        """属性正态投掷契约（v0.9.1/v0.10.0）：[min, max] 内、同名一致、
+        不同名显著变化且集中于区间中点附近；非百分比属性为整数。"""
         base = derive_fighter("attrRoll", GAME)
         self.assertEqual(derive_fighter("attrRoll", GAME).attrs, base.attrs)
         names = ["gauss%03d" % i for i in range(60)]
@@ -110,6 +99,9 @@ class FighterDeterminism(unittest.TestCase):
                 values.add(round(rolled, 4))
                 if abs(rolled - mid) <= half:
                     inside += 1
+                if a.format != "percent":
+                    self.assertIsInstance(f.attrs[a.id], int,
+                                          "非百分比属性 %s 应为整数" % a.id)
             self.assertGreater(len(values), 8,
                                "属性 %s 应随名字显著变化" % a.id)
             self.assertGreater(inside / len(names), 0.55,
@@ -137,14 +129,13 @@ class FighterDeterminism(unittest.TestCase):
 
     def test_title_composition(self):
         f = derive_fighter("TitleTest", GAME)
-        loc = load_locale(CONFIG_ROOT, "zh")
-        api = fighter_to_api(f, GAME, loc)
+        api = fighter_to_api(f, GAME)
         name = api["title"]["name"]
         self.assertTrue(name)
         self.assertTrue(api["title"]["description"].endswith("。"))
-        pool_key = {"prefix": "prefixes", "core": "cores", "core2": "cores", "suffix": "suffixes"}
+        pool_key = {"prefix": "prefix", "core": "core", "core2": "core", "suffix": "suffix"}
         for fname, fid in f.title_fields.items():
-            expected = loc.titles[pool_key[fname]][fid]["name"]
+            expected = GAME.title_field(pool_key[fname], fid).name
             self.assertIn(expected, name)
 
     def test_title_bonuses_applied(self):
@@ -155,7 +146,7 @@ class FighterDeterminism(unittest.TestCase):
             deltas = {}
             for attr_id, delta in title_bonus_items(f.title_fields, structure, GAME):
                 deltas[attr_id] = deltas.get(attr_id, 0) + delta
-            api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+            api = fighter_to_api(f, GAME)
             # API 展示的加成与配置一致
             self.assertEqual({b["attr"]: b["value"] for b in api["title"]["bonuses"]},
                              {k: v for k, v in deltas.items() if v != 0})
@@ -192,7 +183,7 @@ class FighterDeterminism(unittest.TestCase):
         self.assertTrue(modded, "应有技能获得词缀")
         # 描述格式：公式括号紧跟对应数值（基数 + 变量式*合并系数）+ 尾句依赖
         f, sdef, eff = linked[0]
-        api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+        api = fighter_to_api(f, GAME)
         entry = next(s for s in api["skills"] if s["id"] == sdef.id)
         if eff.get("links"):
             self.assertIn("越", entry["text"])
@@ -224,7 +215,7 @@ class FighterDeterminism(unittest.TestCase):
         seen = 0
         for i in range(60):
             f = derive_fighter("mastery%02d" % i, GAME)
-            api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+            api = fighter_to_api(f, GAME)
             for sdef, eff in personalized_effects(f, GAME):
                 entry = next(s for s in api["skills"] if s["id"] == sdef.id)
                 self.assertIn("mastery", eff)
@@ -288,11 +279,10 @@ class FighterDeterminism(unittest.TestCase):
         """live 文本有 1~2 个 LIVE_MARKER（与 link_calc 一一对应）；
         简易模式隐藏公式（尾句保留）。"""
         from namefight.fighter import LIVE_MARKER
-        zh = load_locale(CONFIG_ROOT, "zh")
         linked = self._collect_linked(20)
         self.assertTrue(linked)
         for f, sdef, eff in linked:
-            api = fighter_to_api(f, GAME, zh)
+            api = fighter_to_api(f, GAME)
             entry = next(s for s in api["skills"] if s["id"] == sdef.id)
             links = eff.get("links")
             if not links:
@@ -311,14 +301,10 @@ class FighterDeterminism(unittest.TestCase):
             self.assertNotIn("当前", entry["text"])
 
     def test_link_calc_matches_engine_resonance(self):
-        """前端实时公式（base + 变量式 × coeff + 上下限，v0.9.1 起均为
-        白板 100 显示单位）与引擎 resonance_coeff + apply_resonance
-        按量纲换算后逐点一致（含双变数技能）。"""
-        from namefight.battle import _live_value, _make_combatant
-        from namefight.fighter import (apply_resonance, display_units,
-                                       field_unit, resonance_coeff)
-        zh = load_locale(CONFIG_ROOT, "zh")
-        units = display_units(GAME)
+        """前端实时公式（base + 变量式 × coeff + 上下限）与引擎
+        resonance_coeff + apply_resonance 逐点一致（v0.10.0 起均为引擎真实值）。"""
+        from namefight.fighter import apply_resonance, resonance_coeff
+        from namefight.battle import _live_value
         linked = self._collect_linked(25)
         enemy = _make_combatant(derive_fighter("对照者", GAME), 1, GAME)
         checked = 0
@@ -326,28 +312,27 @@ class FighterDeterminism(unittest.TestCase):
             links = eff.get("links")
             if not links:
                 continue
-            api = fighter_to_api(f, GAME, zh)
+            api = fighter_to_api(f, GAME)
             entry = next(s for s in api["skills"] if s["id"] == sdef.id)
             actor = _make_combatant(f, 0, GAME)
             proc = dict(eff)
             for lc in entry["link_calc"]:
                 field = lc["field"]
-                # 引擎路径：按当前原始值计算系数并修正参数
+                # 引擎路径：按当前值计算系数并修正参数
                 coeff = resonance_coeff(lambda vid: _live_value(actor, vid),
                                         lambda vid: _live_value(enemy, vid),
                                         next(l for l in links if l["field"] == field),
                                         GAME)
                 proc = apply_resonance(proc, coeff, field)
-                # 前端路径（显示单位）：base + 显示变量式 × 显示系数（+ 显示上下限）
-                var_factor = units[lc["variable"]]
+                # 前端路径（同一真实值口径）：base + 变量式 × coeff（+ 上下限）
                 if lc["mode"] in ("difference", "sum"):
-                    own = _live_value(actor, lc["variable"]) * var_factor
-                    other = _live_value(enemy, lc["against"]) * units[lc["against"]]
+                    own = _live_value(actor, lc["variable"])
+                    other = _live_value(enemy, lc["against"])
                     expr = own - other if lc["mode"] == "difference" else own + other
                 elif lc["mode"] == "enemy":
-                    expr = _live_value(enemy, lc["variable"]) * var_factor
+                    expr = _live_value(enemy, lc["variable"])
                 else:
-                    expr = _live_value(actor, lc["variable"]) * var_factor
+                    expr = _live_value(actor, lc["variable"])
                 value = lc["base"] + expr * lc["coeff"]
                 lo, hi = lc["clamp"]
                 if lo is not None:
@@ -358,16 +343,15 @@ class FighterDeterminism(unittest.TestCase):
                     value = max(1, int(round(value)))
                     self.assertEqual(int(proc[field]), value)
                 else:
-                    field_u = units.get(field_unit(eff, field), 1.0)
-                    self.assertAlmostEqual(proc[field] * field_u, value, places=5,
+                    self.assertAlmostEqual(proc[field], value, places=5,
                                            msg="技能 %s 字段 %s 实时公式与引擎不一致"
                                                % (sdef.id, field))
                 checked += 1
         self.assertGreater(checked, 15)
 
     def test_snapshot_carriers_live_attributes(self):
-        """快照含 crit/dodge/gauge_gain：前端实时技能公式与逐刻行动槽
-        动画所需的全部数据可直接取用。"""
+        """快照含 crit/dodge/gauge/gauge_gain 等全部实时数据：
+        前端实时技能公式与逐刻行动槽动画所需的全部数据可直接取用。"""
         fa = derive_fighter("Alice", GAME)
         fb = derive_fighter("Bob", GAME)
         outcome = run_battle(fa, fb, GAME)
@@ -375,57 +359,143 @@ class FighterDeterminism(unittest.TestCase):
             for side in ("a", "b"):
                 snap = e["state"][side]
                 for key in ("hp", "max_hp", "atk", "def", "spd",
-                            "crit", "dodge", "gauge", "gauge_gain"):
+                            "crit", "dodge", "gauge", "gauge_gain",
+                            "gauge_pct", "gauge_pct_gain", "gauge_threshold"):
                     self.assertIn(key, snap)
 
-    def test_whiteboard_baseline_and_scale(self):
-        """量纲契约（v0.9.1）：引擎使用原始量纲（命 100 / 攻 13 / 防 5 / 速 10），
-        display_ref = 满投掷（max）；API 的 value/min/max 为白板 100 显示单位
-        （满投掷 = 100，称号加成可超过 100），raw 为引擎原始值。"""
-        expect_base = {"hp": 100, "atk": 13, "def": 5, "spd": 10,
-                       "crit": 12, "dodge": 10}
+    def test_real_value_display(self):
+        """量纲契约（v0.10.0）：引擎与显示统一为真实值。攻/防/速投掷区间
+        [1000, 2000]（×100 整数量纲）、生命翻倍 [16000, 24000]；
+        API 的 value 即引擎原始值（不再换算白板单位）。"""
+        expect = {"hp": (20000, 16000, 24000),
+                  "atk": (1500, 1000, 2000),
+                  "def": (1500, 1000, 2000),
+                  "spd": (1500, 1000, 2000),
+                  "crit": (12, 5, 20),
+                  "dodge": (10, 5, 15)}
         for a in GAME.attributes:
-            self.assertEqual(a.base, expect_base[a.id],
-                             "属性 %s 基准值应为原始量纲" % a.id)
-            if a.id in ("hp", "atk", "def", "spd"):
-                self.assertEqual(a.display_ref, a.max,
-                                 "白板满投掷（max）应为显示参照")
-            else:
-                self.assertEqual(a.display_ref, 0, "百分比属性不参与显示换算")
-        f = derive_fighter("白板测试", GAME)
-        api = fighter_to_api(f, GAME, load_locale(CONFIG_ROOT, "zh"))
+            base, lo, hi = expect[a.id]
+            self.assertEqual((a.base, a.min, a.max), (base, lo, hi),
+                             "属性 %s 量纲不符" % a.id)
+        f = derive_fighter("真实值测试", GAME)
+        api = fighter_to_api(f, GAME)
         by_id = {a["id"]: a for a in api["attributes"]}
         for a in GAME.attributes:
             entry = by_id[a.id]
-            factor = 100.0 / a.display_ref if a.display_ref > 0 else 1.0
-            self.assertAlmostEqual(entry["value"], f.attrs[a.id] * factor, places=3)
-            self.assertAlmostEqual(entry["raw"], f.attrs[a.id], places=3)
-            self.assertAlmostEqual(entry["min"], a.min * factor, places=3)
-            self.assertAlmostEqual(entry["max"], a.max * factor, places=3)
+            self.assertAlmostEqual(entry["value"], f.attrs[a.id], places=3)
+            self.assertAlmostEqual(entry["min"], a.min, places=3)
+            self.assertAlmostEqual(entry["max"], a.max, places=3)
 
-    def test_snapshot_uses_display_units(self):
-        """快照属性与战报数值均为白板 100 显示单位：开局快照等于卡牌显示值，
-        gauge_gain = 原始速度 × 100 / 阈值。"""
-        from namefight.fighter import display_units
+    def test_snapshot_uses_real_values(self):
+        """快照属性为引擎真实值：开局快照等于卡牌显示值，
+        gauge 为原始行动槽值、gauge_gain = 每刻推进速度值。"""
         fa = derive_fighter("显示甲", GAME)
         fb = derive_fighter("显示乙", GAME)
         outcome = run_battle(fa, fb, GAME)
-        units = display_units(GAME)
         first = outcome.events[0]["state"]
         for side, f in (("a", fa), ("b", fb)):
             snap = first[side]
-            self.assertAlmostEqual(snap["max_hp"], f.attrs["hp"] * units["hp"],
-                                   places=1)
-            self.assertAlmostEqual(snap["atk"], f.attrs["atk"] * units["atk"],
-                                   places=1)
-            self.assertAlmostEqual(snap["def"], f.attrs["def"] * units["def"],
-                                   places=1)
-            self.assertAlmostEqual(snap["spd"], f.attrs["spd"] * units["spd"],
-                                   places=1)
-            self.assertAlmostEqual(
-                snap["gauge_gain"],
-                f.attrs["spd"] * 100.0 / GAME.battle.gauge_threshold, places=1)
+            self.assertAlmostEqual(snap["max_hp"], f.attrs["hp"], places=1)
+            self.assertAlmostEqual(snap["atk"], f.attrs["atk"], places=1)
+            self.assertAlmostEqual(snap["def"], f.attrs["def"], places=1)
+            self.assertAlmostEqual(snap["spd"], f.attrs["spd"], places=1)
+            self.assertAlmostEqual(snap["gauge_gain"], f.attrs["spd"], places=1)
             self.assertAlmostEqual(snap["crit"], f.attrs["crit"], places=1)
+            self.assertAlmostEqual(
+                snap["gauge_threshold"], GAME.battle.gauge_threshold, places=1)
+
+    def test_defense_reciprocal_reduction(self):
+        """防御契约（v0.10.0）：倒数百分比免伤 dmg = raw × (1 − DEF/(DEF+K))，
+        不再直接扣减；穿透按比例抵消灭伤率（pen=1 时无视全部防御）。"""
+        bc = GAME.battle
+
+        def mk(atk, dfn):
+            c = _make_combatant(derive_fighter("防御测试", GAME), 0, GAME)
+            c.atk = atk
+            c.defense = dfn
+            return c
+
+        actor, enemy = mk(1500.0, 1500.0), mk(1500.0, 1500.0)
+        rng = DetRng(7)
+        dmg = _compute_damage(actor, enemy, 1.0, False, GAME, rng)
+        rng2 = DetRng(7)
+        variance = rng2.next_gaussian(bc.variance_lo, bc.variance_hi)
+        reduction = 1500.0 / (1500.0 + bc.defense_constant)
+        self.assertAlmostEqual(dmg, 1500.0 * variance * (1.0 - reduction), places=6)
+        # 零防御：无免伤
+        enemy.defense = 0.0
+        dmg0 = _compute_damage(actor, enemy, 1.0, False, GAME, DetRng(7))
+        reduction0 = 0.0 / (0.0 + bc.defense_constant)
+        self.assertAlmostEqual(dmg0, 1500.0 * variance * (1.0 - reduction0), places=6)
+        # 全穿透：免伤率被完全抵消
+        dmg_pen = _compute_damage(actor, mk(1500.0, 2000.0), 1.0, False, GAME,
+                                  DetRng(7), pen=1.0)
+        self.assertAlmostEqual(dmg_pen, 1500.0 * variance, places=6)
+
+    def test_integer_results_policy(self):
+        """取整契约（v0.10.0）：多步浮点计算只在最终应用时取整一次--
+        战报中的伤害/治疗/消耗/剩余生命均为整数字符串；血量全程保持整数。"""
+        fa = derive_fighter("整数甲", GAME)
+        fb = derive_fighter("整数乙", GAME)
+        outcome = run_battle(fa, fb, GAME)
+        # 仅检查恒为整数语义的参数键（value/spd 等键在不同事件中可为百分数）
+        numeric_keys = {"damage", "heal", "cost", "hp"}
+        for e in outcome.events:
+            for key, v in e["params"].items():
+                if key in numeric_keys:
+                    self.assertIsInstance(v, str)
+                    self.assertNotIn(".", v,
+                                     "战报数值 %s=%r 应为整数字符串" % (key, v))
+            for side in ("a", "b"):
+                hp = e["state"][side]["hp"]
+                self.assertAlmostEqual(hp, round(hp), places=6,
+                                       msg="生命应保持整数值（实测 %r）" % hp)
+
+    def test_blood_pact_buff_shows_accumulated_atk(self):
+        """血契标记契约（v0.10.0）：只显示累计转化的攻击量。"""
+        fa = derive_fighter("血契甲", GAME)
+        fb = derive_fighter("血契乙", GAME)
+        ca = _make_combatant(fa, 0, GAME)
+        cb = _make_combatant(fb, 1, GAME)
+        snap = _snapshot([ca, cb], GAME.battle.gauge_threshold, 0)
+        self.assertEqual([b for b in snap["a"]["buffs"] if b["id"] == "blood_pact"], [],
+                         "未转化过攻击时不显示血契标记")
+        ca.pact_total_gain = 237.6
+        snap = _snapshot([ca, cb], GAME.battle.gauge_threshold, 0)
+        pact = [b for b in snap["a"]["buffs"] if b["id"] == "blood_pact"]
+        self.assertEqual(len(pact), 1)
+        self.assertEqual(sorted(pact[0]["params"].keys()), ["value"])
+        self.assertEqual(pact[0]["params"]["value"], "238")
+
+    def test_battle_log_rich_segments(self):
+        """富文本契约（v0.10.0）：每条战报带 rich 段，各段拼接后与纯文本
+        完全一致；阵营名/技能/伤害/治疗段在若干场对局中均会出现。"""
+        kinds = set()
+        battles = 0
+        for i in range(10):
+            fa = derive_fighter("富文本甲%02d" % i, GAME)
+            fb = derive_fighter("富文本乙%02d" % i, GAME)
+            outcome = run_battle(fa, fb, GAME)
+            api = battle_to_api(outcome, [fighter_to_api(fa, GAME),
+                                          fighter_to_api(fb, GAME)], GAME)
+            battles += 1
+            for e in api["log"]:
+                self.assertIn("rich", e)
+                joined = "".join(seg["t"] for seg in e["rich"])
+                self.assertEqual(joined, e["text"])
+                for seg in e["rich"]:
+                    kinds.add(seg["k"])
+                    self.assertIn("t", seg)
+                    if seg["k"] == "skill":
+                        self.assertIn("id", seg)
+            if {"name-a", "name-b", "skill", "dmg", "heal"} <= kinds:
+                break
+        self.assertGreater(battles, 0)
+        self.assertIn("name-a", kinds)
+        self.assertIn("name-b", kinds)
+        self.assertIn("skill", kinds)
+        self.assertIn("dmg", kinds)
+        self.assertIn("heal", kinds)
 
     def test_snapshots_off_matches_full_run(self):
         """极速模式（无快照）与完整模式的胜负、tick 与事件序列完全一致。"""

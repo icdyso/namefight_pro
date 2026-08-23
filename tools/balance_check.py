@@ -51,12 +51,13 @@ def main(n_names: int = 400, n_battles: int = 6000) -> int:
                 if idx == winner_idx:
                     stat[sid][1] += 1
 
-    locale_names = {"zh": None}
+    locale_names = {}
     try:
         import json
-        with open(REPO_ROOT / "config" / "locales" / "zh" / "skills.json",
+        with open(REPO_ROOT / "config" / "game" / "skills.json",
                   encoding="utf-8") as fh:
-            locale_names = {k: v.get("name", k) for k, v in json.load(fh).items()}
+            locale_names = {s["id"]: s.get("name", s["id"])
+                            for s in json.load(fh).get("skills", [])}
     except Exception:
         locale_names = {}
 

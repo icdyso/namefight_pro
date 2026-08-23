@@ -1,4 +1,4 @@
-"""配置完整性与「功能-文案解耦」校验（见 AGENTS.md 2.2）。"""
+"""配置完整性校验（v0.10.0：数值与文案合并在 config/game，单语言）。"""
 import sys
 import unittest
 from pathlib import Path
@@ -9,16 +9,13 @@ if str(REPO_ROOT) not in sys.path:
 
 from namefight.battle import BUFF_IDS, SUPPORTED_EFFECTS, TEMPLATES_USED
 from namefight.config import (REQUIRED_ATTRIBUTE_IDS, TITLE_FIELD_POOLS,
-                              load_game_config, load_locale)
+                              load_game_config)
 from namefight.fighter import STATS_KEYS_USED
 from namefight.rng import DetRng
-from namefight.text import render_template
+from namefight.text import format_num, format_pct, render_template
 
 CONFIG_ROOT = REPO_ROOT / "config"
 GAME = load_game_config(CONFIG_ROOT)
-LOCALES = {lang: load_locale(CONFIG_ROOT, lang) for lang in GAME.system.available_locales}
-
-_TITLE_POOL_LOCALE = {"prefix": "prefixes", "core": "cores", "suffix": "suffixes"}
 
 
 class GameConfigTests(unittest.TestCase):
@@ -27,13 +24,11 @@ class GameConfigTests(unittest.TestCase):
         for attr_id in REQUIRED_ATTRIBUTE_IDS:
             self.assertIn(attr_id, ids)
 
-    def test_attribute_base_and_display_range(self):
+    def test_attribute_base_and_range(self):
         for a in GAME.attributes:
             self.assertLessEqual(a.min, a.max)
             self.assertGreater(a.base, 0)
-            # 显示层换算参照（v0.9.1）：满投掷 = 100；百分比属性不参与
-            if a.display_ref > 0:
-                self.assertEqual(a.display_ref, a.max)
+            self.assertTrue(a.name, "属性 %s 缺显示名" % a.id)
 
     def test_skill_count_within_pool(self):
         self.assertLessEqual(GAME.skill_count_min, GAME.skill_count_max)
@@ -90,6 +85,7 @@ class GameConfigTests(unittest.TestCase):
             self.assertTrue(pool)
             for m in pool:
                 self.assertGreater(m.weight, 0)
+                self.assertTrue(m.name, "词缀 %s 缺显示名" % m.id)
                 for param in m.mod:
                     self.assertIn(param, known_params,
                                   "词缀 %s 修正了未知参数 %s" % (m.id, param))
@@ -115,61 +111,46 @@ class GameConfigTests(unittest.TestCase):
     def test_battle_constants_sane(self):
         self.assertGreaterEqual(GAME.battle.max_ticks, 1)
         self.assertGreater(GAME.battle.gauge_threshold, 0)
+        self.assertGreater(GAME.battle.defense_constant, 0)
+        self.assertGreaterEqual(GAME.battle.message_delay_ms, 16)
 
 
-class LocaleCoverageTests(unittest.TestCase):
-    def test_every_game_id_has_text(self):
-        for lang, loc in LOCALES.items():
-            for a in GAME.attributes:
-                self.assertIn(a.id, loc.attributes, "[%s] 属性 %s 缺文案" % (lang, a.id))
-            for s in GAME.skills:
-                self.assertIn(s.id, loc.skills, "[%s] 技能 %s 缺文案" % (lang, s.id))
-                self.assertIn("description", loc.skills[s.id])
-            for pool_name, pool_key in _TITLE_POOL_LOCALE.items():
-                for fdef in GAME.title_pools[pool_name]:
-                    entry = loc.titles.get(pool_key, {}).get(fdef.id)
-                    self.assertIsNotNone(entry, "[%s] 称号字段 %s/%s 缺文案" % (lang, pool_key, fdef.id))
-                    self.assertIn("name", entry)
-                    self.assertIn("desc", entry)
+class ConfigTextTests(unittest.TestCase):
+    """文案契约（v0.10.0）：每个条目的文字与其数值保存在同一配置文件内。"""
+
+    def test_skills_have_text(self):
+        for s in GAME.skills:
+            self.assertTrue(s.name, "技能 %s 缺名称" % s.id)
+            self.assertTrue(s.description, "技能 %s 缺风味描述" % s.id)
+
+    def test_title_fields_have_text(self):
+        for pool_name in ("prefix", "core", "suffix"):
+            for fdef in GAME.title_pools[pool_name]:
+                self.assertTrue(fdef.name, "称号字段 %s/%s 缺名称" % (pool_name, fdef.id))
+                self.assertTrue(fdef.desc, "称号字段 %s/%s 缺描述" % (pool_name, fdef.id))
 
     def test_every_template_has_text(self):
-        for lang, loc in LOCALES.items():
-            for template in TEMPLATES_USED:
-                self.assertIn(template, loc.battle_log,
-                              "[%s] 战报模板 %s 缺文案" % (lang, template))
+        for template in TEMPLATES_USED:
+            self.assertIn(template, GAME.battle_log,
+                          "战报模板 %s 缺文案" % template)
 
     def test_every_buff_has_text(self):
-        for lang, loc in LOCALES.items():
-            for buff_id in BUFF_IDS:
-                entry = loc.buffs.get(buff_id)
-                self.assertIsNotNone(entry, "[%s] buff %s 缺文案" % (lang, buff_id))
-                self.assertIn("name", entry)
-                self.assertIn("detail", entry)
-                self.assertIn("desc", entry, "[%s] buff %s 缺详细说明" % (lang, buff_id))
+        for buff_id in BUFF_IDS:
+            entry = GAME.buffs.get(buff_id)
+            self.assertIsNotNone(entry, "buff %s 缺文案" % buff_id)
+            self.assertIn("name", entry)
+            self.assertIn("detail", entry)
 
     def test_every_stat_key_has_text(self):
-        for lang, loc in LOCALES.items():
-            for key in STATS_KEYS_USED:
-                self.assertIn(key, loc.stats, "[%s] 技能参数标签 %s 缺文案" % (lang, key))
-            for v in GAME.skill_variable_link.variables:
-                self.assertIn("link_" + v.id, loc.stats,
-                              "[%s] 共鸣标记 link_%s 缺文案" % (lang, v.id))
+        for key in STATS_KEYS_USED:
+            self.assertIn(key, GAME.stats, "技能参数标签 %s 缺文案" % key)
+        for v in GAME.skill_variable_link.variables:
+            self.assertIn("link_" + v.id, GAME.stats,
+                          "共鸣标记 link_%s 缺文案" % v.id)
 
-    def test_modifiers_have_locale_text(self):
-        mods = GAME.skill_name_modifiers
-        for lang, loc in LOCALES.items():
-            for m in mods.prefixes:
-                self.assertIn(m.id, loc.modifiers.get("prefixes", {}),
-                              "[%s] 前缀 %s 缺文案" % (lang, m.id))
-            for m in mods.suffixes:
-                self.assertIn(m.id, loc.modifiers.get("suffixes", {}),
-                              "[%s] 后缀 %s 缺文案" % (lang, m.id))
-
-    def test_ui_key_parity_across_locales(self):
-        key_sets = [frozenset(loc.ui.keys()) for loc in LOCALES.values()]
-        self.assertTrue(key_sets)
-        for ks in key_sets[1:]:
-            self.assertEqual(key_sets[0], ks)
+    def test_ui_text_present(self):
+        for key in ("app_title", "battle_button", "winner_text", "error_empty_name"):
+            self.assertIn(key, GAME.ui)
 
 
 class RngAndTextTests(unittest.TestCase):
@@ -218,16 +199,14 @@ class RngAndTextTests(unittest.TestCase):
         self.assertTrue(counts[2] and counts[3])
 
     def test_render_template_resolves_refs(self):
-        loc = LOCALES["zh"]
-        text = render_template(loc.battle_log["skill_proc"],
-                               {"a": "张三", "skill": {"ref": "skill", "id": "heavy_strike"}}, loc)
+        text = render_template(GAME.battle_log["skill_proc"],
+                               {"a": "张三", "skill": {"ref": "skill", "id": "heavy_strike"}}, GAME)
         self.assertIn("张三", text)
-        self.assertIn(loc.skills["heavy_strike"]["name"], text)
+        self.assertIn(GAME.skill_def("heavy_strike").name, text)
 
     def test_render_template_missing_keys_are_safe(self):
-        loc = LOCALES["zh"]
-        self.assertEqual(render_template("{a} {missing}", {"a": 1}, loc), "1 {missing}")
-        self.assertEqual(render_template(None, {}, loc), "")
+        self.assertEqual(render_template("{a} {missing}", {"a": 1}, GAME), "1 {missing}")
+        self.assertEqual(render_template(None, {}, GAME), "")
 
     def test_format_helpers(self):
         from namefight.text import format_num, format_pct

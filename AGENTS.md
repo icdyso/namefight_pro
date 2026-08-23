@@ -1,4 +1,4 @@
-# AGENTS.md — namefight_pro 项目规约（必读）
+# AGENTS.md - namefight_pro 项目规约（必读）
 
 > 本文件固化「名字竞技场」的底层需求、核心不变量与开发流程。任何开发者 / Agent
 > 在修改本项目之前必须先阅读本文件；**任何更新都不得违背第 2 章的核心不变量**；
@@ -17,7 +17,8 @@
 - 后端：**纯 Python（仅标准库）**，`python server.py` 直接运行，无任何第三方依赖；
 - 前端：**无构建步骤**的静态 Web UI（原生 JS + 自编写微型框架，见 `web/js/framework.js`），
   不引入 npm / 打包器 / CDN，保证离线可运行；
-- 无数据库：一切由名字实时推导。
+- 无数据库：一切由名字实时推导；
+- **单语言（中文）**：v0.10.0 起多语言体系移除，`config/locales/` 已删除。
 
 ## 2. 核心不变量（任何时候都不可破坏）
 
@@ -41,15 +42,17 @@
    **数值类随机一律使用高斯分布**（`DetRng.next_gaussian`，Box-Muller，
    每次消耗两个均匀数；离散选择仍用加权均匀抽取）；适用范围：属性投掷、
    技能数量、熟练度、个性化扰动倍率、共鸣倍率、伤害浮动。
-   **数值精度**：后台运算不取整、全程保留浮点（离散计数如持续刻数除外）；
+   **数值精度与取整（v0.10.0）**：后台中间量不取整、全程保留浮点
+   （离散计数如持续刻数除外）；**全部计算结果取整**--多步浮点计算只在
+   **最终应用时取整一次**（伤害/治疗/吸血/毒/流血/破甲/叠速/血契转化等，
+   见 `battle._r`），非百分比属性投掷即取整，血量全程整数；
    一切展示中**百分数保留 2 位小数、其余数值保留整数**
    （后端 `format_pct` / `format_num` 与前端格式化遵循同一规则，v0.8.0 起）。
-   **原始量纲 + 白板 100 显示**（v0.9.1）：引擎与配置使用原始属性量纲
-   （命 100 / 攻 13 / 防 5 / 速 10，正态投掷于 `[min, max]`）；显示层经
-   `attributes.json` 各属性 `display_ref`（= 满投掷 max）换算为
-   「满投掷 = 100」的白板单位（卡牌 / HUD / 快照 / 战报数值 / 共鸣公式），
-   **只影响展示，数值计算不变**；crit/dodge 本身即百分数，不参与换算。
-   称号字段附带小额属性加成（`game/titles.json` 各字段 `bonus`，原始量纲），
+   **×100 整数量纲 + 真实值直显（v0.10.0）**：非百分比基础数值整体 ×100
+   （命 20000 / 攻防速 1500，正态投掷于 `[min, max]`）；v0.9.1 的白板 100
+   显示换算（display_ref）已删除，卡牌 / HUD / 快照 / 战报数值 / 共鸣公式
+   **一律直显引擎真实值**；crit/dodge 本身即百分数（浮点），不取整。
+   称号字段附带小额属性加成（`game/titles.json` 各字段 `bonus`，×100 量纲），
    查表叠加到投掷值，不消耗随机数。
    技能个性化（熟练度/数值/词缀/变数随名字扰动）使用**独立种子**
    `md5(规范化名字 + ":" + 技能id)`，与主派生流互不影响；个性化消耗顺序固定
@@ -65,25 +68,31 @@
 7. 配置文件内容属于「输入」的一部分：修改配置可能改变同名结果，属正常行为，
    但必须在更新文档中显著标注（见 3.4）。
 
-### 2.2 功能与文字解耦（可配置性）
+### 2.2 数值与文案同文件（可配置性，v0.10.0 单层配置）
 
-1. **数值 / 规则**全部位于 `config/game/*.json`：属性区间、技能效果与参数、
-   称号权重、技能池与个性化区间、战斗常数、名字归一化规则。
-2. **文案**全部位于 `config/locales/<lang>/*.json`（每语言八个文件）：UI 文案、
-   属性显示名、技能名与风味短句、自然语言技能模板与共鸣句式（stats）、
-   称号字段（titles）、buff 文案（buffs）、技能词缀（modifiers）、
-   战斗日志模板（battle_log）。
-3. 代码中**禁止硬编码任何面向用户的文案**；技能描述只写风味文本，不重复数值
+1. **数值 / 规则 / 文案**统一位于 `config/game/*.json`（六个文件）--
+   每个条目的**文字与其数值 / 加成绑定在同一条目内**：
+   - `system.json`：版本、语言、名字归一化规则；
+   - `attributes.json`：属性投掷区间、战力权重、显示名与 emoji；
+   - `skills.json`：技能池（效果参数 + 名称 + 风味描述）、`stats` 自然语言模板
+     与共鸣句式、`md5_variance`、`variable_link`、`name_modifiers`（词缀名称与修正值）；
+   - `titles.json`：称号结构池（structures）+ 字段池（prefix/cores/suffixes，
+     含 name/desc/**bonus 加成**）；
+   - `battle.json`：战斗常数（暴击倍率/浮动/免伤常数/行动槽阈值/max_ticks）、
+     `battle_log` 战报模板、`buffs` 文案、`playback` 回放配置；
+   - `ui.json`：全部界面文案。
+2. 代码中**禁止硬编码任何面向用户的文案**；技能描述只写风味文本，不重复数值
    （数值的唯一事实来源是 `config/game`）。
-4. 战斗日志以「模板 id + 参数」结构化存储；技能 / 称号 / 属性等参数以
-   `{"ref": 注册名, "id": 条目id}` 形式传递，渲染时才查当前语言的显示名，
-   保证切换语言不改变战报结构。
-5. 扩展方式：
-   - 新增语言 = 新增 `config/locales/<lang>/` 目录（八个文件齐全）；
-   - 新增技能 = `config/game/skills.json` 增加条目（效果类型必须是引擎
-     `SUPPORTED_EFFECTS` 中已支持的）+ 各语言补充文案与 stats 标签；
+3. 战斗日志以「模板 id + 参数」结构化存储；技能 / 称号 / 属性等参数以
+   `{"ref": 注册名, "id": 条目id}` 形式传递，渲染时才查条目显示名；
+   每条战报同时附带 `rich` 富文本段（plain/name-a/name-b/skill/dmg/heal），
+   供前端着色（阵营名红蓝加粗、技能名各自配色加粗、伤害红治疗绿），
+   各段拼接与纯文本渲染完全一致。
+4. 扩展方式：
+   - 新增技能 = `game/skills.json` 的 `skills` 增加条目（含 name/description；
+     效果类型必须是引擎 `SUPPORTED_EFFECTS` 中已支持的）+ `stats` 补模板；
    - 新增称号字段 = `game/titles.json` 对应池（prefixes/cores/suffixes）加条目
-     + 各语言补 name/desc；
+     （含 name/desc/bonus）；
    - 新增称号结构 = `game/titles.json` 的 structures 加条目（字段名限定
      prefix / core / core2 / suffix，连接符数量为字段数减一）。
 
@@ -101,8 +110,8 @@
 2. **Git 提交**：更新完成后必须 git commit；若配置了远端且可达则 push 到
    GitHub；远端不可达 / 未配置时提交到本地 git，并在更新文档中注明。
 3. 提交信息使用 Conventional Commits（feat / fix / docs / refactor / test / config）。
-4. **版本号**：功能新增 → 次版本号 +1；修复 → 修订号 +1；会改变同名结果的
-   数值 / 规则 / 算法变更 → 主版本号 +1 或明确 breaking 标注。
+4. **版本号**：功能新增 -> 次版本号 +1；修复 -> 修订号 +1；会改变同名结果的
+   数值 / 规则 / 算法变更 -> 主版本号 +1 或明确 breaking 标注。
    版本号唯一维护于 `config/game/system.json` 的 `version` 字段。
 5. **测试**：任何更新前后都必须运行 `python -m unittest discover -s tests -v`
    且全部通过；确定性测试（`tests/test_determinism.py`）失败视为最高优先级事故。
@@ -113,42 +122,40 @@
 
 ## 4. 目录结构
 
-```
+````
 namefight_pro/
 ├── AGENTS.md                 # 本文件：需求与规约
 ├── README.md                 # 使用与定制说明
 ├── server.py                 # 启动入口
 ├── namefight/                # 后端核心包（纯标准库）
 │   ├── rng.py                # splitmix64 确定性 PRNG
-│   ├── config.py             # 配置加载与校验
+│   ├── config.py             # 配置加载与校验（数值+文案单层）
 │   ├── fighter.py            # 名字 -> MD5 -> 斗士派生
-│   ├── battle.py             # 确定性对战引擎
-│   ├── text.py               # 模板渲染（文案与结构解耦）
+│   ├── battle.py             # 确定性对战引擎（富文本段/快照）
+│   ├── text.py               # 模板渲染（结构化事件 -> 文本）
 │   └── server.py             # HTTP 服务（静态资源 + JSON API）
 ├── config/
-│   ├── game/                 # 数值与规则（与语言无关）
-│   │   ├── system.json       # 版本、语言列表、名字归一化规则
-│   │   ├── attributes.json   # 属性投掷区间、战力权重与显示参照 display_ref
-│   │   ├── skills.json       # 技能池 + md5_variance + variable_link + name_modifiers
-│   │   ├── titles.json       # 称号：结构池（structures）+ 字段池（prefix/cores/suffixes，含 bonus）
-│   │   └── battle.json       # 战斗常数（暴击倍率/浮动/行动槽阈值/max_ticks 等）
-│   └── locales/              # 文案（与数值无关），每语言八个文件：
-│       ├── zh/               # ui/attributes/skills/titles/stats/buffs/modifiers/battle_log
-│       └── en/
+│   └── game/                 # 数值 + 规则 + 文案（同文件保存，单语言）
+│       ├── system.json       # 版本、语言、名字归一化规则
+│       ├── attributes.json   # 属性投掷区间、战力权重、显示名与 emoji
+│       ├── skills.json       # 技能池 + stats 模板 + md5_variance + variable_link + name_modifiers
+│       ├── titles.json       # 称号：结构池 + 字段池（name/desc/bonus 同条目）
+│       ├── battle.json       # 战斗常数 + battle_log 模板 + buffs 文案 + playback
+│       └── ui.json           # 界面文案
 ├── web/                      # 前端（无构建、零依赖）
 │   ├── index.html
 │   ├── css/style.css
 │   └── js/framework.js       # 自编写微型框架（NF.h 等）
 │   └── js/app.js             # 应用逻辑（文案全部来自 /api/text）
 ├── tests/                    # unittest 测试
-│   ├── test_determinism.py   # 核心不变量：同名同命 / 顺序无关 / 跨进程一致
-│   └── test_config.py        # 配置完整性、locale 覆盖、PRNG 金向量
+│   ├── test_determinism.py   # 核心不变量：同名同命 / 顺序无关 / 跨进程一致 / 量纲与取整契约
+│   └── test_config.py        # 配置完整性、文案覆盖、PRNG 金向量
 ├── tools/
 │   └── balance_check.py      # 技能平衡蒙特卡洛检验（固定种子，可复现）
 └── docs/
     ├── GAME_SPEC.md          # 完整规则手册：流程图/细则/数值/JSON 指南（更新须同步）
     └── updates/              # 更新文档（每次更新一份）
-```
+````
 
 ## 5. 运行与验证
 
@@ -161,50 +168,51 @@ namefight_pro/
 | 接口 | 说明 |
 | --- | --- |
 | `GET /api/health` | `{status, version}` |
-| `GET /api/text?lang=zh` | 前端所需全部 UI 文案 + 可用语言列表 |
-| `GET /api/fighter?name=X&lang=zh` | 斗士完整数据（含 MD5 摘要、属性、技能、称号） |
-| `POST /api/battle` | body `{"a": "...", "b": "...", "lang": "zh"}`；返回双方数据、逐条战报（结构化事件 + 已渲染文本 + 双方状态快照）与胜负 |
+| `GET /api/text` | 前端所需全部 UI 文案 + 回放配置 + 版本（lang 参数被接受但忽略） |
+| `GET /api/fighter?name=X` | 斗士完整数据（含 MD5 摘要、属性、技能、称号） |
+| `POST /api/battle` | body `{"a": "...", "b": "..."}`；返回双方数据、逐条战报（结构化事件 + 已渲染文本 + rich 富文本段 + 双方状态快照）与胜负 |
 | `POST /api/battle/fast` | `{a,b,runs}` 或 `{pairs,runs}`；极速对战（无快照/无文案），供批量测试 |
 
-错误以 `{"error": "<code>"}` + 4xx/5xx 返回，错误码文案同样由 locale 提供。
+错误以 `{"error": "<code>"}` + 4xx/5xx 返回，错误码文案由 `game/ui.json` 提供。
 
 ## 7. 设计备忘
 
 - **tick 战斗模型**：战斗以 tick 推进；每个 tick 双方行动槽（gauge）累加自身有效
-  速度，达到阈值（`battle.json` 的 `gauge_threshold`，默认 100；白板速度 10 ≈
-  每 10 刻一动）即可行动一次并扣回阈值。速度决定行动频率。
+  速度，达到阈值（`battle.json` 的 `gauge_threshold`，默认 10000；速度 1500 ≈
+  每 7 刻一动）即可行动一次并扣回阈值。速度决定行动频率。
   同一 tick 多人可行动时按（gauge 余量降序、内部序）执行；内部序 = 速度降序、
   规范化名字升序，与输入顺序无关；
-- **原始量纲 + 白板 100 显示**（v0.9.1）：伤害公式 `max(最小伤害, ATK × 浮动 ×
-  暴击倍率 × 技能倍率 − 有效防御 × (1−穿透))`（atk_factor = defense_factor = 1.0，
-  保留系数便于日后调整量纲）；属性为正态投掷的浮点值；显示层按
-  `fighter.display_units` 把面板 / 快照 / 战报数值 / 共鸣公式换算为白板 100 单位
-  （满投掷 = 100），引擎计算不受影响；
+- **防御倒数百分比免伤**（v0.10.0）：伤害公式
+  `raw = ATK × atk_factor × 高斯浮动 × 暴击倍率 × 技能倍率`，
+  `免伤率 = 有效防御 / (有效防御 + defense_constant) × (1 − 穿透率)`，
+  `dmg = max(min_damage, raw × (1 − 免伤率))`（最终应用时取整一次）；
+  不再从伤害中直接扣减防御；破甲降低有效防御，穿透按比例抵消灭伤率；
 - **技能个性化**：每个技能实例附带熟练度（0~100，高斯）与至多两个共鸣变数；
   熟练度按 `skills.json` 各技能 `mastery: [lo,hi]` 区间缩放触发概率
   （`mastery_on` 指定作用字段，条件型技能可为 value/immune），
-  熟练度行显示最终触发率（「熟练度 63：触发率 36.52%」，永不超过 100%，
-  各技能基础触发率按强度互不相同）；
+  熟练度行显示最终触发率（永不超过 100%，各技能基础触发率按强度互不相同）；
 - **变量共鸣**（v0.9.0 双槽位）：每个效果类型在 `variable_link.targets` 声明
-  1~2 个可共鸣字段（对应技能中两个不同的数值），各以 `chance`（25%）概率成为
-  变数；模式 own 10 : enemy 3 : difference 2 : sum 1（单值优先、己方优先，
-  差值/并值与同名属性运算）；触发时按归一化系数修正技能自身参数，公式括号紧跟
-  对应数值（`基数 + 变量式*合并系数`，v0.9.1 起均为白板 100 显示单位），变量式用
-  属性 emoji（❤️⚔️🛡️👟🎯🌀，own 省略范围词、enemy 前缀「对方」、差值/并值
-  【己方-对方】/【己方+对方】）；
+  1~2 个可共鸣字段，各以 `chance`（25%）概率成为变数；模式 own 10 : enemy 3 :
+  difference 2 : sum 1（单值优先、己方优先，差值/并值与同名属性运算）；触发时按
+  归一化系数修正技能自身参数，公式括号紧跟对应数值（`基数 + 变量式*合并系数`，
+  v0.10.0 起为引擎真实值），变量式用属性 emoji（❤️⚔️🛡️👟🎯🌀，own 省略范围词、
+  enemy 前缀「对方」、差值/并值【己方-对方】/【己方+对方】）；
   名称后缀标记（锋/坚/疾/命/锐/影）依变数顺序追加；对战中前端按快照实时计算
   最终值（`link_calc` 列表 + `\u0001` 标记逐个替换），支持简易显示模式；
-- **称号加成**：称号各字段自带小额属性加成（可为负，原始量纲），叠加到属性
-  投掷值，卡牌展示聚合结果（按 display_factor 换算为白板单位，
-  如「称号加成：攻击 +6」）；
+- **称号加成**：称号各字段自带小额属性加成（可为负，×100 量纲），叠加到属性
+  投掷值，卡牌展示聚合结果（真实值直显，如「攻击 +100」）；
 - 持续状态（毒/流血/眩晕/破甲/回春/怨念/锻痕）以刻为期，到期自动失效；
-  毒/流血伤害在拥有者行动时结算；行动顺序：斩断打断 → 毒发 → 流血 →
-  行动开始技能（血契/回春/净化）→ 眩晕 → 背水一战 → 攻击（蓄力释放优先）；
+  毒/流血伤害在拥有者行动时结算；行动顺序：斩断打断 -> 毒发 -> 流血 ->
+  行动开始技能（血契/回春/净化）-> 眩晕 -> 背水一战 -> 攻击（蓄力释放优先）；
   tick 耗尽按剩余生命比例判定，完全相同则平局；
+- **血契**：献祭吸血在行动结束后按转化比例永久加攻击（每次取整、累计）；
+  血契标记只显示累计转化的攻击量；
 - `crit` / `dodge` 属性以百分数（浮点）存储，判定时除以 100；暴击上限 100%、
   闪避上限 60%；
 - 称号为多字段组合：结构（core / prefix+core / core+suffix / 双core / 全结构）
   与各字段均按权重概率抽取，显示名按结构连接符拼接，描述由字段描述片段以「，」拼接；
-- 战报条目结构：`{tick, template, params, state, text}`；`state` 为双方快照
-  （HP/ATK/DEF/SPD/暴击/闪避/行动槽百分比/每刻推进量/buff 列表），buff 以
-  id+params 存储、渲染时查 locale 的 buffs 模板；快照按输入位置 a/b 记录。
+- 战报条目结构：`{tick, template, params, state, text, rich}`；`state` 为双方快照
+  （HP/ATK/DEF/SPD/暴击/闪避/行动槽原始值与百分比/每刻推进量/阈值/buff 列表），
+  buff 以 id+params 存储、渲染时查 `battle.json` 的 buffs 模板；
+  快照按输入位置 a/b 记录；前端逐条停顿回放（`playback.message_delay_ms` 可配置），
+  HUD 六维实时刷新（数值变化高亮），行动槽同时展示数值。

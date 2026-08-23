@@ -1,28 +1,27 @@
 /* 名字竞技场前端应用逻辑。
- * 约定（见 AGENTS.md 2.2.3）：前端不硬编码任何面向用户的文案——
- * 所有用户可见文本均来自 GET /api/text（即 config/locales/<lang>/ui.json）。 */
+ * 约定（见 AGENTS.md 2.2.3）：前端不硬编码任何面向用户的文案--
+ * 所有用户可见文本均来自 GET /api/text（即 config/game/ui.json）。 */
 (function () {
   "use strict";
 
-  var TICK_MS = 255;          // 每个 tick 的基础演出时长（ms），v0.6.0 起为原速的 1/3
   var SPEEDS = [0.5, 1, 2, 4];  // 回放倍速
   var LIVE_MARK = "\u0001";   // 后端 live 文本中的实时数值占位符
 
   var state = {
-    lang: "zh",
-    langs: ["zh"],
     version: "",
     text: {},
-    fighters: null,   // [fighterApi, fighterApi]（按输入顺序）
-    battle: null,     // /api/battle 响应
-    shown: 0,         // 已展示的战报条数
+    msgDelay: 320,      // 每条战报的停顿时长（ms，来自 battle.json 的 playback 配置）
+    fighters: null,     // [fighterApi, fighterApi]（按输入顺序）
+    battle: null,       // /api/battle 响应
+    shown: 0,           // 已展示的战报条数
     playing: false,
     timer: null,
     speed: 1,
     busy: false,
-    simple: false,    // 简易显示模式（隐藏技能描述中的共鸣公式）
-    skillRefs: null,  // {a: [{s, textNode, tipTextNode}], b: [...]} 实时刷新用
-    lastBattleState: null  // 最近一次应用的双方快照（重渲染后恢复实时数值）
+    simple: false,      // 简易显示模式（隐藏技能描述中的共鸣公式）
+    skillRefs: null,    // {a: [{s, textNode, tipTextNode}], b: [...]} 实时刷新用
+    lastBattleState: null,  // 最近一次应用的双方快照（重渲染后恢复实时数值）
+    tickPos: 0
   };
 
   var els = {};
@@ -54,6 +53,24 @@
     return s;
   }
 
+  /* 每个技能一种专属颜色（由技能 id 确定性散列出 hue，卡牌与战报共用） */
+  var skillColorCache = {};
+  function skillColor(id) {
+    if (skillColorCache[id]) return skillColorCache[id];
+    var h = 0;
+    for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    var color = "hsl(" + (h % 360) + ", 74%, 68%)";
+    skillColorCache[id] = color;
+    return color;
+  }
+
+  /* 属性条重新量化：投掷区间线性映射到 8%~92%——永不空条、永不全满 */
+  function barPct(v, min, max) {
+    var span = Math.max(1e-6, max - min);
+    var f = Math.max(0, Math.min(1, (+v - min) / span));
+    return 8 + f * 84;
+  }
+
   function errorText(err) {
     var code = err && err.code ? err.code : "error_request";
     var text = t(code);
@@ -79,20 +96,19 @@
 
   /* ---------------- API ---------------- */
 
-  function apiText(lang) {
-    return NF.fetchJSON("/api/text?lang=" + encodeURIComponent(lang));
+  function apiText() {
+    return NF.fetchJSON("/api/text");
   }
 
   function apiFighter(name) {
-    return NF.fetchJSON("/api/fighter?name=" + encodeURIComponent(name) +
-      "&lang=" + encodeURIComponent(state.lang));
+    return NF.fetchJSON("/api/fighter?name=" + encodeURIComponent(name));
   }
 
   function apiBattle(a, b) {
     return NF.fetchJSON("/api/battle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ a: a, b: b, lang: state.lang })
+      body: JSON.stringify({ a: a, b: b })
     });
   }
 
@@ -149,38 +165,20 @@
       .then(function () { setBusy(false); });
   }
 
-  function loadLangText(lang) {
-    return apiText(lang).then(function (data) {
-      state.lang = data.lang;
-      state.langs = data.langs || [data.lang];
+  function loadText() {
+    return apiText().then(function (data) {
       state.version = data.version || "";
       state.text = data.ui || {};
+      var pb = data.playback || {};
+      state.msgDelay = Math.max(16, +pb.message_delay_ms || 320);
       document.title = t("app_title");
     });
   }
 
-  /* 切换语言后，用同样的名字重新拉取当前数据，验证文案切换、结果不变 */
-  function refreshAfterLangChange() {
-    var n = currentNames();
-    if (!n.a || !n.b) return Promise.resolve();
-    if (state.battle) return fight();
-    if (state.fighters) return derive();
-    return Promise.resolve();
-  }
-
-  function switchLang(lang) {
-    if (lang === state.lang || state.busy) return;
-    loadLangText(lang)
-      .then(function () {
-        renderAll();
-        return refreshAfterLangChange();
-      })
-      .catch(function (e) { showError(errorText(e)); });
-  }
-
-  /* ---------------- 战报逐刻回放（tick 时钟驱动） ----------------
-   * 回放按游戏刻推进：每刻双方行动槽 +速度值，行动槽满时该方的战报条目
-   * 恰好到达并被揭示——由此直观展现双方真实的攻击间隔与出手节奏。 */
+  /* ---------------- 战报逐条回放（每条消息停顿 msgDelay/speed 毫秒） ----------------
+   * v0.10.0 起回放按「条」推进：每条战报展示后停顿一段可配置的时间
+   * （battle.json 的 playback.message_delay_ms ÷ 倍速）；跨刻时行动槽
+   * 按每刻推进量顺次补进，仍与服务器快照逐条对齐校正。 */
 
   function stopPlayback() {
     state.playing = false;
@@ -190,8 +188,8 @@
     }
   }
 
-  function tickDuration() {
-    return Math.max(16, TICK_MS / state.speed);
+  function msgDuration() {
+    return Math.max(16, state.msgDelay / state.speed);
   }
 
   function startPlayback() {
@@ -199,42 +197,42 @@
     state.tickPos = 0;
     state.playing = true;
     renderControls();
-    scheduleTick();
+    scheduleMsg();
   }
 
-  function scheduleTick() {
-    state.timer = setTimeout(tickStep, tickDuration());
+  function scheduleMsg() {
+    state.timer = setTimeout(stepMsg, msgDuration());
   }
 
-  function tickStep() {
+  function stepMsg() {
     if (!state.playing || !state.battle) return;
     var log = state.battle.log;
-    var finalTick = log.length ? log[log.length - 1].tick : 0;
-    if (state.shown >= log.length && state.tickPos >= finalTick) {
+    if (state.shown >= log.length) {
       finishPlayback();
       return;
     }
-    state.tickPos++;
-    advanceGauges();
-    while (state.shown < log.length && log[state.shown].tick <= state.tickPos) {
-      appendLogEntry(log[state.shown]);
-      state.shown++;
+    var entry = log[state.shown];
+    if (entry.tick > state.tickPos) {
+      advanceGauges(entry.tick - state.tickPos);
+      state.tickPos = entry.tick;
     }
-    if (state.shown >= log.length && state.tickPos >= finalTick) {
+    appendLogEntry(entry);
+    state.shown++;
+    if (state.shown >= log.length) {
       finishPlayback();
       return;
     }
-    scheduleTick();
+    scheduleMsg();
   }
 
-  /* 客户端行动槽逐刻推进（每刻推进 gauge_gain%），与服务器快照对齐校正 */
-  function advanceGauges() {
+  /* 客户端行动槽逐刻推进（每刻推进 gauge_pct_gain%），与服务器快照对齐校正 */
+  function advanceGauges(deltaTicks) {
     ["a", "b"].forEach(function (side) {
       var refs = els.hud && els.hud[side];
       if (!refs || refs._dead || !refs._gain) return;
-      var g = Math.min(100, (refs._gauge || 0) + refs._gain);
-      refs._gauge = g;
-      refs.gaugeFill.style.transition = "width " + tickDuration() + "ms linear";
+      var g = Math.min(100, (refs._gaugePct || 0) + refs._gain * (deltaTicks || 1));
+      refs._gaugePct = g;
+      refs.gaugeFill.style.transition = "width " + Math.max(120, msgDuration()) + "ms linear";
       refs.gaugeFill.style.width = g + "%";
     });
   }
@@ -267,11 +265,10 @@
       renderControls();
     } else {
       var log = state.battle.log;
-      var finalTick = log.length ? log[log.length - 1].tick : 0;
-      if (state.shown >= log.length && state.tickPos >= finalTick) return;
+      if (state.shown >= log.length) return;
       state.playing = true;
       renderControls();
-      scheduleTick();
+      scheduleMsg();
     }
   }
 
@@ -308,13 +305,7 @@
       onchange: function (e) { toggleSimple(e.target.checked); }
     });
     return NF.h("header", { class: "app-header" },
-      NF.h("div", { class: "lang-row", role: "group", "aria-label": t("lang_label") },
-        state.langs.map(function (lg) {
-          return NF.h("button", {
-            class: "lang-btn" + (lg === state.lang ? " active" : ""),
-            onclick: function () { switchLang(lg); }
-          }, lg.toUpperCase());
-        }),
+      NF.h("div", { class: "lang-row" },
         NF.h("label", { class: "simple-toggle", title: t("simple_mode_title") },
           simpleBox, NF.h("span", null, t("simple_mode_label")))),
       NF.h("h1", { class: "app-title" }, t("app_title")),
@@ -383,9 +374,8 @@
 
   function fighterCard(f, side) {
     var statRows = f.attributes.map(function (a) {
-      var span = Math.max(0.001, a.max - a.min);
-      var pct = Math.max(0, Math.min(100, (a.value - a.min) / span * 100));
-      // 属性值均为白板 100 显示单位（满投掷 = 100）；百分比属性保留 2 位小数
+      // v0.10.0：数值均为引擎真实值；属性条映射到 8%~92%（永不空/满）
+      var pct = barPct(a.value, a.min, a.max);
       var valueText = a.format === "percent"
         ? fmtPct(a.value / 100) : fmtInt(a.value);
       var icon = a.emoji ? a.emoji + " " : "";
@@ -404,7 +394,8 @@
         state.skillRefs[side].push({ s: s, textNode: textNode, tipTextNode: tipTextNode });
       }
       return NF.h("div", { class: "skill-chip" },
-        NF.h("div", { class: "skill-name" }, s.name,
+        NF.h("div", { class: "skill-name" },
+          NF.h("span", { class: "skill-name-text", style: { color: skillColor(s.id) } }, s.name),
           s.mastery_text ? NF.h("span", { class: "skill-mastery" }, s.mastery_text) : null),
         textNode,
         s.flavor ? NF.h("div", { class: "skill-desc" }, s.flavor) : null,
@@ -419,14 +410,14 @@
 
     return NF.h("div", { class: "fighter-card side-" + side },
       NF.h("div", { class: "card-head" },
-      NF.h("div", { class: "card-id" },
-        NF.h("h2", { class: "fighter-name" }, f.name),
-        NF.h("div", { class: "fighter-title" }, f.title.name),
-        f.title.description
-          ? NF.h("div", { class: "title-desc" }, f.title.description) : null,
-        f.title.bonuses_text
-          ? NF.h("div", { class: "title-bonus" },
-              fmt("title_bonus_label", { bonuses: f.title.bonuses_text })) : null),
+        NF.h("div", { class: "card-id" },
+          NF.h("h2", { class: "fighter-name" }, f.name),
+          NF.h("div", { class: "fighter-title" }, f.title.name),
+          f.title.description
+            ? NF.h("div", { class: "title-desc" }, f.title.description) : null,
+          f.title.bonuses_text
+            ? NF.h("div", { class: "title-bonus" },
+                fmt("title_bonus_label", { bonuses: f.title.bonuses_text })) : null),
         NF.h("div", { class: "fighter-power" },
           NF.h("div", { class: "power-value" }, String(f.power)),
           NF.h("div", { class: "power-label" }, t("power_label")))),
@@ -473,11 +464,15 @@
     }
   }
 
-  /* ---------- 战斗 HUD：HP / 属性 / 行动槽 / buff 实时渲染 ---------- */
+  /* ---------- 战斗 HUD：HP / 六维属性 / 行动槽 / buff 实时渲染 ----------
+   * 属性为引擎真实值（v0.10.0），随每条战报的快照刷新，变化时高亮提示。 */
 
   function buildHud(f, side) {
+    var attrOf = function (id) {
+      return f.attributes.filter(function (a) { return a.id === id; })[0];
+    };
     var attrIcon = function (id) {
-      var found = f.attributes.filter(function (a) { return a.id === id; })[0];
+      var found = attrOf(id);
       if (found && found.emoji) return found.emoji + " ";
       var name = found ? found.name : id.toUpperCase();
       return name + " ";
@@ -488,8 +483,11 @@
     refs.atkVal = NF.h("b", null, "");
     refs.defVal = NF.h("b", null, "");
     refs.spdVal = NF.h("b", null, "");
+    refs.critVal = NF.h("b", null, "");
+    refs.dodgeVal = NF.h("b", null, "");
     refs.atkStat = NF.h("span", { class: "hud-stat", title: attrNameOf(f, "atk") }, attrIcon("atk"), refs.atkVal);
     refs.gaugeFill = NF.h("div", { class: "hud-gaugefill" });
+    refs.gaugeText = NF.h("span", { class: "hud-gaugeval" }, "");
     refs.buffs = NF.h("div", { class: "hud-buffs" });
     refs.root = NF.h("div", { class: "hud side-" + side },
       NF.h("div", { class: "hud-head" },
@@ -499,10 +497,13 @@
       NF.h("div", { class: "hud-stats" },
         refs.atkStat,
         NF.h("span", { class: "hud-stat", title: attrNameOf(f, "def") }, attrIcon("def"), refs.defVal),
-        NF.h("span", { class: "hud-stat", title: attrNameOf(f, "spd") }, attrIcon("spd"), refs.spdVal)),
+        NF.h("span", { class: "hud-stat", title: attrNameOf(f, "spd") }, attrIcon("spd"), refs.spdVal),
+        NF.h("span", { class: "hud-stat", title: attrNameOf(f, "crit") }, attrIcon("crit"), refs.critVal),
+        NF.h("span", { class: "hud-stat", title: attrNameOf(f, "dodge") }, attrIcon("dodge"), refs.dodgeVal)),
       NF.h("div", { class: "hud-gaugewrap" },
         NF.h("span", { class: "hud-gaugelabel" }, t("gauge_label")),
-        NF.h("div", { class: "hud-gauge" }, refs.gaugeFill)),
+        NF.h("div", { class: "hud-gauge" }, refs.gaugeFill),
+        refs.gaugeText),
       refs.buffs);
     return refs;
   }
@@ -512,33 +513,48 @@
     return found ? found.name : id.toUpperCase();
   }
 
+  /* 数值刷新：文本变化时短暂高亮（属性实时变化的可视反馈） */
+  function setStat(el, text) {
+    if (el.textContent === text) return;
+    el.textContent = text;
+    el.classList.remove("bump");
+    void el.offsetWidth;
+    el.classList.add("bump");
+  }
+
   function applyHudState(refs, snap, instant) {
     if (!refs || !snap) return;
     var hpPct = snap.max_hp > 0 ? (snap.hp / snap.max_hp * 100) : 0;
     refs.hpFill.style.width = Math.max(0, Math.min(100, hpPct)) + "%";
-    refs.hpText.textContent = fmtInt(snap.hp) + " / " + fmtInt(snap.max_hp);
-    refs.atkVal.textContent = fmtInt(snap.atk);
-    refs.defVal.textContent = fmtInt(snap.def);
-    refs.spdVal.textContent = fmtInt(snap.spd);
-    refs._gain = snap.gauge_gain != null ? +snap.gauge_gain : 0;
+    setStat(refs.hpText, fmtInt(snap.hp) + " / " + fmtInt(snap.max_hp));
+    setStat(refs.atkVal, fmtInt(snap.atk));
+    setStat(refs.defVal, fmtInt(snap.def));
+    setStat(refs.spdVal, fmtInt(snap.spd));
+    setStat(refs.critVal, fmtPct(snap.crit / 100));
+    setStat(refs.dodgeVal, fmtPct(snap.dodge / 100));
     refs._dead = snap.hp <= 0;
     var boosted = (snap.buffs || []).some(function (b) { return b.id === "last_stand"; });
     refs.atkStat.classList.toggle("atk-boost", boosted);
-    // 行动槽：服务器快照对齐（行动消耗时快速回落；校正上升按刻节奏；瞬时模式直接应用）
-    var gauge = Math.max(0, Math.min(100, snap.gauge));
-    var prev = refs._gauge == null ? gauge : refs._gauge;
-    refs._gauge = gauge;
+    // 行动槽：真实引擎值 + 百分比条（服务器快照对齐；瞬时模式直接应用）
+    var th = snap.gauge_threshold || 100;
+    var gauge = Math.max(0, Math.min(+snap.gauge || 0, th));
+    var gp = snap.gauge_pct != null ? +snap.gauge_pct
+      : Math.min(100, gauge / th * 100);
+    refs._gain = snap.gauge_pct_gain != null ? +snap.gauge_pct_gain : 0;
+    setStat(refs.gaugeText, fmtInt(gauge) + "/" + fmtInt(th));
+    var prev = refs._gaugePct == null ? gp : refs._gaugePct;
+    refs._gaugePct = gp;
     var duration;
-    if (instant || gauge === prev) {
+    if (instant || gp === prev) {
       duration = 0;
-    } else if (gauge < prev) {
+    } else if (gp < prev) {
       duration = 150;
     } else {
-      duration = tickDuration();
+      duration = Math.max(120, msgDuration());
     }
     refs.gaugeFill.style.transition = duration > 0
       ? "width " + duration + "ms linear" : "none";
-    refs.gaugeFill.style.width = gauge + "%";
+    refs.gaugeFill.style.width = gp + "%";
     // buff 差量刷新：集合未变化时不重建，避免闪烁
     var sig = JSON.stringify(snap.buffs || []);
     if (refs._buffSig !== sig) {
@@ -648,6 +664,40 @@
     })));
   }
 
+  /* ---------- 战报富文本渲染 ----------
+   * 后端为每条战报提供 rich 段列表：阵营名（红/蓝加粗）、技能名（各自配色
+   * 加粗）、伤害（红）、治疗（绿）、普通文本；技能使用行后附个性化描述。 */
+
+  function richSeg(seg) {
+    if (seg.k === "name-a") return NF.h("b", { class: "nm nm-a" }, seg.t);
+    if (seg.k === "name-b") return NF.h("b", { class: "nm nm-b" }, seg.t);
+    if (seg.k === "skill") {
+      return NF.h("b", { class: "sk", style: { color: skillColor(seg.id) } }, seg.t);
+    }
+    if (seg.k === "dmg") return NF.h("span", { class: "dmg" }, seg.t);
+    if (seg.k === "heal") return NF.h("span", { class: "heal" }, seg.t);
+    return document.createTextNode(seg.t);
+  }
+
+  /* 技能使用行（skill_proc）之后附该技能实例的个性化描述一行 */
+  function appendSkillDesc(box, entry) {
+    var side = null;
+    (entry.rich || []).some(function (seg) {
+      if (seg.k === "name-a") { side = 0; return true; }
+      if (seg.k === "name-b") { side = 1; return true; }
+      return false;
+    });
+    var sid = entry.params && entry.params.skill && entry.params.skill.id;
+    if (side == null || !sid || !state.fighters) return;
+    var find = function (idx) {
+      var list = state.fighters[idx] && state.fighters[idx].skills;
+      return list ? list.filter(function (x) { return x.id === sid; })[0] : null;
+    };
+    var s = find(side) || find(1 - side);
+    if (!s) return;
+    box.appendChild(NF.h("div", { class: "log-desc" }, skillText(s)));
+  }
+
   function appendLogEntry(entry) {
     if (!els.logBox) return;
     var cls = "log-entry";
@@ -655,7 +705,14 @@
     else if (entry.template === "skill_proc") cls += " log-skill";
     else if (entry.template === "death" || entry.template === "poison_death") cls += " log-death";
     else if (entry.template === "victory" || entry.template === "draw") cls += " log-result";
-    els.logBox.appendChild(NF.h("div", { class: cls }, entry.text));
+    var box = NF.h("div", { class: cls });
+    if (entry.rich && entry.rich.length) {
+      entry.rich.forEach(function (seg) { box.appendChild(richSeg(seg)); });
+    } else {
+      box.appendChild(document.createTextNode(entry.text || ""));
+    }
+    if (entry.template === "skill_proc") appendSkillDesc(box, entry);
+    els.logBox.appendChild(box);
     els.logBox.scrollTop = els.logBox.scrollHeight;
     if (entry.state) applyBattleState(entry.state, !!state.skipping);
   }
@@ -683,15 +740,9 @@
 
   /* ---------------- 启动 ---------------- */
 
-  function detectLang() {
-    var nav = (navigator.language || "zh").toLowerCase();
-    return nav.indexOf("en") === 0 ? "en" : "zh";
-  }
-
   function init() {
     try { state.simple = localStorage.getItem("nf_simple") === "1"; } catch (e) { /* 忽略 */ }
-    loadLangText(detectLang())
-      .catch(function () { return loadLangText("zh"); })
+    loadText()
       .then(function () { renderAll(); })
       .catch(function (e) {
         document.body.appendChild(NF.h("div", { class: "toast show" },

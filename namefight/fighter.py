@@ -5,13 +5,16 @@
 - 主派生 PRNG 消耗顺序固定（v0.9.1）：属性（配置顺序，正态投掷）-> 技能数量
   -> 技能抽取 -> 称号结构 -> 称号字段（按结构字段顺序）。
 - 属性在 [min, max] 内正态投掷（均值 = 区间中点，σ = 宽 / 4，截断到区间）；
-  引擎与配置一律使用原始量纲（攻 13 / 防 5 / 速 10 / 命 100），
-  显示层经 display_ref 换算为「满投掷 = 100」的白板单位（见 display_factor）。
+  v0.10.0 起非百分比属性为 ×100 整数量纲（命 20000 / 攻防速 1500），
+  投掷结果**取整**；crit/dodge 为百分数，保持浮点；
+  全部数值**直接以引擎真实值显示**（不再换算白板 100 单位）。
 - 技能个性化（熟练度/数值/词缀/变数随 MD5 扰动）使用独立种子
   md5(规范化名字 + ":" + 技能id)，与主派生流互不影响。
 - v0.9.0 起每个技能附带一个熟练度（0~100）与至多两个变数槽位：
   熟练度按技能各自的区间缩放触发概率（或条件型的效果值），
   变数槽位以 25% 概率实际成为共鸣变数（公式括号紧跟对应数值）。
+- 文案（技能名/属性名/称号字段名等）与数值自 v0.10.0 起合并在
+  config/game 同一条目内保存，本模块直接从 GameCfg 读取。
 """
 from __future__ import annotations
 
@@ -22,10 +25,7 @@ from .config import GameCfg, TITLE_FIELD_POOLS
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
-# 字段名 -> locale.titles 中的键
-_FIELD_LOCALE = {"prefix": "prefixes", "core": "cores", "core2": "cores", "suffix": "suffixes"}
-
-# 技能参数标签模板键（测试据此校验每个 locale 都有对应文案）
+# 技能参数标签模板键（测试据此校验配置都有对应文案）
 STATS_KEYS_USED = frozenset({
     "link_sep", "link_formula", "link_expr_difference", "link_expr_sum",
     "link_ratio", "link_difference", "link_sum",
@@ -107,10 +107,9 @@ RESONANCE_SPECS = {
 # 熟练度作用字段 -> 实际缩放的参数列表（条件触发型技能缩放效果值而非概率）
 _MASTERY_PARAMS = {"chance": ("chance",), "value": ("value", "spd"), "immune": ("immune",)}
 
-# 数值字段的量纲表：(效果类型, 字段) -> 属性 id 或 "gauge"。
-# 显示层按 display_factor 把这些字段的原始量纲换算为白板 100 显示单位，
-# 与属性面板 / 快照 / 共鸣公式的显示口径保持一致；
-# 不在表中的字段为纯倍率 / 百分比 / 刻数，直接展示。
+# 绝对数值字段表：(效果类型, 字段) -> 有量纲。
+# v0.10.0 起仅用于词缀文案的展示语义：有量纲字段的词缀增量以整数展示，
+# 纯倍率字段以百分数展示；数值本身一律以引擎真实值直显（不再换算）。
 _FIELD_UNITS = {
     ("poison", "damage"): "hp",
     ("heal", "value"): "hp",
@@ -125,39 +124,13 @@ _FIELD_UNITS = {
 }
 
 
-def display_factor(game: GameCfg, unit: str) -> float:
-    """显示层换算系数：满投掷（或满行动槽）= 100，无量纲属性为 1。
-
-    引擎计算永远使用原始量纲，本函数只用于展示（AGENTS.md 2.1.5）。
-    """
-    if unit == "gauge":
-        return 100.0 / float(game.battle.gauge_threshold)
-    try:
-        a = game.attr(unit)
-    except Exception:
-        return 1.0
-    return 100.0 / a.display_ref if a.display_ref > 0 else 1.0
-
-
-def display_value(game: GameCfg, unit: str, raw) -> float:
-    """原始量纲数值 -> 显示值（无 display_ref 的属性原值直显）。"""
-    return float(raw) * display_factor(game, unit)
-
-
-def display_units(game: GameCfg) -> dict:
-    """全部量纲的显示换算系数（对战中一次计算、全程复用）。"""
-    units = {a.id: display_factor(game, a.id) for a in game.attributes}
-    units["gauge"] = display_factor(game, "gauge")
-    return units
-
-
 def field_unit(eff: dict, field: str):
-    """效果数值字段的量纲（None = 无量纲，直接展示）。"""
+    """效果数值字段是否为绝对数值（None = 纯倍率/百分比，直接展示）。"""
     return _FIELD_UNITS.get((str(eff.get("type")), field))
 
 
 class InvalidName(Exception):
-    """名字不合法。code 用于映射 locale 错误文案。"""
+    """名字不合法。code 用于映射错误文案。"""
 
     def __init__(self, code: str):
         super().__init__(code)
@@ -196,8 +169,12 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
     rng = DetRng(int(digest, 16))
 
     # 属性正态投掷：[min, max] 内近似正态（均值 = 区间中点，σ = 宽 / 4，截断），
-    # 消耗顺序 = 配置顺序；引擎使用原始量纲，展示层另行换算
-    attrs = {a.id: rng.next_gaussian(a.min, a.max) for a in game.attributes}
+    # 消耗顺序 = 配置顺序。v0.10.0：非百分比属性为 ×100 整数量纲，投掷即取整；
+    # crit/dodge 为百分数，保持浮点
+    attrs = {}
+    for a in game.attributes:
+        roll = rng.next_gaussian(a.min, a.max)
+        attrs[a.id] = round(roll) if a.format != "percent" else roll
 
     count = rng.next_gaussian_range(game.skill_count_min, game.skill_count_max)
     skills = rng.sample_weighted(((s, s.weight) for s in game.skills), count)
@@ -387,18 +364,18 @@ def format_field(value, fmt: str) -> str:
     return format_pct(float(value))
 
 
-def format_resonance_final(scaled_value, field: str, eff: dict, locale=None) -> str:
-    """共鸣后目标参数的展示值；locale 为 None 时（引擎战报）不带单位词。"""
+def format_resonance_final(scaled_value, field: str, eff: dict, game=None) -> str:
+    """共鸣后目标参数的展示值（引擎真实值）；game 为 None 时不带单位词。"""
     fmt = _res_spec(eff, field)[0]
     text = format_field(scaled_value, fmt)
-    if locale is None:
+    if game is None:
         return text
     if fmt == "num":
-        return render_template(locale.stats.get("final_damage", "{v}"),
-                               {"v": text}, locale)
+        return render_template(game.stats.get("final_damage", "{v}"),
+                               {"v": text}, game)
     if fmt == "turns":
-        return render_template(locale.stats.get("final_turns", "{v}"),
-                               {"v": text}, locale)
+        return render_template(game.stats.get("final_turns", "{v}"),
+                               {"v": text}, game)
     return text
 
 
@@ -434,18 +411,15 @@ def title_bonus_items(title_fields, structure, game: GameCfg):
 
 
 def _nat_params(display_eff: dict, game: GameCfg):
-    """效果类型 -> (模板键, 模板参数)。数值为共鸣估算后的显示值：
-    按字段量纲（_FIELD_UNITS）换算为白板 100 显示单位后输出--
+    """效果类型 -> (模板键, 模板参数)。数值为共鸣估算后的引擎真实值：
     百分数 2 位小数（format_pct），其余取整（format_num）。
     模板参数名与效果字段名一致，便于共鸣公式内联注入。"""
     ttype = display_eff.get("type")
     chance = float(display_eff.get("chance", 1.0))
 
     def num(field, default=0.0):
-        """整数类数值字段：先按量纲换算为显示单位再取整。"""
-        unit = field_unit(display_eff, field)
-        factor = display_factor(game, unit) if unit else 1.0
-        return format_num(float(display_eff.get(field, default)) * factor)
+        """绝对数值字段：引擎真实值取整展示。"""
+        return format_num(float(display_eff.get(field, default)))
 
     if ttype == "charge":
         return "nat_charge", {
@@ -578,63 +552,59 @@ def _nat_params(display_eff: dict, game: GameCfg):
     return "nat_" + str(ttype), {}
 
 
-def _link_formula(eff: dict, link: dict, field: str, game: GameCfg, locale):
-    """共鸣描述两部分（v0.9.1）：
+def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
+    """共鸣描述两部分（v0.10.0 起全部为引擎真实值）：
 
     1. 内联最简线性公式（紧跟对应数值）：最终值 = 基数 + 变量式 * 合并系数；
        变量式以属性 emoji 表示--own 省略范围词、enemy 前缀「对方」、
        difference「【己方-对方】」、sum「【己方+对方】」；
-       基数与系数均按 display_factor 换算为白板 100 显示单位，
-       与属性面板 / 快照显示口径一致（引擎计算仍用原始量纲）；
     2. 尾句依赖描述（使用属性全名，如「己方攻击越高，效果值越高。」）。
     """
-    tmpl = locale.stats
+    tmpl = game.stats
     var_id = str(link.get("variable"))
-    attr_loc = locale.attributes.get(var_id, {})
-    var_name = str(attr_loc.get("name", var_id))
-    var_emoji = str(attr_loc.get("emoji", var_name))
-    base = max(1.0, display_value(game, var_id, game.attr(var_id).base))
-    unit = field_unit(eff, field)
-    field_factor = display_factor(game, unit) if unit else 1.0
+    var_def = game.attr(var_id)
+    var_name = var_def.name
+    var_emoji = var_def.emoji or var_name
+    base = max(1.0, float(var_def.base))
     mode = str(link.get("mode", "own"))
     scope_own = str(tmpl.get("scope_own", ""))
     scope_enemy = str(tmpl.get("scope_enemy", ""))
     field_word = str(tmpl.get("field_" + field, field))
     fmt = _res_spec(eff, field)[0]
-    eff_disp = float(eff.get(field, 0.0)) * field_factor
-    base_display = format_field(eff_disp, fmt)
-    merged = format_pct(eff_disp * float(link.get("rate", 0.0)) / base)
+    eff_raw = float(eff.get(field, 0.0))
+    base_display = format_field(eff_raw, fmt)
+    merged = format_pct(eff_raw * float(link.get("rate", 0.0)) / base)
     against = var_id
     if mode in ("difference", "sum"):
         vdef = next((v for v in game.skill_variable_link.variables if v.id == var_id), None)
         against = vdef.diff_against if vdef else var_id
-        against_name = str(locale.attributes.get(against, {}).get("name", against))
+        against_name = game.attr(against).name
         expr_tmpl = "link_expr_difference" if mode == "difference" else "link_expr_sum"
         expr = render_template(tmpl.get(expr_tmpl, "{emoji}"),
                                {"own": scope_own, "enemy": scope_enemy,
-                                "emoji": var_emoji}, locale)
+                                "emoji": var_emoji}, game)
         tail_tmpl = "link_difference" if mode == "difference" else "link_sum"
         tail = render_template(tmpl.get(tail_tmpl, ""),
                                {"own": scope_own + var_name,
                                 "enemy": scope_enemy + against_name,
-                                "field": field_word}, locale)
+                                "field": field_word}, game)
     elif mode == "enemy":
         expr = scope_enemy + var_emoji
         tail = render_template(tmpl.get("link_ratio", ""),
                                {"scope": scope_enemy, "stat": var_name,
-                                "field": field_word}, locale)
+                                "field": field_word}, game)
     else:
         expr = var_emoji
         tail = render_template(tmpl.get("link_ratio", ""),
                                {"scope": scope_own, "stat": var_name,
-                                "field": field_word}, locale)
+                                "field": field_word}, game)
     formula = render_template(tmpl.get("link_formula", ""),
                               {"base": base_display, "expr": expr, "merged": merged},
-                              locale)
+                              game)
     return formula, tail
 
 
-def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale,
+def _natural_text(eff: dict, fighter: Fighter, game: GameCfg,
                   simple: bool = False, live: bool = False) -> str:
     """标准化自然语言描述。参数为共鸣估算后的最终值（敌方按基础值估算）：
 
@@ -649,7 +619,7 @@ def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale,
         field = str(link.get("field"))
         if field not in params:
             continue
-        formula, tail = _link_formula(eff, link, field, game, locale)
+        formula, tail = _link_formula(eff, link, field, game)
         final = str(params[field])
         if live:
             params[field] = LIVE_MARKER + ("" if simple else formula)
@@ -659,7 +629,7 @@ def _natural_text(eff: dict, fighter: Fighter, game: GameCfg, locale,
             params[field] = final + formula
         if tail:
             tails.append(tail)
-    text = render_template(locale.stats.get(key, key), params, locale)
+    text = render_template(game.stats.get(key, key), params, game)
     for tail in tails:
         text += tail
     if not text.endswith("。") and text:
@@ -671,14 +641,14 @@ def _link_calc(eff: dict, game: GameCfg) -> list:
     """对战实时技能数据（每个共鸣变数一条）：前端按公式
     最终值 = base + 变量式 × coeff（含上下限）用双方快照逐刻重算，
     与引擎 resonance_coeff + apply_resonance 完全一致，按槽位顺序排列。
-    v0.9.1 起 base/coeff/clamp 均为白板 100 显示单位，与快照属性口径一致。"""
+    v0.10.0 起 base/coeff/clamp 均为引擎真实值，与快照属性口径一致。"""
     out = []
     for link in eff.get("links", ()):
         field = str(link.get("field"))
         if field not in eff:
             continue
         var_id = str(link.get("variable"))
-        base = max(1.0, display_value(game, var_id, game.attr(var_id).base))
+        base = max(1.0, float(game.attr(var_id).base))
         mode = str(link.get("mode", "own"))
         against = var_id
         if mode in ("difference", "sum"):
@@ -686,9 +656,7 @@ def _link_calc(eff: dict, game: GameCfg) -> list:
                          if v.id == var_id), None)
             against = vdef.diff_against if vdef else var_id
         fmt, lo, hi = _res_spec(eff, field)
-        unit = field_unit(eff, field)
-        field_factor = display_factor(game, unit) if unit else 1.0
-        value = float(eff.get(field, 0.0)) * field_factor
+        value = float(eff.get(field, 0.0))
         out.append({
             "field": field,
             "fmt": fmt,
@@ -697,8 +665,7 @@ def _link_calc(eff: dict, game: GameCfg) -> list:
             "mode": mode,
             "variable": var_id,
             "against": against,
-            "clamp": [None if lo is None else lo * field_factor,
-                      None if hi is None else hi * field_factor],
+            "clamp": [lo, hi],
         })
     return out
 
@@ -707,16 +674,16 @@ _MOD_TEMPLATES = {"chance": "mod_chance", "value": "mod_value",
                   "damage": "mod_damage", "turns": "mod_turns", "ticks": "mod_ticks"}
 
 
-def _mod_texts(eff: dict, game: GameCfg, locale) -> list:
+def _mod_texts(eff: dict, game: GameCfg) -> list:
     """词缀修正的可读文案（显示个性化缩放后的实际值），如「疾风：触发率 +3%」。
-    数值类修正按字段量纲换算为白板 100 显示单位。"""
+    绝对数值字段以整数展示，纯倍率字段以百分数展示。"""
     texts = []
-    for pool, key, scale_key in ((game.skill_name_modifiers.prefixes, "prefix", "prefix_scale"),
-                                 (game.skill_name_modifiers.suffixes, "suffix", "suffix_scale")):
+    for kind, key, scale_key in (("prefix", "prefix", "prefix_scale"),
+                                 ("suffix", "suffix", "suffix_scale")):
         mod_id = eff.get(key)
         if not mod_id:
             continue
-        mdef = next((m for m in pool if m.id == mod_id), None)
+        mdef = game.name_modifier(kind, mod_id)
         if mdef is None:
             continue
         scale = float(eff.get(scale_key, 1.0))
@@ -731,19 +698,16 @@ def _mod_texts(eff: dict, game: GameCfg, locale) -> list:
             elif param == "value" and not field_unit(eff, "value"):
                 magnitude = format_pct(abs(scaled))  # 纯倍率字段：增量以百分数展示
             else:
-                unit = field_unit(eff, param) if param in ("value", "damage") else None
-                factor = display_factor(game, unit) if unit else 1.0
-                magnitude = format_num(abs(scaled) * factor)
+                magnitude = format_num(abs(scaled))  # 绝对数值字段：真实值整数展示
             sign = "+" if scaled > 0 else "-"
-            parts.append(render_template(locale.stats.get(template_key, template_key),
-                                         {"v": sign + magnitude}, locale))
+            parts.append(render_template(game.stats.get(template_key, template_key),
+                                         {"v": sign + magnitude}, game))
         if parts:
-            name = locale.modifiers.get(key + "es", {}).get(mod_id, {}).get("name", mod_id)
-            texts.append(name + "：" + "，".join(parts))
+            texts.append(mdef.name + "：" + "，".join(parts))
     return texts
 
 
-def _mastery_text(eff: dict, sdef, locale) -> str:
+def _mastery_text(eff: dict, sdef, game: GameCfg) -> str:
     """熟练度文案（v0.9.1）：直接给出该技能实例的最终触发率，
     如「熟练度 63：触发率 36.52%」--永远不超过 100%；
     条件型技能给出效果倍率（×1.21），壁垒类给出免疫触发率。"""
@@ -752,18 +716,18 @@ def _mastery_text(eff: dict, sdef, locale) -> str:
         return ""
     if sdef.mastery_on == "immune":
         rate = min(0.5, max(0.01, float(eff.get("immune", 0.0))))
-        return render_template(locale.stats.get("mastery_text_immune", ""),
+        return render_template(game.stats.get("mastery_text_immune", ""),
                                {"v": int(mastery), "rate": format_pct(rate)},
-                               locale)
+                               game)
     if sdef.mastery_on == "chance":
         rate = min(0.95, max(0.02, float(eff.get("chance", 0.0))))
-        return render_template(locale.stats.get("mastery_text", ""),
+        return render_template(game.stats.get("mastery_text", ""),
                                {"v": int(mastery), "rate": format_pct(rate)},
-                               locale)
-    return render_template(locale.stats.get("mastery_text_value", ""),
+                               game)
+    return render_template(game.stats.get("mastery_text_value", ""),
                            {"v": int(mastery),
                             "mult": "%.2f" % float(eff.get("mastery_mult", 1.0))},
-                           locale)
+                           game)
 
 
 def _find_structure(fighter: Fighter, game: GameCfg):
@@ -780,10 +744,9 @@ def _format_bonus(value: float, attr_format: str) -> str:
     return "%s%s" % (sign, format_num(value))
 
 
-def _title_bonus_api(fighter: Fighter, game: GameCfg, locale) -> dict:
+def _title_bonus_api(fighter: Fighter, game: GameCfg) -> dict:
     """称号加成的对外表示：按属性配置顺序聚合，供卡牌展示。
-    增量按 display_factor 换算为白板 100 显示单位（与属性面板口径一致）；
-    value 保留原始量纲增量。"""
+    value 为引擎真实值增量（v0.10.0 起直显，不再换算）。"""
     structure = _find_structure(fighter, game)
     if structure is None:
         return {"bonuses": [], "bonuses_text": ""}
@@ -795,16 +758,14 @@ def _title_bonus_api(fighter: Fighter, game: GameCfg, locale) -> dict:
     for a in game.attributes:
         if a.id not in sums or sums[a.id] == 0:
             continue
-        name = locale.attributes.get(a.id, {}).get("name", a.id)
-        display = display_value(game, a.id, sums[a.id])
-        text = _format_bonus(display, a.format)
-        bonuses.append({"attr": a.id, "name": name, "value": sums[a.id],
+        text = _format_bonus(sums[a.id], a.format)
+        bonuses.append({"attr": a.id, "name": a.name, "value": sums[a.id],
                         "display": text, "format": a.format})
-        parts.append("%s %s" % (name, text))
+        parts.append("%s %s" % (a.name, text))
     return {"bonuses": bonuses, "bonuses_text": " · ".join(parts)}
 
 
-def compose_title_name(fighter: Fighter, game: GameCfg, locale) -> str:
+def compose_title_name(fighter: Fighter, game: GameCfg) -> str:
     """按结构与连接符拼接称号显示名。"""
     structure = _find_structure(fighter, game)
     if structure is None:
@@ -812,8 +773,8 @@ def compose_title_name(fighter: Fighter, game: GameCfg, locale) -> str:
     parts = []
     for fname in structure.fields:
         fid = fighter.title_fields.get(fname)
-        entry = locale.titles.get(_FIELD_LOCALE[fname], {}).get(fid, {})
-        parts.append(str(entry.get("name", fid or "")))
+        fdef = game.title_field(TITLE_FIELD_POOLS[fname], fid)
+        parts.append(fdef.name if fdef is not None else str(fid or ""))
     if not parts:
         return ""
     out = parts[0]
@@ -823,7 +784,7 @@ def compose_title_name(fighter: Fighter, game: GameCfg, locale) -> str:
     return out
 
 
-def compose_title_desc(fighter: Fighter, game: GameCfg, locale) -> str:
+def compose_title_desc(fighter: Fighter, game: GameCfg) -> str:
     """把各字段的描述片段用「，」连接成称号描述。"""
     structure = _find_structure(fighter, game)
     if structure is None:
@@ -831,76 +792,72 @@ def compose_title_desc(fighter: Fighter, game: GameCfg, locale) -> str:
     frags = []
     for fname in structure.fields:
         fid = fighter.title_fields.get(fname)
-        entry = locale.titles.get(_FIELD_LOCALE[fname], {}).get(fid, {})
-        desc = entry.get("desc", "")
-        if desc:
-            frags.append(str(desc))
+        fdef = game.title_field(TITLE_FIELD_POOLS[fname], fid)
+        if fdef is not None and fdef.desc:
+            frags.append(fdef.desc)
     return "，".join(frags) + "。" if frags else ""
 
 
-def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
-    """斗士数据的对外表示：数值来自 Fighter/个性化效果，显示名全部来自 locale。
-    属性 value/min/max 为白板 100 显示单位（满投掷 = 100），
-    raw 为引擎原始量纲值；两者仅展示口径不同，计算一律使用 raw。"""
+def fighter_to_api(fighter: Fighter, game: GameCfg) -> dict:
+    """斗士数据的对外表示：数值来自 Fighter/个性化效果，显示名来自同一配置。
+    v0.10.0 起属性 value/min/max 均为引擎真实值（不再换算白板单位）。"""
     attrs_api = []
     for a in game.attributes:
-        a_loc = locale.attributes.get(a.id, {})
         raw = fighter.attrs[a.id]
         attrs_api.append({
             "id": a.id,
-            "name": a_loc.get("name", a.id),
-            "emoji": a_loc.get("emoji", ""),
-            "value": round(display_value(game, a.id, raw), 4),
-            "raw": round(float(raw), 4),
-            "min": round(display_value(game, a.id, a.min), 4),
-            "max": round(display_value(game, a.id, a.max), 4),
+            "name": a.name,
+            "emoji": a.emoji,
+            "value": round(float(raw), 4),
+            "min": round(a.min, 4),
+            "max": round(a.max, 4),
             "format": a.format,
         })
     skills_api = []
     for sdef, eff in personalized_effects(fighter, game):
-        entry = locale.skills.get(sdef.id, {})
-        sep = str(locale.stats.get("link_sep", "·"))
-        name = str(entry.get("name", sdef.id))
-        mod_names = locale.modifiers
+        sep = str(game.stats.get("link_sep", "·"))
+        name = sdef.name
         if eff.get("prefix"):
-            pname = mod_names.get("prefixes", {}).get(eff["prefix"], {}).get("name")
-            if pname:
-                name = pname + sep + name
+            pdef = game.name_modifier("prefix", eff["prefix"])
+            if pdef is not None:
+                name = pdef.name + sep + name
         if eff.get("suffix"):
-            sname = mod_names.get("suffixes", {}).get(eff["suffix"], {}).get("name")
-            if sname:
-                name = name + sep + sname
+            smod = game.name_modifier("suffix", eff["suffix"])
+            if smod is not None:
+                name = name + sep + smod.name
         links = eff.get("links", ())
         for link in links:
-            marker = locale.stats.get("link_" + str(link.get("variable")))
+            marker = game.stats.get("link_" + str(link.get("variable")))
             if marker:
                 name = name + sep + str(marker)
-        link_api = [{
-            "field": str(link.get("field")),
-            "variable": link.get("variable"),
-            "name": locale.attributes.get(link.get("variable"), {}).get(
-                "name", link.get("variable")),
-            "mode": link.get("mode", "own"),
-            "rate": link.get("rate", 0),
-        } for link in links]
+        link_api = []
+        for link in links:
+            vdef = next((a for a in game.attributes if a.id == link.get("variable")), None)
+            link_api.append({
+                "field": str(link.get("field")),
+                "variable": link.get("variable"),
+                "name": vdef.name if vdef else str(link.get("variable")),
+                "mode": link.get("mode", "own"),
+                "rate": link.get("rate", 0),
+            })
         skill_entry = {
             "id": sdef.id,
             "name": name,
-            "flavor": entry.get("description", ""),
-            "text": _natural_text(eff, fighter, game, locale),
-            "text_simple": _natural_text(eff, fighter, game, locale, simple=True),
-            "modifiers": _mod_texts(eff, game, locale),
+            "flavor": sdef.description,
+            "text": _natural_text(eff, fighter, game),
+            "text_simple": _natural_text(eff, fighter, game, simple=True),
+            "modifiers": _mod_texts(eff, game),
             "mastery": int(eff.get("mastery", 0)),
-            "mastery_text": _mastery_text(eff, sdef, locale),
+            "mastery_text": _mastery_text(eff, sdef, game),
             "link": link_api if link_api else None,
         }
         if links:
-            skill_entry["live_text"] = _natural_text(eff, fighter, game, locale, live=True)
+            skill_entry["live_text"] = _natural_text(eff, fighter, game, live=True)
             skill_entry["live_text_simple"] = _natural_text(
-                eff, fighter, game, locale, simple=True, live=True)
+                eff, fighter, game, simple=True, live=True)
             skill_entry["link_calc"] = _link_calc(eff, game)
         skills_api.append(skill_entry)
-    title_bonus = _title_bonus_api(fighter, game, locale)
+    title_bonus = _title_bonus_api(fighter, game)
     return {
         "name": fighter.name,
         "normalized": fighter.normalized,
@@ -908,8 +865,8 @@ def fighter_to_api(fighter: Fighter, game: GameCfg, locale) -> dict:
         "digest_short": fighter.digest[:8],
         "title": {
             "structure": fighter.title_structure_id,
-            "name": compose_title_name(fighter, game, locale),
-            "description": compose_title_desc(fighter, game, locale),
+            "name": compose_title_name(fighter, game),
+            "description": compose_title_desc(fighter, game),
             "bonuses": title_bonus["bonuses"],
             "bonuses_text": title_bonus["bonuses_text"],
         },

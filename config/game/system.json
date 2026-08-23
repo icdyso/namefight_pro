@@ -1,10 +1,6 @@
 {
-  "version": "0.9.1",
-  "default_locale": "zh",
-  "available_locales": [
-    "zh",
-    "en"
-  ],
+  "version": "0.10.0",
+  "language": "zh",
   "name": {
     "trim": true,
     "case_sensitive": false,

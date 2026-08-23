@@ -1,4 +1,8 @@
-"""HTTP 服务：静态资源 + JSON API。纯标准库实现（见 AGENTS.md 2.3）。"""
+"""HTTP 服务：静态资源 + JSON API。纯标准库实现（见 AGENTS.md 2.3）。
+
+v0.10.0 起配置单层化（config/game 同时含数值与文案），不再有 locale 概念；
+lang 查询参数仅为兼容旧前端而忽略。
+"""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .battle import battle_to_api, run_battle
-from .config import ConfigError, load_game_config, load_locale
+from .config import ConfigError, load_game_config
 from .fighter import InvalidName, derive_fighter, fighter_to_api
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,11 +40,6 @@ class AppState:
 
     def __init__(self, config_root: Path):
         self.game = load_game_config(config_root)
-        self.locales = {}
-        for lang in self.game.system.available_locales:
-            self.locales[lang] = load_locale(config_root, lang)
-        if self.game.system.default_locale not in self.locales:
-            raise ConfigError("默认语言不存在: %s" % self.game.system.default_locale)
 
 
 def make_handler(state: AppState):
@@ -130,50 +129,43 @@ def make_handler(state: AppState):
 
         # ---------- API ----------
 
-        def _require_lang(self, lang):
-            if lang not in state.locales:
-                self._send_error_json("unknown_locale", 400)
-                raise _Handled()
-            return lang
-
         def _api_get(self, path, query):
+            game = state.game
             if path == "/api/health":
-                self._send_json({"status": "ok", "version": state.game.system.version})
+                self._send_json({"status": "ok", "version": game.system.version})
             elif path == "/api/text":
-                lang = self._require_lang((query.get("lang") or [state.game.system.default_locale])[0])
                 self._send_json({
-                    "lang": lang,
-                    "langs": list(state.game.system.available_locales),
-                    "version": state.game.system.version,
-                    "ui": state.locales[lang].ui,
+                    "lang": game.system.language,
+                    "langs": [game.system.language],
+                    "version": game.system.version,
+                    "ui": game.ui,
+                    "playback": {"message_delay_ms": game.battle.message_delay_ms},
                 })
             elif path == "/api/fighter":
-                lang = self._require_lang((query.get("lang") or [state.game.system.default_locale])[0])
                 name = (query.get("name") or [""])[0]
-                fighter = derive_fighter(name, state.game)
-                self._send_json(fighter_to_api(fighter, state.game, state.locales[lang]))
+                fighter = derive_fighter(name, game)
+                self._send_json(fighter_to_api(fighter, game))
             else:
                 self._send_error_json("not_found", 404)
 
         def _api_battle(self, payload):
+            game = state.game
             if not isinstance(payload, dict):
                 self._send_error_json("bad_request", 400)
                 raise _Handled()
-            lang = self._require_lang(payload.get("lang") or state.game.system.default_locale)
             a = payload.get("a")
             b = payload.get("b")
             if not isinstance(a, str) or not isinstance(b, str):
                 self._send_error_json("empty_name", 400)
                 raise _Handled()
-            fighter_a = derive_fighter(a, state.game)
-            fighter_b = derive_fighter(b, state.game)
-            outcome = run_battle(fighter_a, fighter_b, state.game)
-            locale = state.locales[lang]
+            fighter_a = derive_fighter(a, game)
+            fighter_b = derive_fighter(b, game)
+            outcome = run_battle(fighter_a, fighter_b, game)
             fighters_api = [
-                fighter_to_api(fighter_a, state.game, locale),
-                fighter_to_api(fighter_b, state.game, locale),
+                fighter_to_api(fighter_a, game),
+                fighter_to_api(fighter_b, game),
             ]
-            self._send_json(battle_to_api(outcome, fighters_api, locale, state.game))
+            self._send_json(battle_to_api(outcome, fighters_api, game))
 
         def _api_battle_fast(self, payload):
             """极速对战：不生成快照、不做任何文案渲染，供批量测试/基准使用。
@@ -182,6 +174,7 @@ def make_handler(state: AppState):
                   {"pairs": [["a","b"], ...], "runs": 1}
             返回紧凑结果与耗时（ms）。
             """
+            game = state.game
             if not isinstance(payload, dict):
                 self._send_error_json("bad_request", 400)
                 raise _Handled()
@@ -206,11 +199,11 @@ def make_handler(state: AppState):
             started = time.perf_counter()
             results = []
             for a, b in pairs:
-                fighter_a = derive_fighter(a, state.game)
-                fighter_b = derive_fighter(b, state.game)
+                fighter_a = derive_fighter(a, game)
+                fighter_b = derive_fighter(b, game)
                 outcome = None
                 for _ in range(runs):
-                    outcome = run_battle(fighter_a, fighter_b, state.game,
+                    outcome = run_battle(fighter_a, fighter_b, game,
                                          snapshots=False)
                 results.append({
                     "a": fighter_a.normalized, "b": fighter_b.normalized,
@@ -222,7 +215,7 @@ def make_handler(state: AppState):
             elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
             self._send_json({"results": results, "runs": runs,
                              "elapsed_ms": elapsed_ms,
-                             "version": state.game.system.version})
+                             "version": game.system.version})
 
     return Handler
 
@@ -242,7 +235,7 @@ def main(argv=None):
 
     httpd = ThreadingHTTPServer((args.host, args.port), make_handler(state))
     print("名字竞技场 v%s 已启动: http://%s:%s" % (state.game.system.version, args.host, args.port))
-    print("可用语言: %s（Ctrl+C 退出）" % ", ".join(state.game.system.available_locales))
+    print("Ctrl+C 退出")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

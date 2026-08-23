@@ -1,8 +1,0 @@
-{
-  "hp":    { "name": "HP",    "emoji": "❤️" },
-  "atk":   { "name": "ATK",   "emoji": "⚔️" },
-  "def":   { "name": "DEF",   "emoji": "🛡️" },
-  "spd":   { "name": "SPD",   "emoji": "👟" },
-  "crit":  { "name": "CRIT",  "emoji": "🎯" },
-  "dodge": { "name": "DODGE", "emoji": "🌀" }
-}

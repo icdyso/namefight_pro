@@ -18,614 +18,358 @@
       "sum": 1
     },
     "targets": {
-      "charge": [
-        "value",
-        "crit"
-      ],
-      "damage_multiplier": [
-        "value",
-        "threshold"
-      ],
-      "lifesteal": [
-        "value",
-        "turns"
-      ],
-      "poison": [
-        "damage",
-        "ticks"
-      ],
-      "concussive": [
-        "value",
-        "ticks"
-      ],
-      "thunder": [
-        "value",
-        "decay"
-      ],
-      "sever": [
-        "value",
-        "delay"
-      ],
-      "gauge_surge": [
-        "value",
-        "crit_value"
-      ],
-      "damage_reduction": [
-        "value",
-        "ticks"
-      ],
-      "reflect": [
-        "value",
-        "ratio"
-      ],
-      "bulwark": [
-        "value",
-        "threshold"
-      ],
-      "retribution": [
-        "ratio",
-        "cap"
-      ],
-      "iron_will": [
-        "value",
-        "decay"
-      ],
-      "heal": [
-        "value",
-        "regen"
-      ],
-      "cleanse": [
-        "value",
-        "per"
-      ],
-      "low_hp_atk_bonus": [
-        "value",
-        "spd"
-      ],
-      "streak_bonus": [
-        "value",
-        "cap"
-      ],
-      "overload": [
-        "value",
-        "cost"
-      ],
-      "armor_shred": [
-        "value",
-        "ticks"
-      ],
-      "bleed": [
-        "value",
-        "ticks"
-      ],
-      "gamble": [
-        "value",
-        "penalty"
-      ],
-      "tempo": [
-        "value"
-      ],
-      "armor_pen": [
-        "crit"
-      ],
-      "blood_pact": [
-        "value",
-        "convert"
-      ],
-      "grudge": [
-        "value",
-        "ticks"
-      ]
+      "charge": ["value", "crit"],
+      "damage_multiplier": ["value", "threshold"],
+      "lifesteal": ["value", "turns"],
+      "poison": ["damage", "ticks"],
+      "concussive": ["value", "ticks"],
+      "thunder": ["value", "decay"],
+      "sever": ["value", "delay"],
+      "gauge_surge": ["value", "crit_value"],
+      "damage_reduction": ["value", "ticks"],
+      "reflect": ["value", "ratio"],
+      "bulwark": ["value", "threshold"],
+      "retribution": ["ratio", "cap"],
+      "iron_will": ["value", "decay"],
+      "heal": ["value", "regen"],
+      "cleanse": ["value", "per"],
+      "low_hp_atk_bonus": ["value", "spd"],
+      "streak_bonus": ["value", "cap"],
+      "overload": ["value", "cost"],
+      "armor_shred": ["value", "ticks"],
+      "bleed": ["value", "ticks"],
+      "gamble": ["value", "penalty"],
+      "tempo": ["value"],
+      "armor_pen": ["crit"],
+      "blood_pact": ["value", "convert"],
+      "grudge": ["value", "ticks"]
     },
     "variables": {
-      "atk": {
-        "weight": 3,
-        "rate": [
-          0.25,
-          0.65
-        ]
-      },
-      "def": {
-        "weight": 2,
-        "rate": [
-          0.25,
-          0.65
-        ]
-      },
-      "spd": {
-        "weight": 3,
-        "rate": [
-          0.25,
-          0.65
-        ]
-      },
-      "hp": {
-        "weight": 2,
-        "rate": [
-          0.25,
-          0.65
-        ]
-      },
-      "crit": {
-        "weight": 1,
-        "rate": [
-          0.25,
-          0.65
-        ]
-      },
-      "dodge": {
-        "weight": 1,
-        "rate": [
-          0.25,
-          0.65
-        ]
-      }
+      "atk":   { "weight": 3, "rate": [0.25, 0.65] },
+      "def":   { "weight": 2, "rate": [0.25, 0.65] },
+      "spd":   { "weight": 3, "rate": [0.25, 0.65] },
+      "hp":    { "weight": 2, "rate": [0.25, 0.65] },
+      "crit":  { "weight": 1, "rate": [0.25, 0.65] },
+      "dodge": { "weight": 1, "rate": [0.25, 0.65] }
     }
   },
   "name_modifiers": {
     "prefix_chance": 0.5,
     "suffix_chance": 0.4,
-    "mod_variance": [
-      0.7,
-      1.3
-    ],
+    "mod_variance": [0.7, 1.3],
     "prefixes": [
-      {
-        "id": "swift",
-        "weight": 3,
-        "mod": {
-          "chance": 0.03
-        }
-      },
-      {
-        "id": "fierce",
-        "weight": 3,
-        "mod": {
-          "value": 0.08
-        }
-      },
-      {
-        "id": "venomous",
-        "weight": 2,
-        "mod": {
-          "damage": 1
-        }
-      },
-      {
-        "id": "lingering",
-        "weight": 1,
-        "mod": {
-          "ticks": 2
-        }
-      },
-      {
-        "id": "vast",
-        "weight": 1,
-        "mod": {
-          "value": 0.05,
-          "chance": 0.02
-        }
-      }
+      { "id": "swift",    "name": "疾风", "weight": 3, "mod": { "chance": 0.03 } },
+      { "id": "fierce",   "name": "猛烈", "weight": 3, "mod": { "value": 0.08 } },
+      { "id": "venomous", "name": "蚀骨", "weight": 2, "mod": { "damage": 1 } },
+      { "id": "lingering","name": "缠绵", "weight": 1, "mod": { "ticks": 2 } },
+      { "id": "vast",     "name": "浩大", "weight": 1, "mod": { "value": 0.05, "chance": 0.02 } }
     ],
     "suffixes": [
-      {
-        "id": "breaker",
-        "weight": 3,
-        "mod": {
-          "value": 0.06
-        }
-      },
-      {
-        "id": "opportune",
-        "weight": 3,
-        "mod": {
-          "chance": 0.04
-        }
-      },
-      {
-        "id": "deep",
-        "weight": 2,
-        "mod": {
-          "damage": 1
-        }
-      },
-      {
-        "id": "endless",
-        "weight": 1,
-        "mod": {
-          "ticks": 2
-        }
-      },
-      {
-        "id": "surging",
-        "weight": 1,
-        "mod": {
-          "value": 0.12,
-          "chance": -0.03
-        }
-      }
+      { "id": "breaker",   "name": "破军", "weight": 3, "mod": { "value": 0.06 } },
+      { "id": "opportune", "name": "蹈隙", "weight": 3, "mod": { "chance": 0.04 } },
+      { "id": "deep",      "name": "入骨", "weight": 2, "mod": { "damage": 1 } },
+      { "id": "endless",   "name": "不息", "weight": 1, "mod": { "ticks": 2 } },
+      { "id": "surging",   "name": "汹涌", "weight": 1, "mod": { "value": 0.12, "chance": -0.03 } }
     ]
+  },
+  "stats": {
+    "nat_charge": "攻击时有 {chance} 概率进入蓄力（蓄力占用一次行动）：下次行动进行一次必定命中、暴击率 +{crit} 的攻击，伤害提升至 {value}。",
+    "nat_execution": "当敌方生命低于 {threshold} 时，攻击有 {chance} 概率使伤害提升至 {value}。",
+    "nat_lifesteal": "攻击时有 {chance} 概率进入嗜血：{turns} 次行动内，所造成伤害的 {value} 转化为自身生命。",
+    "nat_poison": "攻击时有 {chance} 概率使敌方中毒：其每次行动损失 {damage} 点生命，持续 {ticks} 刻。",
+    "nat_concussive": "攻击时有 {chance} 概率挥出破防重击：本次攻击无视敌方 {value} 的防御，命中则令其 {ticks} 刻内无法行动。",
+    "nat_thunder": "攻击时有 {chance} 概率以雷罚替换本次攻击：连续劈落至多 {max} 道真实伤害，每道为攻击的 {value}，之后每道概率为前道的 {decay}。",
+    "nat_sever": "敌方即将行动时有 {chance} 概率斩断其回合：打断该次行动并立即反击，造成 {value} 的伤害，其行动槽倒退 {delay}。",
+    "nat_gauge_surge": "命中后有 {chance} 概率行动槽额外前进 {value}，若为暴击则改为前进 {crit_value}。",
+    "nat_damage_reduction": "每次受到攻击时有 {chance} 概率叠一层锻痕：伤害减免 +{value}，持续 {ticks} 刻，可无限叠加。",
+    "nat_reflect": "每次受到伤害时有 {chance} 概率反噬：免除该次伤害的 {value}，并将其以 {ratio} 反弹给攻击者。",
+    "nat_bulwark": "自身生命不低于 {threshold} 时，所受伤害降低 {value}，且有 {immune} 的概率完全免疫。",
+    "nat_retribution": "受到攻击时有 {chance} 概率记录该次伤害（至多 {cap} 条）：下次命中将记录总和以 {ratio} 追加打出。",
+    "nat_iron_will": "受到致命伤害时有 {chance} 概率触发不屈：回复 {value} 最大生命并撑过该次伤害；每次触发后概率衰减为前次的 {decay}。",
+    "nat_heal": "行动开始时有 {chance} 概率回复 {value} 点生命，并施加回春印记：每 {tick} 刻回复 {regen} 点生命，持续 {duration} 刻。",
+    "nat_cleanse": "行动开始时有 {chance} 概率净化：驱散双方所有标记与增益减益（每驱散 1 种为自己回复 {per} 点生命），并回复 {value} 点生命。",
+    "nat_low_hp_atk_bonus": "生命首次低于 {threshold} 时，攻击 +{value} 且速度 +{spd}，持续到战斗结束。",
+    "nat_streak_bonus": "命中时有 {chance} 概率获得 1 层乘胜：每层伤害 +{value}，至多 {cap} 层；攻击落空时清零。",
+    "nat_overload": "攻击时有 {chance} 概率燃血：消耗自身 {cost} 最大生命，使本次伤害提升至 {value}。",
+    "nat_armor_shred": "攻击时有 {chance} 概率击碎敌方护甲：防御 −{value}，持续 {ticks} 刻，至多叠加 {max_stacks} 层。",
+    "nat_bleed": "攻击时有 {chance} 概率撕裂敌方：其每次行动损失相当于攻击者攻击 {value} 的生命，持续 {ticks} 刻。",
+    "nat_gamble": "攻击时有 {chance} 概率孤注一掷：伤害提升至 {value}，否则伤害降低至 {penalty}。",
+    "nat_tempo": "每次行动完毕有 {chance} 概率速度 +{value}，无上限持续叠加。",
+    "nat_armor_pen": "攻击时有 {chance} 概率洞悉弱点：本次攻击无视全部防御，且暴击率 +{crit}。",
+    "nat_blood_pact": "每次行动开始有 {chance} 概率献祭：消耗 {cost} 最大生命，本次攻击附带 {value} 吸血；行动结束后按吸血量的 {convert} 永久增加攻击。",
+    "nat_grudge": "被命中时有 {chance} 概率积攒 1 层怨念（持续 {ticks} 刻）：每层使伤害 +{value}，无层数上限。",
+    "link_formula": "（{base} + {expr}*{merged}）",
+    "link_expr_difference": "【{own}-{enemy}】{emoji}",
+    "link_expr_sum": "【{own}+{enemy}】{emoji}",
+    "link_ratio": "{scope}{stat}越高，{field}越高。",
+    "link_difference": "{own}高于{enemy}越多，{field}越高。",
+    "link_sum": "{own}与{enemy}合计越高，{field}越高。",
+    "scope_own": "己方",
+    "scope_enemy": "对方",
+    "scope_difference": "双方之差",
+    "scope_sum": "双方之和",
+    "field_value": "效果值",
+    "field_crit": "暴击加成",
+    "field_threshold": "触发门槛",
+    "field_turns": "持续行动数",
+    "field_damage": "毒伤",
+    "field_ticks": "持续刻数",
+    "field_decay": "衰减比例",
+    "field_delay": "行动槽倒退量",
+    "field_crit_value": "暴击前进量",
+    "field_ratio": "追加倍率",
+    "field_cap": "层数上限",
+    "field_cost": "消耗比例",
+    "field_convert": "转化比例",
+    "field_per": "驱散回复量",
+    "field_regen": "回春回复量",
+    "field_spd": "速度加成",
+    "field_penalty": "惩罚倍率",
+    "mod_chance": "触发率 {v}",
+    "mod_value": "效果值 {v}",
+    "mod_damage": "毒伤 {v}",
+    "mod_turns": "持续 {v} 次",
+    "mod_ticks": "持续 {v} 刻",
+    "final_damage": "{v} 点",
+    "final_turns": "{v} 刻",
+    "mastery_text": "熟练度 {v}：触发率 {rate}",
+    "mastery_text_value": "熟练度 {v}：效果 ×{mult}",
+    "mastery_text_immune": "熟练度 {v}：免疫触发率 {rate}",
+    "link_sep": "·",
+    "link_atk": "锋",
+    "link_def": "坚",
+    "link_spd": "疾",
+    "link_hp": "命",
+    "link_crit": "锐",
+    "link_dodge": "影"
   },
   "skills": [
     {
       "id": "heavy_strike",
+      "name": "重击",
+      "description": "倾尽全力的一击，重若千钧。",
       "weight": 9,
       "trigger": "on_attack",
-      "mastery": [
-        0.55,
-        1.65
-      ],
-      "effect": {
-        "type": "charge",
-        "chance": 0.16,
-        "value": 2.3,
-        "crit": 30
-      }
+      "mastery": [0.55, 1.65],
+      "effect": { "type": "charge", "chance": 0.16, "value": 3.0, "crit": 40 }
     },
     {
       "id": "execution",
+      "name": "斩杀",
+      "description": "对奄奄一息的敌人毫不留情。",
       "weight": 6,
       "trigger": "on_attack",
-      "mastery": [
-        0.7,
-        1.5
-      ],
-      "effect": {
-        "type": "damage_multiplier",
-        "chance": 0.37,
-        "value": 2.9,
-        "threshold": 0.35
-      }
+      "mastery": [0.7, 1.5],
+      "effect": { "type": "damage_multiplier", "chance": 0.37, "value": 2.9, "threshold": 0.35 }
     },
     {
       "id": "bloodthirst",
+      "name": "嗜血",
+      "description": "杀意涌起时，伤口即是源泉。",
       "weight": 8,
       "trigger": "on_attack",
-      "mastery": [
-        0.75,
-        1.35
-      ],
-      "effect": {
-        "type": "lifesteal",
-        "chance": 0.25,
-        "value": 0.26,
-        "turns": 2
-      }
+      "mastery": [0.75, 1.35],
+      "effect": { "type": "lifesteal", "chance": 0.25, "value": 0.26, "turns": 2 }
     },
     {
       "id": "venom",
+      "name": "淬毒之刃",
+      "description": "刀锋上的毒液缓慢侵蚀敌人。",
       "weight": 9,
       "trigger": "on_attack",
-      "mastery": [
-        0.8,
-        1.3
-      ],
-      "effect": {
-        "type": "poison",
-        "chance": 0.3,
-        "damage": 4.5,
-        "ticks": 12
-      }
+      "mastery": [0.8, 1.3],
+      "effect": { "type": "poison", "chance": 0.3, "damage": 380, "ticks": 12 }
     },
     {
       "id": "stun_blow",
+      "name": "眩晕重锤",
+      "description": "一记闷锤，让人眼冒金星。",
       "weight": 6,
       "trigger": "on_attack",
-      "mastery": [
-        0.6,
-        1.55
-      ],
-      "effect": {
-        "type": "concussive",
-        "chance": 0.17,
-        "value": 0.35,
-        "ticks": 6
-      }
+      "mastery": [0.6, 1.55],
+      "effect": { "type": "concussive", "chance": 0.17, "value": 0.35, "ticks": 6 }
     },
     {
       "id": "thunder",
+      "name": "雷罚",
+      "description": "天罚连绵，一道接着一道。",
       "weight": 8,
       "trigger": "on_attack",
-      "mastery": [
-        0.85,
-        1.15
-      ],
-      "effect": {
-        "type": "thunder",
-        "chance": 0.78,
-        "value": 0.24,
-        "decay": 0.93,
-        "max_hits": 9
-      }
+      "mastery": [0.85, 1.15],
+      "effect": { "type": "thunder", "chance": 0.78, "value": 0.27, "decay": 0.93, "max_hits": 9 }
     },
     {
       "id": "sever",
+      "name": "斩断",
+      "description": "在敌人出手的瞬间，斩断其节奏。",
       "weight": 8,
       "trigger": "on_defense",
-      "mastery": [
-        0.65,
-        1.5
-      ],
-      "effect": {
-        "type": "sever",
-        "chance": 0.1,
-        "value": 0.5,
-        "delay": 12
-      }
+      "mastery": [0.65, 1.5],
+      "effect": { "type": "sever", "chance": 0.1, "value": 0.45, "delay": 900 }
     },
     {
       "id": "shadow_step",
+      "name": "疾影突袭",
+      "description": "影随身动，快若闪电。",
       "weight": 7,
       "trigger": "on_attack",
-      "mastery": [
-        0.7,
-        1.45
-      ],
-      "effect": {
-        "type": "gauge_surge",
-        "chance": 0.62,
-        "value": 33,
-        "crit_value": 56
-      }
+      "mastery": [0.7, 1.45],
+      "effect": { "type": "gauge_surge", "chance": 0.62, "value": 3300, "crit_value": 5600 }
     },
     {
       "id": "iron_hide",
+      "name": "千锤百炼",
+      "description": "每一道伤痕，都让皮肤更硬一分。",
       "weight": 9,
       "trigger": "on_defense",
-      "mastery": [
-        0.8,
-        1.25
-      ],
-      "effect": {
-        "type": "damage_reduction",
-        "chance": 0.65,
-        "value": 0.1,
-        "ticks": 30
-      }
+      "mastery": [0.8, 1.25],
+      "effect": { "type": "damage_reduction", "chance": 0.65, "value": 0.07, "ticks": 20 }
     },
     {
       "id": "thorns",
+      "name": "荆棘反甲",
+      "description": "伤我者，必被反噬。",
       "weight": 8,
       "trigger": "on_defense",
-      "mastery": [
-        0.7,
-        1.4
-      ],
-      "effect": {
-        "type": "reflect",
-        "chance": 0.31,
-        "value": 0.18,
-        "ratio": 1.25
-      }
+      "mastery": [0.7, 1.4],
+      "effect": { "type": "reflect", "chance": 0.31, "value": 0.18, "ratio": 1.25 }
     },
     {
       "id": "bulwark",
+      "name": "坚守壁垒",
+      "description": "气势如虹时，坚不可摧。",
       "weight": 8,
       "trigger": "on_defense",
-      "mastery": [
-        0.6,
-        1.6
-      ],
+      "mastery": [0.6, 1.6],
       "mastery_on": "immune",
-      "effect": {
-        "type": "bulwark",
-        "threshold": 0.6,
-        "value": 0.28,
-        "immune": 0.09
-      }
+      "effect": { "type": "bulwark", "threshold": 0.6, "value": 0.28, "immune": 0.09 }
     },
     {
       "id": "retribution",
+      "name": "以牙还牙",
+      "description": "你打我的每一拳，我都记在账上。",
       "weight": 7,
       "trigger": "on_defense",
-      "mastery": [
-        0.7,
-        1.45
-      ],
-      "effect": {
-        "type": "retribution",
-        "chance": 0.29,
-        "ratio": 0.6,
-        "cap": 6
-      }
+      "mastery": [0.7, 1.45],
+      "effect": { "type": "retribution", "chance": 0.29, "ratio": 0.6, "cap": 6 }
     },
     {
       "id": "iron_will",
+      "name": "不屈意志",
+      "description": "只要还站着，就还没输。",
       "weight": 6,
       "trigger": "passive",
-      "mastery": [
-        0.5,
-        1.5
-      ],
-      "effect": {
-        "type": "iron_will",
-        "chance": 0.52,
-        "value": 0.25,
-        "decay": 0.3
-      }
+      "mastery": [0.5, 1.5],
+      "effect": { "type": "iron_will", "chance": 0.44, "value": 0.2, "decay": 0.3 }
     },
     {
       "id": "spring_heal",
+      "name": "回春术",
+      "description": "体内涌起温和的暖流。",
       "weight": 8,
       "trigger": "on_turn_start",
-      "mastery": [
-        0.75,
-        1.4
-      ],
-      "effect": {
-        "type": "heal",
-        "chance": 0.15,
-        "value": 4.5,
-        "regen": 1.2,
-        "tick": 10,
-        "duration": 30
-      }
+      "mastery": [0.75, 1.4],
+      "effect": { "type": "heal", "chance": 0.15, "value": 550, "regen": 150, "tick": 10, "duration": 30 }
     },
     {
       "id": "purify",
+      "name": "净化",
+      "description": "一念清光，万般污秽俱散。",
       "weight": 5,
       "trigger": "on_turn_start",
-      "mastery": [
-        0.7,
-        1.5
-      ],
-      "effect": {
-        "type": "cleanse",
-        "chance": 0.38,
-        "value": 2.2,
-        "per": 3.2
-      }
+      "mastery": [0.7, 1.5],
+      "effect": { "type": "cleanse", "chance": 0.26, "value": 260, "per": 320 }
     },
     {
       "id": "last_stand",
+      "name": "背水一战",
+      "description": "绝境之中，爆发潜能。",
       "weight": 7,
       "trigger": "passive",
-      "mastery": [
-        0.8,
-        1.3
-      ],
+      "mastery": [0.8, 1.3],
       "mastery_on": "value",
-      "effect": {
-        "type": "low_hp_atk_bonus",
-        "threshold": 0.3,
-        "value": 0.24,
-        "spd": 0.22
-      }
+      "effect": { "type": "low_hp_atk_bonus", "threshold": 0.3, "value": 0.24, "spd": 0.22 }
     },
     {
       "id": "momentum",
+      "name": "乘胜追击",
+      "description": "攻势如潮，一浪高过一浪。",
       "weight": 8,
       "trigger": "on_attack",
-      "mastery": [
-        0.85,
-        1.2
-      ],
-      "effect": {
-        "type": "streak_bonus",
-        "chance": 0.8,
-        "value": 0.05,
-        "cap": 4
-      }
+      "mastery": [0.85, 1.2],
+      "effect": { "type": "streak_bonus", "chance": 0.8, "value": 0.065, "cap": 5 }
     },
     {
       "id": "overload",
+      "name": "燃血轰击",
+      "description": "以生命为薪，燃尽一切。",
       "weight": 7,
       "trigger": "on_attack",
-      "mastery": [
-        0.65,
-        1.55
-      ],
-      "effect": {
-        "type": "overload",
-        "chance": 0.35,
-        "value": 2.2,
-        "cost": 0.12
-      }
+      "mastery": [0.65, 1.55],
+      "effect": { "type": "overload", "chance": 0.35, "value": 2.4, "cost": 0.05 }
     },
     {
       "id": "rupture",
+      "name": "破甲连打",
+      "description": "专敲护甲的接缝处。",
       "weight": 8,
       "trigger": "on_attack",
-      "mastery": [
-        0.75,
-        1.35
-      ],
-      "effect": {
-        "type": "armor_shred",
-        "chance": 0.36,
-        "value": 1.7,
-        "ticks": 16,
-        "max_stacks": 3
-      }
+      "mastery": [0.75, 1.35],
+      "effect": { "type": "armor_shred", "chance": 0.36, "value": 460, "ticks": 16, "max_stacks": 3 }
     },
     {
       "id": "lacerate",
+      "name": "撕裂",
+      "description": "伤口绽开，血流不止。",
       "weight": 8,
       "trigger": "on_attack",
-      "mastery": [
-        0.75,
-        1.35
-      ],
-      "effect": {
-        "type": "bleed",
-        "chance": 0.32,
-        "value": 0.26,
-        "ticks": 12
-      }
+      "mastery": [0.75, 1.35],
+      "effect": { "type": "bleed", "chance": 0.32, "value": 0.2, "ticks": 12 }
     },
     {
       "id": "all_in",
+      "name": "孤注一掷",
+      "description": "要么轰轰烈烈，要么一无所有。",
       "weight": 8,
       "trigger": "on_attack",
-      "mastery": [
-        0.7,
-        1.5
-      ],
-      "effect": {
-        "type": "gamble",
-        "chance": 0.39,
-        "value": 2.1,
-        "penalty": 0.5
-      }
+      "mastery": [0.7, 1.5],
+      "effect": { "type": "gamble", "chance": 0.39, "value": 2.1, "penalty": 0.5 }
     },
     {
       "id": "late_bloom",
+      "name": "大器晚成",
+      "description": "越战越勇，渐入佳境。",
       "weight": 7,
       "trigger": "passive",
-      "mastery": [
-        0.85,
-        1.15
-      ],
-      "effect": {
-        "type": "tempo",
-        "chance": 0.84,
-        "value": 0.34
-      }
+      "mastery": [0.85, 1.15],
+      "effect": { "type": "tempo", "chance": 0.28, "value": 100 }
     },
     {
       "id": "true_sight",
+      "name": "洞悉",
+      "description": "再厚的护甲也有弱点。",
       "weight": 8,
       "trigger": "on_attack",
-      "mastery": [
-        0.7,
-        1.45
-      ],
-      "effect": {
-        "type": "armor_pen",
-        "chance": 0.42,
-        "crit": 12
-      }
+      "mastery": [0.7, 1.45],
+      "effect": { "type": "armor_pen", "chance": 0.42, "crit": 5 }
     },
     {
       "id": "blood_pact",
+      "name": "血契",
+      "description": "以血为契，换取力量。",
       "weight": 6,
       "trigger": "on_turn_start",
-      "mastery": [
-        0.7,
-        1.45
-      ],
-      "effect": {
-        "type": "blood_pact",
-        "chance": 0.4,
-        "cost": 0.08,
-        "value": 0.8,
-        "convert": 0.078
-      }
+      "mastery": [0.7, 1.45],
+      "effect": { "type": "blood_pact", "chance": 0.4, "cost": 0.06, "value": 0.8, "convert": 0.1 }
     },
     {
       "id": "grudge",
+      "name": "怨念深重",
+      "description": "每一道伤疤，都在积蓄力量。",
       "weight": 8,
       "trigger": "on_defense",
-      "mastery": [
-        0.75,
-        1.4
-      ],
-      "effect": {
-        "type": "grudge",
-        "chance": 0.6,
-        "value": 0.07,
-        "ticks": 20
-      }
+      "mastery": [0.75, 1.4],
+      "effect": { "type": "grudge", "chance": 0.6, "value": 0.07, "ticks": 20 }
     }
   ]
 }

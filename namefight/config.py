@@ -1,8 +1,8 @@
 """配置加载与校验。
 
-配置分两层（见 AGENTS.md 2.2）：
-- config/game/      数值与规则（与语言无关）
-- config/locales/   文案（与数值无关）
+v0.10.0 起：数值规则与文案**合并在 config/game/*.json 单层配置**--
+每个条目（属性/技能/称号字段/词缀）的文字与其数值/加成保存在同一条目内，
+不再拆分 locales 目录（英文等多语言支持已移除，单语言 zh）。
 
 启动时一次性加载并校验；修改配置后需重启进程。
 """
@@ -37,8 +37,7 @@ def _read_json(path: Path) -> Any:
 @dataclass(frozen=True)
 class SystemCfg:
     version: str
-    default_locale: str
-    available_locales: tuple
+    language: str
     name_trim: bool
     name_case_sensitive: bool
     name_min_length: int
@@ -48,17 +47,20 @@ class SystemCfg:
 @dataclass(frozen=True)
 class AttributeDef:
     id: str
-    base: float         # 名义基准值（共鸣归一化等使用；投掷以 min/max 区间为准）
-    min: float          # 正态投掷区间下限
-    max: float          # 正态投掷区间上限（display_ref 缺省时的显示换算参照）
-    format: str         # int / percent，仅影响展示
-    power_weight: float # 战力权重
-    display_ref: float  # 显示层换算参照（满投掷 = 100）；0 表示原值直显
+    name: str          # 显示名（与数值同条目保存）
+    emoji: str         # 显示图标（共鸣公式 / HUD 用）
+    base: float        # 名义基准值（共鸣归一化等使用；投掷以 min/max 区间为准）
+    min: float         # 正态投掷区间下限
+    max: float         # 正态投掷区间上限
+    format: str        # int / percent，仅影响展示
+    power_weight: float  # 战力权重
 
 
 @dataclass(frozen=True)
 class SkillDef:
     id: str
+    name: str          # 显示名（与效果数值同条目保存）
+    description: str   # 风味短句（不重复数值）
     weight: float
     trigger: str         # on_attack / on_defense / on_turn_start / passive
     effect: dict         # {type: 效果类型, ...参数}
@@ -104,6 +106,7 @@ VALID_LINK_MODES = ("own", "enemy", "difference", "sum")
 class NameModifierDef:
     """技能名称词缀（前缀/后缀）：附带对技能已有参数的小幅修正（数值可个性化缩放）。"""
     id: str
+    name: str          # 词缀显示名（与修正值同条目保存）
     weight: float
     mod: dict = field(default_factory=dict)  # {参数名: 增量}，仅作用于技能已有参数
 
@@ -122,6 +125,8 @@ class SkillNameModCfg:
 @dataclass(frozen=True)
 class TitleFieldDef:
     id: str
+    name: str          # 字段显示名（与加成同条目保存）
+    desc: str          # 字段描述片段
     weight: float
     bonus: dict = field(default_factory=dict)  # {属性id: 小额加成（可为负）}
 
@@ -139,18 +144,20 @@ class BattleCfg:
     crit_multiplier: float
     variance_lo: float
     variance_hi: float
-    atk_factor: float       # 攻击换算系数（白板 100 攻击下的实际攻击当量）
-    defense_factor: float
+    atk_factor: float         # 攻击换算系数
+    defense_constant: float   # 倒数免伤常数 K：免伤率 = DEF / (DEF + K)
     min_damage: int
     max_ticks: int
-    gauge_threshold: float   # 行动槽阈值：每 tick 累加速度值，满阈值即可行动
-    crit_cap: float          # 百分数上限
-    dodge_cap: float         # 百分数上限
+    gauge_threshold: float    # 行动槽阈值：每 tick 累加速度值，满阈值即可行动
+    crit_cap: float           # 百分数上限
+    dodge_cap: float          # 百分数上限
     seed_separator: str
+    message_delay_ms: int     # 前端战报逐条播放的停顿时长（可配置）
 
 
 @dataclass(frozen=True)
 class GameCfg:
+    """全部游戏配置：数值规则 + 文案（v0.10.0 起合并保存，单语言）。"""
     system: SystemCfg
     attributes: tuple    # (AttributeDef, ...)，配置文件顺序
     skills: tuple
@@ -162,12 +169,49 @@ class GameCfg:
     skill_variable_link: SkillLinkCfg
     skill_name_modifiers: SkillNameModCfg
     battle: BattleCfg
+    stats: dict          # 技能参数标签模板 + 共鸣句式（skills.json -> stats）
+    battle_log: dict     # 战报模板（battle.json -> battle_log）
+    buffs: dict          # buff 名称/说明模板（battle.json -> buffs）
+    ui: dict             # 界面文案（ui.json）
 
     def attr(self, attr_id: str) -> AttributeDef:
         for a in self.attributes:
             if a.id == attr_id:
                 return a
         raise ConfigError("未定义的属性: %s" % attr_id)
+
+    def skill_def(self, skill_id: str):
+        for s in self.skills:
+            if s.id == skill_id:
+                return s
+        return None
+
+    def title_field(self, pool_name: str, field_id: str):
+        for t in self.title_pools.get(pool_name, ()):
+            if t.id == field_id:
+                return t
+        return None
+
+    def name_modifier(self, kind: str, mod_id: str):
+        """kind: "prefix" / "suffix"。"""
+        pool = getattr(self.skill_name_modifiers, kind + "es", ())
+        for m in pool:
+            if m.id == mod_id:
+                return m
+        return None
+
+    def ref_name(self, registry: str, ref_id: str):
+        """按注册名取显示名；缺失返回 None。stat_word 注册名直接返回 stats 字符串。"""
+        if registry == "stat_word":
+            word = self.stats.get(ref_id)
+            return str(word) if word is not None else None
+        if registry == "attr":
+            a = next((x for x in self.attributes if x.id == ref_id), None)
+            return a.name if a is not None else None
+        if registry == "skill":
+            s = self.skill_def(ref_id)
+            return s.name if s is not None else None
+        return None
 
 
 def load_game_config(config_root) -> GameCfg:
@@ -178,19 +222,19 @@ def load_game_config(config_root) -> GameCfg:
     skills_data = _read_json(game / "skills.json")
     titles_data = _read_json(game / "titles.json")
     battle_data = _read_json(game / "battle.json")
+    ui_data = _read_json(game / "ui.json")
 
     name_cfg = sys_data.get("name", {})
     system = SystemCfg(
         version=str(sys_data["version"]),
-        default_locale=str(sys_data["default_locale"]),
-        available_locales=tuple(sys_data["available_locales"]),
+        language=str(sys_data.get("language", "zh")),
         name_trim=bool(name_cfg.get("trim", True)),
         name_case_sensitive=bool(name_cfg.get("case_sensitive", False)),
         name_min_length=int(name_cfg.get("min_length", 1)),
         name_max_length=int(name_cfg.get("max_length", 32)),
     )
-    if not system.available_locales or system.default_locale not in system.available_locales:
-        raise ConfigError("system.json 语言配置非法")
+    if not system.language:
+        raise ConfigError("system.json language 配置非法")
 
     attributes = []
     seen_attrs = set()
@@ -203,13 +247,11 @@ def load_game_config(config_root) -> GameCfg:
         hi = float(a.get("max", base))
         if lo > hi:
             raise ConfigError("属性投掷区间非法: %s" % a["id"])
-        display_ref = float(a.get("display_ref", 0))
-        if display_ref < 0:
-            raise ConfigError("属性 display_ref 非法: %s" % a["id"])
         attributes.append(AttributeDef(
-            id=str(a["id"]), base=base, min=lo, max=hi,
+            id=str(a["id"]), name=str(a.get("name", a["id"])),
+            emoji=str(a.get("emoji", "")),
+            base=base, min=lo, max=hi,
             format=str(a.get("format", "int")), power_weight=float(a.get("power_weight", 0)),
-            display_ref=display_ref,
         ))
     missing = [i for i in REQUIRED_ATTRIBUTE_IDS if i not in seen_attrs]
     if missing:
@@ -228,7 +270,9 @@ def load_game_config(config_root) -> GameCfg:
                 or float(mastery[0]) > float(mastery[1])):
             raise ConfigError("技能 %s 的熟练度区间非法" % s["id"])
         skills.append(SkillDef(
-            id=str(s["id"]), weight=float(s.get("weight", 1)),
+            id=str(s["id"]), name=str(s.get("name", s["id"])),
+            description=str(s.get("description", "")),
+            weight=float(s.get("weight", 1)),
             trigger=str(s.get("trigger", "passive")), effect=dict(s.get("effect", {})),
             mastery=(float(mastery[0]), float(mastery[1])),
             mastery_on=str(s.get("mastery_on", "chance")),
@@ -302,7 +346,7 @@ def load_game_config(config_root) -> GameCfg:
     if skill_variable_link.chance > 0 and not targets:
         raise ConfigError("variable_link.chance > 0 但 targets 为空")
 
-    # 技能名称词缀（前缀/后缀，附带微小参数修正）
+    # 技能名称词缀（前缀/后缀，附带微小参数修正；名称与修正值同条目）
     mod_data = skills_data.get("name_modifiers", {})
 
     def _load_mod_pool(pool_data, label):
@@ -320,7 +364,8 @@ def load_game_config(config_root) -> GameCfg:
                 if not isinstance(delta, (int, float)) or isinstance(delta, bool):
                     raise ConfigError("词缀 %s/%s 的修正值必须为数字: %s" % (label, mid, key))
                 mod[str(key)] = float(delta)
-            pool.append(NameModifierDef(id=mid, weight=float(entry.get("weight", 1)), mod=mod))
+            pool.append(NameModifierDef(id=mid, name=str(entry.get("name", mid)),
+                                        weight=float(entry.get("weight", 1)), mod=mod))
         return tuple(pool)
 
     mod_prefixes = _load_mod_pool(mod_data.get("prefixes"), "prefix")
@@ -338,7 +383,7 @@ def load_game_config(config_root) -> GameCfg:
         if not 0.0 <= chance <= 1.0:
             raise ConfigError("name_modifiers 概率必须在 [0, 1]")
 
-    # 称号：多字段 + 多结构概率生成
+    # 称号：多字段 + 多结构概率生成（名称/描述/加成同条目保存）
     structures = []
     seen_structs = set()
     for s in titles_data.get("structures", []):
@@ -380,24 +425,28 @@ def load_game_config(config_root) -> GameCfg:
             for attr_id in bonus:
                 if attr_id not in seen_attrs:
                     raise ConfigError("称号字段 %s/%s 加成了未定义的属性 %s" % (pool_key, tid, attr_id))
-            pool.append(TitleFieldDef(id=tid, weight=float(entry.get("weight", 1)), bonus=bonus))
+            pool.append(TitleFieldDef(id=tid, name=str(entry.get("name", tid)),
+                                      desc=str(entry.get("desc", "")),
+                                      weight=float(entry.get("weight", 1)), bonus=bonus))
         if not pool:
             raise ConfigError("称号字段池为空: %s" % pool_key)
         title_pools[pool_name] = tuple(pool)
 
+    playback = battle_data.get("playback", {})
     variance = battle_data.get("variance", [1.0, 1.0])
     battle = BattleCfg(
         crit_multiplier=float(battle_data.get("crit_multiplier", 1.8)),
         variance_lo=float(variance[0]),
         variance_hi=float(variance[1]),
         atk_factor=float(battle_data.get("atk_factor", 1.0)),
-        defense_factor=float(battle_data.get("defense_factor", 1.0)),
+        defense_constant=float(battle_data.get("defense_constant", 25.0)),
         min_damage=int(battle_data.get("min_damage", 1)),
         max_ticks=int(battle_data.get("max_ticks", 600)),
         gauge_threshold=float(battle_data.get("gauge_threshold", 100)),
         crit_cap=float(battle_data.get("crit_cap", 100)),
         dodge_cap=float(battle_data.get("dodge_cap", 60)),
         seed_separator=str(battle_data.get("seed_separator", "")),
+        message_delay_ms=int(playback.get("message_delay_ms", 320)),
     )
     if battle.max_ticks < 1:
         raise ConfigError("max_ticks 必须 >= 1")
@@ -405,8 +454,22 @@ def load_game_config(config_root) -> GameCfg:
         raise ConfigError("gauge_threshold 必须 > 0")
     if battle.atk_factor <= 0:
         raise ConfigError("atk_factor 必须 > 0")
+    if battle.defense_constant <= 0:
+        raise ConfigError("defense_constant 必须 > 0")
+    if battle.message_delay_ms < 16:
+        raise ConfigError("playback.message_delay_ms 必须 >= 16")
     if battle.variance_lo > battle.variance_hi:
         raise ConfigError("variance 区间非法")
+
+    stats = skills_data.get("stats", {})
+    if not isinstance(stats, dict):
+        raise ConfigError("skills.json 的 stats 必须是对象")
+    battle_log = battle_data.get("battle_log", {})
+    buffs = battle_data.get("buffs", {})
+    if not isinstance(battle_log, dict) or not isinstance(buffs, dict):
+        raise ConfigError("battle.json 的 battle_log/buffs 必须是对象")
+    if not isinstance(ui_data, dict):
+        raise ConfigError("ui.json 必须是对象")
 
     return GameCfg(
         system=system, attributes=tuple(attributes),
@@ -417,50 +480,5 @@ def load_game_config(config_root) -> GameCfg:
         skill_variable_link=skill_variable_link,
         skill_name_modifiers=skill_name_modifiers,
         battle=battle,
-    )
-
-
-class Locale:
-    """某一语言的全部文案（纯文本，不含任何数值规则）。"""
-
-    def __init__(self, lang, ui, attributes, skills, titles,
-                 stats, buffs, modifiers, battle_log):
-        self.lang = lang
-        self.ui = ui
-        self.attributes = attributes
-        self.skills = skills
-        self.titles = titles          # {"prefixes": {...}, "cores": {...}, "suffixes": {...}}
-        self.stats = stats            # 技能参数标签模板 + 共鸣标记/词缀修饰模板
-        self.buffs = buffs            # buff 名称/说明模板
-        self.modifiers = modifiers    # 技能词缀名称 {"prefixes": {...}, "suffixes": {...}}
-        self.battle_log = battle_log
-
-    def ref_name(self, registry: str, ref_id: str):
-        """按注册名取显示名；缺失返回 None。stat_word 注册名直接返回 stats 字符串。"""
-        if registry == "stat_word":
-            word = self.stats.get(ref_id)
-            return str(word) if word is not None else None
-        table = {
-            "skill": self.skills, "attr": self.attributes,
-        }.get(registry)
-        if table is None:
-            return None
-        entry = table.get(ref_id)
-        if isinstance(entry, dict) and "name" in entry:
-            return entry["name"]
-        return None
-
-
-LOCALE_FILES = ("ui", "attributes", "skills", "titles",
-                "stats", "buffs", "modifiers", "battle_log")
-
-
-def load_locale(config_root, lang: str) -> Locale:
-    root = Path(config_root) / "locales" / str(lang)
-    data = {name: _read_json(root / ("%s.json" % name)) for name in LOCALE_FILES}
-    return Locale(
-        lang=str(lang), ui=data["ui"], attributes=data["attributes"],
-        skills=data["skills"],
-        titles=data["titles"], stats=data["stats"], buffs=data["buffs"],
-        modifiers=data["modifiers"], battle_log=data["battle_log"],
+        stats=stats, battle_log=battle_log, buffs=buffs, ui=ui_data,
     )

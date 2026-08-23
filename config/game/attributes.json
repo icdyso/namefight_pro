@@ -1,10 +1,10 @@
 {
   "attributes": [
-    { "id": "hp",    "base": 100, "min": 80, "max": 120, "format": "int",     "power_weight": 1, "display_ref": 120 },
-    { "id": "atk",   "base": 13,  "min": 10, "max": 16,  "format": "int",     "power_weight": 4, "display_ref": 16 },
-    { "id": "def",   "base": 5,   "min": 2,  "max": 8,   "format": "int",     "power_weight": 3, "display_ref": 8 },
-    { "id": "spd",   "base": 10,  "min": 6,  "max": 14,  "format": "int",     "power_weight": 2, "display_ref": 14 },
-    { "id": "crit",  "base": 12,  "min": 5,  "max": 20,  "format": "percent", "power_weight": 2 },
-    { "id": "dodge", "base": 10,  "min": 5,  "max": 15,  "format": "percent", "power_weight": 2 }
+    { "id": "hp",    "name": "生命", "emoji": "❤️", "base": 20000, "min": 16000, "max": 24000, "format": "int",     "power_weight": 1 },
+    { "id": "atk",   "name": "攻击", "emoji": "⚔️", "base": 1500,  "min": 1000,  "max": 2000,  "format": "int",     "power_weight": 4 },
+    { "id": "def",   "name": "防御", "emoji": "🛡️", "base": 1500,  "min": 1000,  "max": 2000,  "format": "int",     "power_weight": 3 },
+    { "id": "spd",   "name": "速度", "emoji": "👟", "base": 1500,  "min": 1000,  "max": 2000,  "format": "int",     "power_weight": 2 },
+    { "id": "crit",  "name": "暴击", "emoji": "🎯", "base": 12,    "min": 5,     "max": 20,    "format": "percent", "power_weight": 2 },
+    { "id": "dodge", "name": "闪避", "emoji": "🌀", "base": 10,    "min": 5,     "max": 15,    "format": "percent", "power_weight": 2 }
   ]
 }
