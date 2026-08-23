@@ -5,7 +5,8 @@
   "use strict";
 
   var SPEEDS = [0.5, 1, 2, 4];  // 回放倍速
-  var LIVE_MARK = "\u0001";   // 后端 live 文本中的实时数值占位符
+  // 后端 live 文本中的实时数值占位符：\u0001 + 槽位序号（对应 link_calc 下标）
+  var LIVE_MARK_RE = /\u0001(\d+)/g;
 
   var state = {
     version: "",
@@ -676,17 +677,21 @@
     return fmtPct(v);
   }
 
-  /* live 文本中的实时数值占位符（每技能至多 2 个）按 link_calc 顺序填充 */
+  /* live 文本的实时数值占位符为「\u0001 + 槽位序号」，序号对应 link_calc 下标。
+     必须按序号取值：模板参数顺序与共鸣槽位顺序可能不一致（如壁垒的
+     门槛/效果值），按位置填充会交叉错位（v1.2.0 修复）。 */
   function fillLiveText(tmpl, calcs, selfSnap, enemySnap) {
-    var parts = tmpl.split(LIVE_MARK);
-    if (parts.length < 2) return tmpl;
-    var out = parts[0];
-    for (var i = 1; i < parts.length; i++) {
-      var value = (calcs && calcs[i - 1])
-        ? liveFinalValue(calcs[i - 1], selfSnap, enemySnap) : "";
-      out += value + parts[i];
+    var out = "", last = 0, m;
+    var re = LIVE_MARK_RE;
+    re.lastIndex = 0;
+    while ((m = re.exec(tmpl)) !== null) {
+      var idx = parseInt(m[1], 10);
+      out += tmpl.slice(last, m.index);
+      out += (calcs && calcs[idx])
+        ? liveFinalValue(calcs[idx], selfSnap, enemySnap) : "";
+      last = m.index + m[0].length;
     }
-    return out;
+    return out + tmpl.slice(last);
   }
 
   function updateLiveSkills(snapA, snapB) {

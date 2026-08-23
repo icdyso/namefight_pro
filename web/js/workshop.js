@@ -30,7 +30,110 @@
 
   var els = {};
 
+  /* 选项悬浮提示：鼠标移到 ? 上显示说明。键 = 字段标签 / 表头 / 分区标题文本。 */
+  var TIPS = {
+    /* ---- 系统 ---- */
+    "版本号 version": "配置版本号，仅作展示与记录（/api/health 等处返回）。改数值不影响对战结果；改变同名结果的修改建议递增并在 docs/updates 记录。",
+    "语言 language": "语言标识，当前单语言固定为 zh，改动无实际效果。",
+    "去除首尾空格": "名字归一化规则：计算 MD5 前是否去掉名字首尾空格。改变归一化规则会改变同名斗士的全部派生数据。",
+    "区分大小写": "名字归一化规则：是否区分英文大小写。不区分时先统一转小写再计算 MD5。",
+    "最短长度": "名字最短长度（字符数），低于该长度的名字会被拒绝。",
+    "最长长度": "名字最长长度（字符数），超过该长度的名字会被拒绝。",
+    /* ---- 属性 ---- */
+    "名称": "显示名，出现在卡牌、战斗界面、共鸣公式的依赖描述等处。",
+    "基准值": "名义基准值：变量共鸣归一化用（共鸣幅度 = 属性当前值 ÷ 基准值），不参与属性投掷；建议取投掷区间中点附近的典型值。",
+    "最小": "投掷区间下限：属性值在 [最小, 最大] 内按三角形分布投掷（两个随机数取均值，中点概率最高，不会堆积在边界）。",
+    "最大": "投掷区间上限：属性值在 [最小, 最大] 内按三角形分布投掷，中点概率最高。",
+    "格式": "int：取整后按数值显示；percent：按百分数显示、保留小数（暴击/闪避，判定时除以 100）。",
+    "战力权重": "战力 = Σ(属性值 × 权重)，只影响面板战力展示，不影响战斗。",
+    /* ---- 技能：抽取与个性化 ---- */
+    "技能数（最少）": "每个斗士技能数量的投掷下限（1~3 间三角形分布取整，中间值概率更高）。",
+    "技能数（最多）": "每个斗士技能数量的投掷上限。",
+    "数值扰动倍率下限": "技能个性化：数值类参数（value / damage）乘以此区间内的随机倍率，使同名同技能数值随名字不同。下限与上限一般关于 1 对称。",
+    "数值扰动倍率上限": "技能个性化：数值类参数（value / damage）扰动倍率的投掷上限。",
+    "共鸣变数概率": "每个技能有两个变数槽位，每个槽位以此概率真正绑定一个属性成为共鸣变数（默认 0.25）。",
+    "前缀获得概率": "技能名获得前缀词缀（如「缠绵」）的概率；词缀会小幅修正技能的某些参数。",
+    "后缀获得概率": "技能名获得后缀词缀（如「入骨」）的概率；词缀会小幅修正技能的某些参数。",
+    "词缀缩放下限": "词缀修正量实际生效前乘以此区间内的随机倍率（个性化缩放），下限与上限一般关于 1 对称。",
+    "词缀缩放上限": "词缀修正量缩放倍率的投掷上限。",
+    "权重": "抽取权重：所有条目按权重比例随机抽取，数值越大越容易被选中。",
+    "倍率下限": "该属性作为共鸣变量时的倍率投掷区间下限。共鸣修正幅度 = 倍率 × 变量表达式 ÷ 基准值。",
+    "倍率上限": "该属性作为共鸣变量时的倍率投掷区间上限。",
+    "差值参照": "差值 / 并值模式下，与对方哪个属性运算（默认与自己相同的属性）。例：速度差值参照防御 = 己方速度 − 对方防御。",
+    /* ---- 称号 ---- */
+    "字段（逗号分隔）": "该结构由哪些字段拼成，逗号分隔，可选：prefix / core / core2 / suffix。例：prefix,core,suffix。core2 为双核心结构的第二核心，不会与第一核心重复。",
+    "连接符（逗号分隔）": "字段之间的连接符，数量 = 字段数 − 1。例：·、· 两段。留空则直接拼接。",
+    "描述": "称号字段的描述片段，多个字段描述以「，」拼接成完整称号描述。",
+    "属性加成（k:v）": "该称号字段附带的属性加成，格式 属性:值，多个用逗号分隔，如 atk:100, crit:1。可为负数；直接加到属性投掷值上，不消耗随机数。",
+    /* ---- 战斗 ---- */
+    "暴击倍率": "暴击时伤害乘以的倍率（默认 1.8）。",
+    "伤害浮动下限": "每次攻击的伤害浮动倍率投掷区间下限（三角形分布），围绕 1 上下浮动。",
+    "伤害浮动上限": "伤害浮动倍率投掷区间上限。",
+    "攻击系数": "伤害公式中的攻击换算系数：raw = 攻击 × 系数 × 浮动 × 暴击倍率 × 技能倍率，再按免伤率减免。",
+    "免伤常数 K": "免伤率 = 防御 ÷ (防御 + K) × (1 − 穿透)。K 越大，同等防御带来的免伤越低。",
+    "最小伤害": "单次伤害的下限，保证防御再高也至少造成该伤害。",
+    "最大刻数": "战斗最长刻数；耗尽未分胜负时按剩余生命比例判胜，完全相同为平局。",
+    "行动槽阈值": "每刻行动槽累加速度值，累计达到阈值即可行动一次并扣回阈值。速度 10、阈值 100 ≈ 每 10 刻行动一次。",
+    "暴击上限 %": "暴击率的封顶百分数（属性 + 加成合计超过时按上限计）。",
+    "闪避上限 %": "闪避率的封顶百分数。",
+    "对战种子分隔符": "对战种子 = md5(两个名字按字典序用此分隔符拼接)。改变分隔符会改变全部对战过程与结果。",
+    "每条停顿 ms": "战报回放：每条战报之间的停顿毫秒数（纯展示，不影响结果）。",
+    "行动间隔（每 N 次）": "战报回放：每 N 次角色行动后插入一次较长停顿，便于看清攻防节奏。",
+    "行动间停顿 ms": "上述较长停顿的时长（毫秒）。",
+    /* ---- 模板与文案 ---- */
+    "参数修正（k:v）": "词缀对技能参数的修正量，格式 参数名:增量，如 chance:0.05, ticks:1；只作用于该技能已有的参数。",
+    "效果类型": "效果类型决定技能行为与参数集合：引擎只支持列表中已有的类型，改类型后记得同步调整下方参数。",
+    "风味": "技能的风味短句，仅展示用，不描述数值（数值由参数自动生成描述）。",
+    /* ---- 共鸣模式 ---- */
+    "己方 own": "共鸣模式：变量式 = 己方该属性当前值。",
+    "对方 enemy": "共鸣模式：变量式 = 对方该属性当前值。",
+    "差值 difference": "共鸣模式：变量式 = 己方属性 − 对方参照属性（可为负，效果可能减弱）。",
+    "并值 sum": "共鸣模式：变量式 = 己方属性 + 对方参照属性。",
+    /* ---- 其余表头 ---- */
+    "变量": "可成为共鸣变数的属性（与属性页的 id 对应）。",
+    "字段一": "变数槽位一可共鸣的参数字段名（必须存在于该效果类型的技能参数中）。",
+    "字段二": "变数槽位二可共鸣的参数字段名；留空表示只有一个槽位。",
+    "键": "模板键名（程序引用，勿随意改动）。",
+    "文案": "界面显示的文字。",
+    "详情": "状态标记悬浮显示的数值详情（可含 {value} 等占位）。",
+    "说明": "状态标记悬浮显示的效果说明。",
+    "参数名": "技能参数名（如 chance / value / threshold），改名会改变技能行为。",
+    "参数值": "该参数的数值；具体含义由效果类型决定（概率为 0~1 小数，倍率为 1 上下）。",
+    "熟练度区间": "熟练度 0~100 映射到 [下限, 上限] 的倍率：倍率 = 下限 + (上限−下限) × 熟练度/100。",
+    "作用字段": "熟练度倍率作用于哪个参数：chance=触发概率 / value=效果数值 / immune=免疫概率。",
+    "触发时机": "on_attack=攻击时 / on_defense=受击时 / on_turn_start=行动开始时 / passive=被动。",
+    "效果": "技能效果 = 效果类型 + 参数表；参数含义随类型变化，见各参数行。",
+    "id": "唯一标识，引擎与模板按它引用；修改相当于换了一个新条目。",
+    "操作": "↑↓ 移动、✕ 删除。条目在列表中的位置参与抽取次序，移动可能改变同名结果。"
+  };
+
+  /* 分区标题悬浮提示（按标题前缀匹配） */
+  var SECTION_TIPS = {
+    "抽取与个性化": "控制每个斗士的技能数量、数值扰动与词缀获得概率——同名斗士的差异都来自这里的随机化。",
+    "共鸣模式权重": "变数绑定后抽取哪种运算模式的权重比例（own : enemy : difference : sum）。",
+    "共鸣变量池": "哪些属性可以作为共鸣变数、被选中的权重与倍率区间。共鸣按「倍率 × 变量式 ÷ 基准值」修正技能自身参数。",
+    "共鸣目标字段": "每个效果类型的哪个参数允许被共鸣修正；每个效果类型最多两个字段，对应两个变数槽位。",
+    "名称前缀池": "技能名前缀词缀池：抽中后技能名加前缀，并按修正量调整技能参数。",
+    "名称后缀池": "技能名后缀词缀池：抽中后技能名加后缀，并按修正量调整技能参数。",
+    "技能池": "全部技能定义：抽取权重、效果参数、熟练度区间。新技能的效果类型必须是引擎已支持的。",
+    "技能描述模板": "技能自然语言描述的句式模板，{参数名} 为占位符；引擎按固定键名取用，勿删必要键。",
+    "称号结构": "称号由哪些字段按什么连接符拼成，按权重抽取结构。",
+    "前缀池": "称号前缀字段池（名称 / 描述 / 权重 / 属性加成）。",
+    "核心池": "称号核心字段池（必有字段）。",
+    "后缀池": "称号后缀字段池。",
+    "战斗常数": "伤害公式、行动节奏与判定规则的核心常数。",
+    "战报播放": "前端战报回放的节奏（纯展示，不影响结果）。",
+    "战报模板": "战斗日志句式模板，{a}/{b}/{skill}/{damage} 等为占位符。",
+    "状态标记文案": "buff / debuff 在状态栏的显示名称与悬浮说明。"
+  };
+
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
+
+  /* 悬浮提示小徽章：鼠标悬停显示 TIPS 说明 */
+  function tipBadge(tipText) {
+    if (!tipText) return null;
+    return NF.h("span", { class: "ws-tip", dataset: { tip: tipText } }, "?");
+  }
 
   function isDirty() {
     return state.files && state.baseline
@@ -120,11 +223,21 @@
 
   function field(labelText, inputEl) {
     return NF.h("div", { class: "ws-field" },
-      NF.h("label", null, labelText), inputEl);
+      NF.h("label", null, labelText, tipBadge(TIPS[labelText])), inputEl);
   }
 
   function sectionTitle(text, extra) {
-    return NF.h("div", { class: "ws-section-title" }, text, extra || null);
+    /* 分区标题的提示按前缀匹配（标题可能带数量等后缀，如「技能池（25 个）」） */
+    var tip = null;
+    Object.keys(SECTION_TIPS).forEach(function (k) {
+      if (!tip && text.indexOf(k) === 0) tip = SECTION_TIPS[k];
+    });
+    return NF.h("div", { class: "ws-section-title" }, text, tipBadge(tip), extra || null);
+  }
+
+  /* 表头单元格：带可选的悬浮提示 */
+  function thCell(labelText) {
+    return NF.h("th", null, labelText, tipBadge(TIPS[labelText]));
   }
 
   function removeButton(onclick) {
@@ -194,7 +307,7 @@
     var table = NF.h("table", { class: "ws-table" },
       NF.h("tr", null,
         ["id", "名称", "图标", "基准值", "最小", "最大", "格式", "战力权重", "操作"]
-          .map(function (t) { return NF.h("th", null, t); })));
+          .map(thCell)));
     list.forEach(function (a, i) {
       var cells = [
         NF.h("td", null, NF.h("span", { class: "ws-static" }, a.id)),
@@ -260,7 +373,7 @@
     box.appendChild(sectionTitle("共鸣变量池"));
     var vtable = NF.h("table", { class: "ws-table" },
       NF.h("tr", null, ["变量", "权重", "倍率下限", "倍率上限", "差值参照", "操作"]
-        .map(function (t) { return NF.h("th", null, t); })));
+        .map(thCell)));
     Object.keys(vl.variables).forEach(function (vid) {
       var v = vl.variables[vid];
       v.rate = Array.isArray(v.rate) && v.rate.length === 2 ? v.rate : [0, 0];
@@ -282,7 +395,7 @@
     box.appendChild(sectionTitle("共鸣目标字段（每个效果类型 1~2 个可共鸣参数）"));
     var ttable = NF.h("table", { class: "ws-table" },
       NF.h("tr", null, ["效果类型", "字段一", "字段二"]
-        .map(function (t) { return NF.h("th", null, t); })));
+        .map(thCell)));
     Object.keys(vl.targets).forEach(function (etype) {
       var fields = Array.isArray(vl.targets[etype]) ? vl.targets[etype] : [vl.targets[etype]];
       var holder = { f0: fields[0] || "", f1: fields[1] || "" };
@@ -310,7 +423,7 @@
       box.appendChild(sectionTitle(poolKey === "prefixes" ? "名称前缀池" : "名称后缀池"));
       var ptable = NF.h("table", { class: "ws-table" },
         NF.h("tr", null, ["id", "名称", "权重", "参数修正（k:v）", "操作"]
-          .map(function (t) { return NF.h("th", null, t); })));
+          .map(thCell)));
       nm[poolKey].forEach(function (m, i) {
         ptable.appendChild(NF.h("tr", null,
           NF.h("td", null, textInput(m, "id", "small")),
@@ -400,21 +513,25 @@
     card.appendChild(NF.h("div", { class: "ws-card-head" },
       textInput(s, "id", "small"),
       textInput(s, "name", "small"),
-      NF.h("span", { class: "ws-static" }, "权重"), numInput(s, "weight"),
-      selectInput(s, "trigger", TRIGGERS),
+      NF.h("span", { class: "ws-static" }, "权重", tipBadge(TIPS["权重"])),
+      numInput(s, "weight"),
+      selectInput(s, "trigger", TRIGGERS), tipBadge(TIPS["触发时机"]),
       moveButtons(list, index, rerenderMain),
       removeButton(function () { list.splice(index, 1); rerenderMain(); })));
     card.appendChild(NF.h("div", { class: "ws-effect-row" },
-      NF.h("span", { class: "ws-static" }, "风味"), textInput(s, "description", "wide")));
+      NF.h("span", { class: "ws-static" }, "风味", tipBadge(TIPS["风味"])),
+      textInput(s, "description", "wide")));
     card.appendChild(NF.h("div", { class: "ws-effect-row" },
-      NF.h("span", { class: "ws-static" }, "熟练度区间"),
+      NF.h("span", { class: "ws-static" }, "熟练度区间",
+             tipBadge(TIPS["熟练度区间"])),
       numInput(s.mastery, "0"), numInput(s.mastery, "1"),
-      NF.h("span", { class: "ws-static" }, "作用字段"),
+      NF.h("span", { class: "ws-static" }, "作用字段",
+             tipBadge(TIPS["作用字段"])),
       selectInput(s, "mastery_on", ["chance", "value", "immune"])));
 
     var eff = s.effect;
     var effRow = NF.h("div", { class: "ws-effect-row" },
-      NF.h("span", { class: "ws-static" }, "效果"),
+      NF.h("span", { class: "ws-static" }, "效果", tipBadge(TIPS["效果"])),
       NF.h("select", {
         class: "ws-select",
         onchange: function (e) { eff.type = e.target.value; rerenderMain(); }
@@ -423,7 +540,8 @@
       })));
     card.appendChild(effRow);
 
-    var ptable = NF.h("table", { class: "ws-table" });
+    var ptable = NF.h("table", { class: "ws-table" },
+      NF.h("tr", null, thCell("参数名"), thCell("参数值"), thCell("操作")));
     Object.keys(eff).forEach(function (key) {
       if (key === "type") return;
       var value = eff[key];
@@ -474,7 +592,7 @@
     box.appendChild(sectionTitle("称号结构（字段：prefix / core / core2 / suffix）"));
     var stable = NF.h("table", { class: "ws-table" },
       NF.h("tr", null, ["id", "权重", "字段（逗号分隔）", "连接符（逗号分隔）", "操作"]
-        .map(function (t) { return NF.h("th", null, t); })));
+        .map(thCell)));
     structs.forEach(function (s, i) {
       var holder = {
         fields: (s.fields || []).join(","),
@@ -517,7 +635,7 @@
         box.appendChild(sectionTitle(pair[1] + "（" + d[poolKey].length + " 个）"));
         var ptable = NF.h("table", { class: "ws-table" },
           NF.h("tr", null, ["id", "名称", "描述", "权重", "属性加成（k:v）", "操作"]
-            .map(function (t) { return NF.h("th", null, t); })));
+            .map(thCell)));
         d[poolKey].forEach(function (t, i) {
           ptable.appendChild(NF.h("tr", null,
             NF.h("td", null, textInput(t, "id", "small")),
@@ -590,7 +708,7 @@
     box.appendChild(sectionTitle("状态标记文案（buff）"));
     var btable = NF.h("table", { class: "ws-table" },
       NF.h("tr", null, ["id", "名称", "详情", "说明", "操作"]
-        .map(function (t) { return NF.h("th", null, t); })));
+        .map(thCell)));
     Object.keys(d.buffs).forEach(function (bid) {
       var b = d.buffs[bid];
       btable.appendChild(NF.h("tr", null,
@@ -618,7 +736,7 @@
   function renderUiForm(d) {
     var box = NF.h("div", null);
     var table = NF.h("table", { class: "ws-table" },
-      NF.h("tr", null, ["键", "文案"].map(function (t) { return NF.h("th", null, t); })));
+      NF.h("tr", null, ["键", "文案"].map(thCell)));
     Object.keys(d).forEach(function (key) {
       table.appendChild(NF.h("tr", null,
         NF.h("td", { style: { width: "180px" } }, keyInput(d, key)),

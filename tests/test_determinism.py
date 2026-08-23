@@ -3,6 +3,7 @@
 这些测试失败意味着「同名同命」契约被破坏，属于最高优先级事故。
 """
 import os
+import re
 import subprocess
 import sys
 import unittest
@@ -15,9 +16,11 @@ if str(REPO_ROOT) not in sys.path:
 from namefight.battle import (_Combatant, _compute_damage, _make_combatant,
                               _snapshot, battle_to_api, run_battle)
 from namefight.config import load_game_config
-from namefight.fighter import (derive_fighter, fighter_to_api,
-                               personalized_effects, title_bonus_items)
+from namefight.fighter import (_format_formula_number, derive_fighter,
+                               fighter_to_api, personalized_effects,
+                               title_bonus_items)
 from namefight.rng import DetRng
+from namefight.text import format_num, format_pct
 
 CONFIG_ROOT = REPO_ROOT / "config"
 GAME = load_game_config(CONFIG_ROOT)
@@ -206,6 +209,73 @@ class FighterDeterminism(unittest.TestCase):
             self.assertLess(entry["text"].index("（"), entry["text"].index("。"))
             # 变数出现概率契约：整体约 25%/槽位（含双变数时两个括号）
             self.assertLessEqual(entry["text"].count("（"), 2)
+
+    @staticmethod
+    def _fill_live(tmpl, calcs, own, enemy):
+        """复刻前端 fillLiveText 的取值逻辑（按占位符携带的槽位序号取
+        link_calc 对应条目），用于校验后端占位符协议与前后端一致性。"""
+        def repl(m):
+            lc = calcs[int(m.group(1))]
+            if lc["mode"] in ("difference", "sum"):
+                other = enemy[lc["against"]]
+                expr = own[lc["variable"]] - other if lc["mode"] == "difference" \
+                    else own[lc["variable"]] + other
+            elif lc["mode"] == "enemy":
+                expr = enemy[lc["variable"]]
+            else:
+                expr = own[lc["variable"]]
+            v = lc["base"] + expr * lc["coeff"]
+            lo, hi = lc["clamp"]
+            if lo is not None:
+                v = max(lo, v)
+            if hi is not None:
+                v = min(hi, v)
+            if lc["fmt"] == "turns":
+                return str(max(1, int(round(v))))
+            if lc["fmt"] == "num":
+                return format_num(v)
+            return format_pct(v)
+        return re.sub("\x01(\\d+)", repl, tmpl)
+
+    def test_live_markers_carry_slot_index(self):
+        """live 占位符协议（v1.2.0）：占位符 = \\x01 + 槽位序号，序号与
+        link_calc 下标一致；按序号填充（而非按出现位置）必须还原出与
+        卡牌估算文本完全一致的结果——模板参数顺序与槽位顺序不一致
+        （如壁垒的门槛/效果值）时按位置填充会交叉错位。"""
+        checked = 0
+        enemy_base = {a.id: a.base for a in GAME.attributes}
+        for i in range(80):
+            f = derive_fighter("live%02d" % i, GAME)
+            api = fighter_to_api(f, GAME)
+            for entry in api["skills"]:
+                calcs = entry.get("link_calc")
+                if not calcs:
+                    continue
+                markers = re.findall("\x01(\\d+)", entry["live_text"])
+                self.assertEqual(sorted(int(x) for x in markers),
+                                 list(range(len(calcs))),
+                                 "占位符序号必须与 link_calc 下标一一对应")
+                filled = self._fill_live(entry["live_text"], calcs,
+                                         f.attrs, enemy_base)
+                self.assertEqual(filled, entry["text"],
+                                 "按序号填充的实时文本必须等于卡牌估算文本")
+                filled_simple = self._fill_live(entry["live_text_simple"],
+                                                calcs, f.attrs, enemy_base)
+                self.assertEqual(filled_simple, entry["text_simple"])
+                checked += 1
+        self.assertGreater(checked, 0, "应采样到带共鸣变数的技能")
+
+    def test_formula_small_values_keep_significant_digits(self):
+        """共鸣公式数值显示（v1.2.0）：>=0.1 保留两位小数；<0.1 改百分数
+        形式并保留两位有效数字，不允许出现被两位小数吞没的 0.00。"""
+        self.assertEqual(_format_formula_number(355.61, True), "355.61")
+        self.assertEqual(_format_formula_number(6.31, True), "6.31")
+        self.assertEqual(_format_formula_number(0.42, True), "0.42")
+        self.assertEqual(_format_formula_number(0.05, True), "5.00%")
+        self.assertEqual(_format_formula_number(0.00209, True), "0.21%")
+        self.assertEqual(_format_formula_number(0.42, False), "0.42%")
+        self.assertEqual(_format_formula_number(0.0042, False), "0.0042%")
+        self.assertEqual(_format_formula_number(0.099, False), "0.099%")
 
     def test_variable_appearance_rate_near_quota(self):
         """变数出现概率契约：每个槽位 25%，技能级出现率应接近 1−0.75²。"""

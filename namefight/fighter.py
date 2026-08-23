@@ -48,8 +48,10 @@ STATS_KEYS_USED = frozenset({
     "nat_gamble", "nat_tempo", "nat_armor_pen", "nat_blood_pact", "nat_grudge",
 })
 
-# 对战实时技能数据的占位符：live 文本中每个共鸣数值位替换为该标记
-# （每技能至多两个），前端按快照实时计算最终值后依序替换回文本
+# 对战实时技能数据的占位符：live 文本中每个共鸣数值位 = 该标记 + 槽位序号，
+# 序号 = 该变数在 eff["links"] 中的下标（与 link_calc 数组下标一致）。
+# 前端按序号（而非占位符在文本中的位置）取值后替换，避免模板参数顺序
+# 与共鸣槽位顺序不一致时数值交叉错位（v1.2.0 修复）。每技能至多两个占位符。
 LIVE_MARKER = "\x01"
 
 # 共鸣字段的展示格式与上下限：(效果类型, 字段) -> (fmt, lo, hi)
@@ -370,6 +372,32 @@ def format_field(value, fmt: str) -> str:
     return format_pct(float(value))
 
 
+def _sig_decimals(v: float, cap: int = 6) -> int:
+    """保留两位有效数字所需的小数位数（至少 2 位、至多 cap 位）。"""
+    v = abs(float(v))
+    decimals = 2
+    while decimals < cap and v * (10 ** decimals) < 10:
+        decimals += 1
+    return decimals
+
+
+def _format_formula_number(display_value: float, bracket: bool) -> str:
+    """共鸣公式内数值展示（v1.2.0）：
+
+    默认保留两位小数（如 6.31 / 0.42%）；当数值低于 0.1 时「保留两位小数」
+    会吞掉全部有效位变成 0.00——此时改为「保留两位有效数字」：
+    - bracket=True（百分数字段括号内的纯数字，正常时不带 %）：
+      数值 ×100 并加 %，如 0.00209 -> 0.21%；
+    - bracket=False（已是百分数形式的系数，如数值字段的合并系数）：
+      仅加深小数位，如 0.00209 -> 0.0021%。"""
+    if abs(display_value) >= 0.1:
+        return ("%.2f" if bracket else "%.2f%%") % display_value
+    if bracket:
+        p = display_value * 100.0
+        return "%.*f%%" % (_sig_decimals(p), p)
+    return "%.*f%%" % (_sig_decimals(display_value), display_value)
+
+
 def format_resonance_final(scaled_value, field: str, eff: dict, game=None) -> str:
     """共鸣后目标参数的展示值（引擎真实值）；game 为 None 时不带单位词。"""
     fmt = _res_spec(eff, field)[0]
@@ -565,8 +593,10 @@ def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
     1. 内联最简线性公式（紧跟对应数值）：最终值 = 基数 + 变量式 * 合并系数；
        变量式以属性 emoji 表示--own 省略范围词、enemy 前缀「对方」、
        difference「【己方-对方】」、sum「【己方+对方】」；
-       v1.1.0 起百分数字段括号内为纯数字（两位小数）、百分号移到括号外，
-       如（355.61+❤️*0.01）%；绝对数值字段仍以整数基数 + 百分数系数表示；
+       v1.1.0 起百分数字段括号内为纯数字、百分号移到括号外，
+       如（355.61+❤️*0.01）%；绝对数值字段仍以整数基数 + 百分数系数表示。
+       v1.2.0 起数值保留两位有效数字：低于 0.1 的数值改为百分数形式
+       （如 ❤️*0.21%），不再出现被两位小数吞没的 *0.00；
     2. 尾句依赖描述（使用属性全名，如「己方攻击越高，效果值越高。」）。
     """
     tmpl = game.stats
@@ -583,13 +613,14 @@ def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
     eff_raw = float(eff.get(field, 0.0))
     merged_raw = eff_raw * float(link.get("rate", 0.0)) / base
     if fmt == "pct":
-        # v1.1.0：百分数字段括号内为纯数字（两位小数），百分号移到括号外，
-        # 如「伤害提升至 375.52%（355.61+❤️*0.01）%」
-        base_display = "%.2f" % (eff_raw * 100.0)
-        merged = "%.2f" % (merged_raw * 100.0)
+        # v1.1.0：百分数字段括号内为纯数字、百分号移到括号外，
+        # 如「伤害提升至 375.52%（355.61+❤️*0.01）%」；
+        # v1.2.0：低于 0.1 的数值改百分数形式保留有效位（如 ❤️*0.21%）
+        base_display = _format_formula_number(eff_raw * 100.0, bracket=True)
+        merged = _format_formula_number(merged_raw * 100.0, bracket=True)
     else:
         base_display = format_field(eff_raw, fmt)
-        merged = format_pct(merged_raw)
+        merged = _format_formula_number(merged_raw * 100.0, bracket=False)
     against = var_id
     if mode in ("difference", "sum"):
         vdef = next((v for v in game.skill_variable_link.variables if v.id == var_id), None)
@@ -627,20 +658,22 @@ def _natural_text(eff: dict, fighter: Fighter, game: GameCfg,
     """标准化自然语言描述。参数为共鸣估算后的最终值（敌方按基础值估算）：
 
     - 每个共鸣字段的公式括号紧跟该数值（simple 模式隐藏公式）；
-    - live=True 时共鸣数值位替换为 LIVE_MARKER，供前端按快照实时填充。
+    - live=True 时共鸣数值位替换为「LIVE_MARKER + 槽位序号」（序号对应
+      link_calc 下标），供前端按快照实时填充，与模板中的出现位置无关。
     """
     display_eff, _ = estimated_resonanced_eff(fighter, eff, game)
     key, params = _nat_params(display_eff, game)
     params = dict(params)
     tails = []
-    for link in eff.get("links", ()):
+    for slot, link in enumerate(eff.get("links", ())):
         field = str(link.get("field"))
         if field not in params:
             continue
         formula, tail = _link_formula(eff, link, field, game)
         final = str(params[field])
         if live:
-            params[field] = LIVE_MARKER + ("" if simple else formula)
+            params[field] = "%s%d%s" % (LIVE_MARKER, slot,
+                                        "" if simple else formula)
         elif simple:
             params[field] = final
         else:
