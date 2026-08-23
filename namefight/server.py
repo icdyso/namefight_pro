@@ -14,7 +14,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .battle import battle_to_api, run_battle
-from .config import ConfigError, load_game_config
+from .config import (CONFIG_FILES, ConfigError, load_game_config,
+                     load_game_config_from_data, save_game_config)
 from .fighter import InvalidName, derive_fighter, fighter_to_api
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,10 +37,23 @@ class _Handled(Exception):
 
 
 class AppState:
-    """启动时一次性加载的配置快照（修改配置需重启进程）。"""
+    """配置快照。启动时加载一次；创意工坊保存配置后热重载。"""
 
     def __init__(self, config_root: Path):
+        self.config_root = config_root
         self.game = load_game_config(config_root)
+
+    def reload(self):
+        self.game = load_game_config(self.config_root)
+
+    def read_raw_files(self) -> dict:
+        """读取配置文件的原始 JSON（创意工坊编辑器用）。"""
+        out = {}
+        for key in CONFIG_FILES:
+            with (Path(self.config_root) / "game" / (key + ".json")).open(
+                    "r", encoding="utf-8") as f:
+                out[key] = json.load(f)
+        return out
 
 
 def make_handler(state: AppState):
@@ -104,11 +118,15 @@ def make_handler(state: AppState):
 
         def do_POST(self):
             path = unquote(urlsplit(self.path).path)
-            if path not in ("/api/battle", "/api/battle/fast"):
+            if path not in ("/api/battle", "/api/battle/fast",
+                            "/api/config/preview", "/api/config/save"):
                 self._send_error_json("not_found", 404)
                 return
             try:
                 length = int(self.headers.get("Content-Length") or 0)
+                if length > 8 * 1024 * 1024:
+                    self._send_error_json("bad_request", 400)
+                    return
                 raw = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
                 payload = json.loads(raw)
             except (ValueError, UnicodeDecodeError):
@@ -117,8 +135,12 @@ def make_handler(state: AppState):
             try:
                 if path == "/api/battle":
                     self._api_battle(payload)
-                else:
+                elif path == "/api/battle/fast":
                     self._api_battle_fast(payload)
+                elif path == "/api/config/preview":
+                    self._api_config_preview(payload)
+                else:
+                    self._api_config_save(payload)
             except _Handled:
                 pass
             except InvalidName as e:
@@ -139,12 +161,20 @@ def make_handler(state: AppState):
                     "langs": [game.system.language],
                     "version": game.system.version,
                     "ui": game.ui,
-                    "playback": {"message_delay_ms": game.battle.message_delay_ms},
+                    "playback": {
+                        "message_delay_ms": game.battle.message_delay_ms,
+                        "action_pause_every": game.battle.action_pause_every,
+                        "action_pause_ms": game.battle.action_pause_ms,
+                    },
                 })
             elif path == "/api/fighter":
                 name = (query.get("name") or [""])[0]
                 fighter = derive_fighter(name, game)
                 self._send_json(fighter_to_api(fighter, game))
+            elif path == "/api/config":
+                # 创意工坊：当前配置原文（编辑器初值）
+                self._send_json({"version": game.system.version,
+                                 "files": state.read_raw_files()})
             else:
                 self._send_error_json("not_found", 404)
 
@@ -216,6 +246,54 @@ def make_handler(state: AppState):
             self._send_json({"results": results, "runs": runs,
                              "elapsed_ms": elapsed_ms,
                              "version": game.system.version})
+
+        # ---------- 创意工坊（v1.0.0） ----------
+
+        def _draft_config(self, payload):
+            """取请求体中的 files 并构建草稿配置；失败返回 (None, 错误文案)。"""
+            files = payload.get("files") if isinstance(payload, dict) else None
+            try:
+                return load_game_config_from_data(files), None
+            except ConfigError as e:
+                return None, str(e)
+            except Exception as e:  # noqa: BLE001 - 草稿数据任意，需兜底
+                return None, "配置解析失败: %r" % (e,)
+
+        def _api_config_preview(self, payload):
+            """草稿试运行：不落盘，用草稿配置推导斗士并打一场，返回完整战报。"""
+            cfg, err = self._draft_config(payload)
+            if cfg is None:
+                self._send_json({"ok": False, "error": err})
+                return
+            name_a = payload.get("a") if isinstance(payload.get("a"), str) and payload.get("a").strip() else "测试甲"
+            name_b = payload.get("b") if isinstance(payload.get("b"), str) and payload.get("b").strip() else "测试乙"
+            try:
+                fighter_a = derive_fighter(name_a, cfg)
+                fighter_b = derive_fighter(name_b, cfg)
+                outcome = run_battle(fighter_a, fighter_b, cfg)
+                preview = battle_to_api(outcome, [
+                    fighter_to_api(fighter_a, cfg),
+                    fighter_to_api(fighter_b, cfg),
+                ], cfg)
+            except InvalidName as e:
+                self._send_json({"ok": False, "error": "名字非法: %s" % e.code})
+                return
+            self._send_json({"ok": True, "version": cfg.system.version,
+                             "preview": preview})
+
+        def _api_config_save(self, payload):
+            """保存配置：先完整校验再原子写入各文件，随后热重载服务配置。"""
+            cfg, err = self._draft_config(payload)
+            if cfg is None:
+                self._send_json({"ok": False, "error": err})
+                return
+            try:
+                save_game_config(state.config_root, payload["files"])
+            except (ConfigError, OSError) as e:
+                self._send_json({"ok": False, "error": "保存失败: %s" % e})
+                return
+            state.reload()
+            self._send_json({"ok": True, "version": state.game.system.version})
 
     return Handler
 

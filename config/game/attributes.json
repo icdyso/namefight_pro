@@ -1,10 +1,64 @@
 {
   "attributes": [
-    { "id": "hp",    "name": "生命", "emoji": "❤️", "base": 20000, "min": 16000, "max": 24000, "format": "int",     "power_weight": 1 },
-    { "id": "atk",   "name": "攻击", "emoji": "⚔️", "base": 1500,  "min": 1000,  "max": 2000,  "format": "int",     "power_weight": 4 },
-    { "id": "def",   "name": "防御", "emoji": "🛡️", "base": 1500,  "min": 1000,  "max": 2000,  "format": "int",     "power_weight": 3 },
-    { "id": "spd",   "name": "速度", "emoji": "👟", "base": 1500,  "min": 1000,  "max": 2000,  "format": "int",     "power_weight": 2 },
-    { "id": "crit",  "name": "暴击", "emoji": "🎯", "base": 12,    "min": 5,     "max": 20,    "format": "percent", "power_weight": 2 },
-    { "id": "dodge", "name": "闪避", "emoji": "🌀", "base": 10,    "min": 5,     "max": 15,    "format": "percent", "power_weight": 2 }
+    {
+      "id": "hp",
+      "name": "生命",
+      "emoji": "❤️",
+      "base": 20000,
+      "min": 16000,
+      "max": 24000,
+      "format": "int",
+      "power_weight": 1
+    },
+    {
+      "id": "atk",
+      "name": "攻击",
+      "emoji": "⚔️",
+      "base": 1500,
+      "min": 1000,
+      "max": 2000,
+      "format": "int",
+      "power_weight": 4
+    },
+    {
+      "id": "def",
+      "name": "防御",
+      "emoji": "🛡️",
+      "base": 750,
+      "min": 500,
+      "max": 1000,
+      "format": "int",
+      "power_weight": 3
+    },
+    {
+      "id": "spd",
+      "name": "速度",
+      "emoji": "👟",
+      "base": 10,
+      "min": 6,
+      "max": 14,
+      "format": "int",
+      "power_weight": 2
+    },
+    {
+      "id": "crit",
+      "name": "暴击",
+      "emoji": "🎯",
+      "base": 12,
+      "min": 5,
+      "max": 20,
+      "format": "percent",
+      "power_weight": 2
+    },
+    {
+      "id": "dodge",
+      "name": "闪避",
+      "emoji": "🌀",
+      "base": 10,
+      "min": 5,
+      "max": 15,
+      "format": "percent",
+      "power_weight": 2
+    }
   ]
 }

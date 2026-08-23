@@ -2,12 +2,13 @@
 
 tick 战斗模型：
 - 每个 tick 双方行动槽（gauge）累加自身有效速度，达到阈值
-  （battle.json 的 gauge_threshold，速度 1500 / 阈值 10000 ≈ 每 7 刻一动）
+  （battle.json 的 gauge_threshold，速度 ~10 / 阈值 100 ≈ 每 10 刻一动）
   即可行动一次并扣回阈值；速度决定行动频率。
   同一 tick 多人可行动时，按（gauge 余量降序、内部序）依次执行；
 - 内部序 = 速度降序、规范化名字升序，与输入顺序无关；
 - v0.10.0 起快照与战报中的全部数值均为**引擎真实值**（不再换算显示单位）；
-  非百分比基础数值为 ×100 整数量纲（命 20000 / 攻防速 1500），
+  命/攻为 ×100 整数量纲（命 20000 / 攻 1500），防御 750（v1.0.0 减半），
+  速度为小整数量纲（~10，v1.0.0 回退旧版）；
   **全部计算结果取整**：多步浮点计算只在最终应用时取整一次
   （伤害/治疗/吸血/毒/流血/破甲/叠速等），百分数内容保持 2 位小数；
 - 防御为倒数百分比免伤：免伤率 = DEF / (DEF + defense_constant)，
@@ -47,7 +48,7 @@ SUPPORTED_EFFECTS = frozenset({
 # 引擎会输出的战报模板 id（测试据此校验配置都有对应文案）
 TEMPLATES_USED = frozenset({
     "battle_start", "tick_marker", "turn_stun", "poison_tick", "poison_death",
-    "bleed_tick", "bleed_death", "regen_tick", "skill_proc",
+    "bleed_tick", "bleed_death", "regen_tick", "skill_proc", "attack_start",
     "effect_execution", "effect_lifesteal",
     "effect_poison", "effect_stun", "effect_heal", "regen_mark",
     "effect_reduction", "effect_reflect", "effect_link", "low_hp_trigger",
@@ -812,6 +813,9 @@ def _quick_strike(attacker, victim, mult, game, rng, ev, tick):
 
 def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
     bc = game.battle
+
+    # ---- 普通攻击宣告：让普攻在战报中同样可见（v1.0.0） ----
+    ev("attack_start", {"a": actor.name})
 
     # ---- 蓄力释放：必定命中、暴击率提升的巨大一击（替换常规攻击） ----
     if actor.charging:

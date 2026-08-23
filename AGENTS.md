@@ -48,18 +48,23 @@
    见 `battle._r`），非百分比属性投掷即取整，血量全程整数；
    一切展示中**百分数保留 2 位小数、其余数值保留整数**
    （后端 `format_pct` / `format_num` 与前端格式化遵循同一规则，v0.8.0 起）。
-   **×100 整数量纲 + 真实值直显（v0.10.0）**：非百分比基础数值整体 ×100
-   （命 20000 / 攻防速 1500，正态投掷于 `[min, max]`）；v0.9.1 的白板 100
-   显示换算（display_ref）已删除，卡牌 / HUD / 快照 / 战报数值 / 共鸣公式
-   **一律直显引擎真实值**；crit/dodge 本身即百分数（浮点），不取整。
-   称号字段附带小额属性加成（`game/titles.json` 各字段 `bonus`，×100 量纲），
+   **真实值直显（v0.10.0）+ 量纲调整（v1.0.0）**：v0.9.1 的白板 100 显示换算
+   （display_ref）已删除，卡牌 / HUD / 快照 / 战报数值 / 共鸣公式**一律直显
+   引擎真实值**；crit/dodge 本身即百分数（浮点），不取整。量纲（v1.0.0）：
+   命/攻为 ×100 整数量纲（命 20000、投掷 [16000,24000]；攻 1500、[1000,2000]），
+   **防御数值减半**（750、[500,1000]），**速度与行动条回退旧版小量纲**
+   （速度 10、[6,14]；`gauge_threshold` 100，约每 10 刻一动）；
+   各技能量纲同步换算（破甲 340、斩断倒退 9、疾影前进 33/56、叠速 +1 等）。
+   称号字段附带小额属性加成（`game/titles.json` 各字段 `bonus`，与属性同量纲），
    查表叠加到投掷值，不消耗随机数。
+   **熟练度为 [0,100] 的高斯投掷**（v1.0.0 起，`next_gaussian_range`，集中于 50，
+   消耗随机数的方式与次数不变）。
    技能个性化（熟练度/数值/词缀/变数随名字扰动）使用**独立种子**
    `md5(规范化名字 + ":" + 技能id)`，与主派生流互不影响；个性化消耗顺序固定
    （v0.9.0，改变即 breaking）：
    **熟练度 -> value -> damage -> 前缀(是否 -> 抽取 -> 缩放) -> 后缀(是否 -> 抽取
    -> 缩放) -> 变数槽一(是否 -> 模式 -> 变量 -> 倍率) -> 变数槽二(同前)**。
-   熟练度（0~100 高斯）按技能各自区间缩放触发概率（条件型缩放效果值），
+   熟练度（0~100 高斯投掷）按技能各自区间缩放触发概率（条件型缩放效果值），
    熟练度行直接显示最终触发率（各技能基础触发率按强度互不相同，永不超过 100%）；
    每个技能两个变数槽位各自以 `variable_link.chance`（25%）概率成为共鸣变数
    （own/enemy/difference/sum 四模式），共鸣只按归一化系数修正技能自身参数。
@@ -79,10 +84,13 @@
    - `titles.json`：称号结构池（structures）+ 字段池（prefix/cores/suffixes，
      含 name/desc/**bonus 加成**）；
    - `battle.json`：战斗常数（暴击倍率/浮动/免伤常数/行动槽阈值/max_ticks）、
-     `battle_log` 战报模板、`buffs` 文案、`playback` 回放配置；
+     `battle_log` 战报模板（含普通攻击宣告 `attack_start`）、`buffs` 文案、
+     `playback` 回放配置（每条停顿 + 行动间较长停顿，均可配置）；
    - `ui.json`：全部界面文案。
 2. 代码中**禁止硬编码任何面向用户的文案**；技能描述只写风味文本，不重复数值
-   （数值的唯一事实来源是 `config/game`）。
+   （数值的唯一事实来源是 `config/game`）。例外：创意工坊（`/workshop.html`，
+   v1.0.0）为管理向独立页面，界面文字直接书写于 `web/js/workshop.js`，
+   不占用游戏文案。
 3. 战斗日志以「模板 id + 参数」结构化存储；技能 / 称号 / 属性等参数以
    `{"ref": 注册名, "id": 条目id}` 形式传递，渲染时才查条目显示名；
    每条战报同时附带 `rich` 富文本段（plain/name-a/name-b/skill/dmg/heal），
@@ -144,9 +152,12 @@ namefight_pro/
 │       └── ui.json           # 界面文案
 ├── web/                      # 前端（无构建、零依赖）
 │   ├── index.html
+│   ├── workshop.html         # 创意工坊（v1.0.0，独立管理页）
 │   ├── css/style.css
-│   └── js/framework.js       # 自编写微型框架（NF.h 等）
-│   └── js/app.js             # 应用逻辑（文案全部来自 /api/text）
+│   ├── css/workshop.css
+│   ├── js/framework.js       # 自编写微型框架（NF.h 等）
+│   ├── js/app.js             # 应用逻辑（文案全部来自 /api/text）
+│   └── js/workshop.js        # 配置可视化编辑 + 草稿试运行 + 保存热重载
 ├── tests/                    # unittest 测试
 │   ├── test_determinism.py   # 核心不变量：同名同命 / 顺序无关 / 跨进程一致 / 量纲与取整契约
 │   └── test_config.py        # 配置完整性、文案覆盖、PRNG 金向量
@@ -162,6 +173,8 @@ namefight_pro/
 - 启动：`python server.py [--host 127.0.0.1] [--port 8000]`
 - 测试：`python -m unittest discover -s tests -v`
 - 冒烟：`GET /api/health`、`GET /api/fighter?name=测试`、`POST /api/battle`
+- 创意工坊：浏览器打开 `/workshop.html`；`GET /api/config` 读取原文，
+  `POST /api/config/preview` 草稿试运行，`POST /api/config/save` 校验保存并热重载。
 
 ## 6. API 摘要
 
@@ -172,22 +185,31 @@ namefight_pro/
 | `GET /api/fighter?name=X` | 斗士完整数据（含 MD5 摘要、属性、技能、称号） |
 | `POST /api/battle` | body `{"a": "...", "b": "..."}`；返回双方数据、逐条战报（结构化事件 + 已渲染文本 + rich 富文本段 + 双方状态快照）与胜负 |
 | `POST /api/battle/fast` | `{a,b,runs}` 或 `{pairs,runs}`；极速对战（无快照/无文案），供批量测试 |
+| `GET /api/config` | 创意工坊：六个配置文件原文 + 当前版本 |
+| `POST /api/config/preview` | 创意工坊：`{files, a, b}` 草稿配置试运行（不落盘），返回 `{ok, preview}` 或 `{ok:false, error}` |
+| `POST /api/config/save` | 创意工坊：`{files}` 先校验后原子写入并热重载服务配置，返回 `{ok, version}` |
+| `/workshop.html` | 创意工坊静态页（独立页面，未来可按需挂载权限） |
 
 错误以 `{"error": "<code>"}` + 4xx/5xx 返回，错误码文案由 `game/ui.json` 提供。
 
 ## 7. 设计备忘
 
 - **tick 战斗模型**：战斗以 tick 推进；每个 tick 双方行动槽（gauge）累加自身有效
-  速度，达到阈值（`battle.json` 的 `gauge_threshold`，默认 10000；速度 1500 ≈
-  每 7 刻一动）即可行动一次并扣回阈值。速度决定行动频率。
+  速度，达到阈值（`battle.json` 的 `gauge_threshold`，v1.0.0 回退为 100；
+  速度 ~10 ≈ 每 10 刻一动）即可行动一次并扣回阈值。速度决定行动频率。
   同一 tick 多人可行动时按（gauge 余量降序、内部序）执行；内部序 = 速度降序、
   规范化名字升序，与输入顺序无关；
+- **战报回放**（v1.0.0）：普通模式逐条停顿（`playback.message_delay_ms`），
+  且每 `action_pause_every` 次角色行动（以 `attack_start` 宣告计）插入一次
+  较长停顿（`action_pause_ms`）；单回合递进模式不自动播放，「递进一步」每次
+  推进一次角色行动的战报；每次攻击行动前先输出 `attack_start`
+  （普通攻击宣告，与技能使用行同理），斩断反击不经过该宣告；
 - **防御倒数百分比免伤**（v0.10.0）：伤害公式
   `raw = ATK × atk_factor × 高斯浮动 × 暴击倍率 × 技能倍率`，
   `免伤率 = 有效防御 / (有效防御 + defense_constant) × (1 − 穿透率)`，
   `dmg = max(min_damage, raw × (1 − 免伤率))`（最终应用时取整一次）；
   不再从伤害中直接扣减防御；破甲降低有效防御，穿透按比例抵消灭伤率；
-- **技能个性化**：每个技能实例附带熟练度（0~100，高斯）与至多两个共鸣变数；
+- **技能个性化**：每个技能实例附带熟练度（0~100，高斯投掷）与至多两个共鸣变数；
   熟练度按 `skills.json` 各技能 `mastery: [lo,hi]` 区间缩放触发概率
   （`mastery_on` 指定作用字段，条件型技能可为 value/immune），
   熟练度行显示最终触发率（永不超过 100%，各技能基础触发率按强度互不相同）；
@@ -215,4 +237,10 @@ namefight_pro/
   （HP/ATK/DEF/SPD/暴击/闪避/行动槽原始值与百分比/每刻推进量/阈值/buff 列表），
   buff 以 id+params 存储、渲染时查 `battle.json` 的 buffs 模板；
   快照按输入位置 a/b 记录；前端逐条停顿回放（`playback.message_delay_ms` 可配置），
-  HUD 六维实时刷新（数值变化高亮），行动槽同时展示数值。
+  HUD 六维实时刷新（数值变化高亮），行动槽同时展示数值；
+  简易显示模式下对战中同样展示实时变动的技能数据（live 文本 + 快照重算）；
+- **创意工坊**（v1.0.0）：`/workshop.html` 独立页面，可视化编辑全部六个配置
+  JSON（表格/卡片式编辑 + JSON 源码模式），编辑只影响草稿；「试运行」以草稿
+  配置推导并打一场（`/api/config/preview`，不落盘），「保存并生效」经
+  `load_game_config_from_data` 完整校验后原子写盘并热重载（无需重启）。
+  该页未来可挂载权限、仅开放给管理员。

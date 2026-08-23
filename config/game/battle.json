@@ -1,16 +1,21 @@
 {
   "crit_multiplier": 1.8,
-  "variance": [0.85, 1.15],
-  "atk_factor": 1.0,
+  "variance": [
+    0.85,
+    1.15
+  ],
+  "atk_factor": 1,
   "defense_constant": 2500,
   "min_damage": 100,
   "max_ticks": 600,
-  "gauge_threshold": 10000,
+  "gauge_threshold": 100,
   "crit_cap": 100,
   "dodge_cap": 60,
   "seed_separator": "\u001f",
   "playback": {
-    "message_delay_ms": 320
+    "message_delay_ms": 320,
+    "action_pause_every": 5,
+    "action_pause_ms": 1600
   },
   "battle_log": {
     "battle_start": "⚔️ {a} 对阵 {b}！",
@@ -22,6 +27,7 @@
     "bleed_death": "🩸 {a} 失血过多而亡！",
     "regen_tick": "🌿 {a} 回春生效，回复 {heal} 点生命。",
     "skill_proc": "{a} 使用了 {skill}！",
+    "attack_start": "　🗡️ {a} 发起攻击！",
     "effect_damage_up": "　　力量涌动，伤害倍率提升至 {mult}！",
     "effect_execution": "　　斩杀时机已到，伤害倍率提升至 {mult}！",
     "effect_lifesteal": "　　🩸 {a} 吸取了 {heal} 点生命。",
@@ -65,37 +71,85 @@
     "retribution_release": "　　😤 {a} 新仇旧怨一起算：追加 {value} 点伤害（记录 ×{ratio}）！"
   },
   "buffs": {
-    "poison":      { "name": "中毒",     "detail": "每次行动损失 {damage} 点生命（剩 {turns} 刻）",
-                      "desc": "毒发在行动时结算，持续以刻计。" },
-    "bleed":       { "name": "流血",     "detail": "每次行动损失 {damage} 点生命（剩 {turns} 刻）",
-                      "desc": "撕裂伤随攻击者的攻击而定。" },
-    "stun":        { "name": "眩晕",     "detail": "{turns} 刻内无法行动",
-                      "desc": "眩晕在持续期间消耗对方的行动。" },
-    "shred":       { "name": "破甲",     "detail": "防御 −{value}（{stacks} 层，剩 {turns} 刻）",
-                      "desc": "护甲碎裂，防御降低。" },
-    "charge":      { "name": "蓄力",     "detail": "下次行动：必定命中的巨大一击",
-                      "desc": "蓄力占用一次行动，可被净化驱散。" },
-    "momentum":    { "name": "乘胜",     "detail": "连击 ×{stacks}，伤害倍率 {mult}",
-                      "desc": "攻击落空后清零。" },
-    "grudge":      { "name": "怨念",     "detail": "×{stacks} 层，伤害倍率 {mult}",
-                      "desc": "被命中时概率积攒，层数无上限，随刻消退。" },
-    "guard":       { "name": "锻痕",     "detail": "{stacks} 层，伤害减免 {value}",
-                      "desc": "受击时概率叠加，随刻消退。" },
-    "retribution": { "name": "记仇",     "detail": "已记录 {stacks} 条（合计 {value} 点）",
-                      "desc": "下次命中把记录总和按倍率追加打出。" },
-    "last_stand":  { "name": "背水一战", "detail": "攻击 +{value}，速度 +{spd}",
-                      "desc": "濒危时爆发的斗志。" },
-    "regen":       { "name": "回春",     "detail": "每 {tick} 刻回复 {value} 点生命（剩 {turns} 刻）",
-                      "desc": "回春印记缓慢滋养伤口。" },
-    "lifesteal":   { "name": "嗜血",     "detail": "吸血 {value}（剩 {turns} 次行动）",
-                      "desc": "所造成伤害的一部分转化为生命。" },
-    "will":        { "name": "不屈",     "detail": "致命伤害：{value} 概率回复至 {heal} 生命",
-                      "desc": "每次触发后概率指数衰减。" },
-    "will_used":   { "name": "不屈（概率已尽）", "detail": "触发概率已衰减殆尽",
-                      "desc": "" },
-    "tempo":       { "name": "渐入佳境", "detail": "速度 +{value}（{stacks} 层）",
-                      "desc": "行动后概率叠加，无上限。" },
-    "blood_pact":  { "name": "血契",     "detail": "累计攻击 +{value}",
-                      "desc": "献祭所得吸血已永久转化为攻击。" }
+    "poison": {
+      "name": "中毒",
+      "detail": "每次行动损失 {damage} 点生命（剩 {turns} 刻）",
+      "desc": "毒发在行动时结算，持续以刻计。"
+    },
+    "bleed": {
+      "name": "流血",
+      "detail": "每次行动损失 {damage} 点生命（剩 {turns} 刻）",
+      "desc": "撕裂伤随攻击者的攻击而定。"
+    },
+    "stun": {
+      "name": "眩晕",
+      "detail": "{turns} 刻内无法行动",
+      "desc": "眩晕在持续期间消耗对方的行动。"
+    },
+    "shred": {
+      "name": "破甲",
+      "detail": "防御 −{value}（{stacks} 层，剩 {turns} 刻）",
+      "desc": "护甲碎裂，防御降低。"
+    },
+    "charge": {
+      "name": "蓄力",
+      "detail": "下次行动：必定命中的巨大一击",
+      "desc": "蓄力占用一次行动，可被净化驱散。"
+    },
+    "momentum": {
+      "name": "乘胜",
+      "detail": "连击 ×{stacks}，伤害倍率 {mult}",
+      "desc": "攻击落空后清零。"
+    },
+    "grudge": {
+      "name": "怨念",
+      "detail": "×{stacks} 层，伤害倍率 {mult}",
+      "desc": "被命中时概率积攒，层数无上限，随刻消退。"
+    },
+    "guard": {
+      "name": "锻痕",
+      "detail": "{stacks} 层，伤害减免 {value}",
+      "desc": "受击时概率叠加，随刻消退。"
+    },
+    "retribution": {
+      "name": "记仇",
+      "detail": "已记录 {stacks} 条（合计 {value} 点）",
+      "desc": "下次命中把记录总和按倍率追加打出。"
+    },
+    "last_stand": {
+      "name": "背水一战",
+      "detail": "攻击 +{value}，速度 +{spd}",
+      "desc": "濒危时爆发的斗志。"
+    },
+    "regen": {
+      "name": "回春",
+      "detail": "每 {tick} 刻回复 {value} 点生命（剩 {turns} 刻）",
+      "desc": "回春印记缓慢滋养伤口。"
+    },
+    "lifesteal": {
+      "name": "嗜血",
+      "detail": "吸血 {value}（剩 {turns} 次行动）",
+      "desc": "所造成伤害的一部分转化为生命。"
+    },
+    "will": {
+      "name": "不屈",
+      "detail": "致命伤害：{value} 概率回复至 {heal} 生命",
+      "desc": "每次触发后概率指数衰减。"
+    },
+    "will_used": {
+      "name": "不屈（概率已尽）",
+      "detail": "触发概率已衰减殆尽",
+      "desc": ""
+    },
+    "tempo": {
+      "name": "渐入佳境",
+      "detail": "速度 +{value}（{stacks} 层）",
+      "desc": "行动后概率叠加，无上限。"
+    },
+    "blood_pact": {
+      "name": "血契",
+      "detail": "累计攻击 +{value}",
+      "desc": "献祭所得吸血已永久转化为攻击。"
+    }
   }
 }

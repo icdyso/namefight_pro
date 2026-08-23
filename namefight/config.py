@@ -4,11 +4,13 @@ v0.10.0 起：数值规则与文案**合并在 config/game/*.json 单层配置**
 每个条目（属性/技能/称号字段/词缀）的文字与其数值/加成保存在同一条目内，
 不再拆分 locales 目录（英文等多语言支持已移除，单语言 zh）。
 
-启动时一次性加载并校验；修改配置后需重启进程。
+启动时一次性加载并校验；v1.0.0 起创意工坊（/workshop.html）可通过
+/api/config/save 在运行时校验并保存配置、随后热重载，无需重启进程。
 """
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,9 @@ REQUIRED_ATTRIBUTE_IDS = ("hp", "atk", "def", "spd", "crit", "dodge")
 
 # 称号结构允许引用的字段名 -> 数值池名（core2 与 core 共用核心池）
 TITLE_FIELD_POOLS = {"prefix": "prefix", "core": "core", "core2": "core", "suffix": "suffix"}
+
+# 配置文件清单（创意工坊读写与校验共用；文件名 = 键 + ".json"）
+CONFIG_FILES = ("system", "attributes", "skills", "titles", "battle", "ui")
 
 
 class ConfigError(Exception):
@@ -153,6 +158,8 @@ class BattleCfg:
     dodge_cap: float          # 百分数上限
     seed_separator: str
     message_delay_ms: int     # 前端战报逐条播放的停顿时长（可配置）
+    action_pause_every: int   # 普通播放模式：每 N 次角色行动插入一次较长停顿
+    action_pause_ms: int      # 该较长停顿的时长（ms）
 
 
 @dataclass(frozen=True)
@@ -217,12 +224,44 @@ class GameCfg:
 def load_game_config(config_root) -> GameCfg:
     root = Path(config_root)
     game = root / "game"
-    sys_data = _read_json(game / "system.json")
-    attrs_data = _read_json(game / "attributes.json")
-    skills_data = _read_json(game / "skills.json")
-    titles_data = _read_json(game / "titles.json")
-    battle_data = _read_json(game / "battle.json")
-    ui_data = _read_json(game / "ui.json")
+    data = {key: _read_json(game / (key + ".json")) for key in CONFIG_FILES}
+    return build_game_config(data)
+
+
+def load_game_config_from_data(data) -> GameCfg:
+    """以内存中的 dict 构建配置（创意工坊试运行用）；非法即抛 ConfigError。"""
+    if not isinstance(data, dict):
+        raise ConfigError("配置数据必须是 JSON 对象")
+    missing = [key for key in CONFIG_FILES if key not in data]
+    if missing:
+        raise ConfigError("缺少配置文件: %s" % "、".join(missing))
+    return build_game_config(data)
+
+
+def save_game_config(config_root, data) -> None:
+    """先完整校验再原子写入各配置文件（创意工坊保存用）。"""
+    load_game_config_from_data(data)
+    game = Path(config_root) / "game"
+    for key in CONFIG_FILES:
+        target = game / (key + ".json")
+        tmp = game / (key + ".json.tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(data[key], f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp, target)
+
+
+def build_game_config(data: dict) -> GameCfg:
+    sys_data = data["system"]
+    attrs_data = data["attributes"]
+    skills_data = data["skills"]
+    titles_data = data["titles"]
+    battle_data = data["battle"]
+    ui_data = data["ui"]
+    if not isinstance(sys_data, dict):
+        raise ConfigError("system.json 必须是 JSON 对象")
+    if "version" not in sys_data:
+        raise ConfigError("system.json 缺少 version")
 
     name_cfg = sys_data.get("name", {})
     system = SystemCfg(
@@ -447,6 +486,8 @@ def load_game_config(config_root) -> GameCfg:
         dodge_cap=float(battle_data.get("dodge_cap", 60)),
         seed_separator=str(battle_data.get("seed_separator", "")),
         message_delay_ms=int(playback.get("message_delay_ms", 320)),
+        action_pause_every=int(playback.get("action_pause_every", 5)),
+        action_pause_ms=int(playback.get("action_pause_ms", 1600)),
     )
     if battle.max_ticks < 1:
         raise ConfigError("max_ticks 必须 >= 1")
@@ -458,6 +499,10 @@ def load_game_config(config_root) -> GameCfg:
         raise ConfigError("defense_constant 必须 > 0")
     if battle.message_delay_ms < 16:
         raise ConfigError("playback.message_delay_ms 必须 >= 16")
+    if battle.action_pause_every < 1:
+        raise ConfigError("playback.action_pause_every 必须 >= 1")
+    if battle.action_pause_ms < 0:
+        raise ConfigError("playback.action_pause_ms 必须 >= 0")
     if battle.variance_lo > battle.variance_hi:
         raise ConfigError("variance 区间非法")
 

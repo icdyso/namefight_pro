@@ -11,6 +11,8 @@
     version: "",
     text: {},
     msgDelay: 320,      // 每条战报的停顿时长（ms，来自 battle.json 的 playback 配置）
+    actionEvery: 5,     // 普通播放：每 N 次角色行动插入一次较长停顿
+    actionPause: 1600,  // 该较长停顿的时长（ms）
     fighters: null,     // [fighterApi, fighterApi]（按输入顺序）
     battle: null,       // /api/battle 响应
     shown: 0,           // 已展示的战报条数
@@ -19,6 +21,8 @@
     speed: 1,
     busy: false,
     simple: false,      // 简易显示模式（隐藏技能描述中的共鸣公式）
+    stepMode: false,    // 单回合递进模式（手动点击，每次推进一次角色行动）
+    actionsShown: 0,    // 普通播放中已展示的角色行动数（行动间大间隔用）
     skillRefs: null,    // {a: [{s, textNode, tipTextNode}], b: [...]} 实时刷新用
     lastBattleState: null,  // 最近一次应用的双方快照（重渲染后恢复实时数值）
     tickPos: 0
@@ -171,6 +175,8 @@
       state.text = data.ui || {};
       var pb = data.playback || {};
       state.msgDelay = Math.max(16, +pb.message_delay_ms || 320);
+      state.actionEvery = Math.max(1, +pb.action_pause_every || 5);
+      state.actionPause = Math.max(0, +pb.action_pause_ms || 0);
       document.title = t("app_title");
     });
   }
@@ -178,7 +184,10 @@
   /* ---------------- 战报逐条回放（每条消息停顿 msgDelay/speed 毫秒） ----------------
    * v0.10.0 起回放按「条」推进：每条战报展示后停顿一段可配置的时间
    * （battle.json 的 playback.message_delay_ms ÷ 倍速）；跨刻时行动槽
-   * 按每刻推进量顺次补进，仍与服务器快照逐条对齐校正。 */
+   * 按每刻推进量顺次补进，仍与服务器快照逐条对齐校正。
+   * v1.0.0：普通模式下每 actionEvery 次角色行动（以「发起攻击」宣告计）
+   * 额外停顿 actionPause 毫秒；单回合递进模式下不自动播放，
+   * 由「递进一步」按钮每次推进一次角色行动。 */
 
   function stopPlayback() {
     state.playing = false;
@@ -195,13 +204,23 @@
   function startPlayback() {
     stopPlayback();
     state.tickPos = 0;
+    state.actionsShown = 0;
     state.playing = true;
     renderControls();
-    scheduleMsg();
+    if (!state.stepMode) scheduleMsg();
   }
 
   function scheduleMsg() {
-    state.timer = setTimeout(stepMsg, msgDuration());
+    // 上一条是「发起攻击」宣告且命中行动间隔节拍时，插入较长停顿
+    var log = state.battle ? state.battle.log : [];
+    var prev = state.shown > 0 ? log[state.shown - 1] : null;
+    var delay = msgDuration();
+    if (prev && prev.template === "attack_start"
+        && state.actionsShown % state.actionEvery === 0
+        && state.actionPause > 0) {
+      delay = Math.max(delay, state.actionPause / state.speed);
+    }
+    state.timer = setTimeout(stepMsg, delay);
   }
 
   function stepMsg() {
@@ -218,11 +237,47 @@
     }
     appendLogEntry(entry);
     state.shown++;
+    if (entry.template === "attack_start") state.actionsShown++;
     if (state.shown >= log.length) {
       finishPlayback();
       return;
     }
+    if (state.stepMode) {
+      renderControls();
+      return;
+    }
     scheduleMsg();
+  }
+
+  /* 单回合递进：展示到下一次角色行动为止（普通攻击宣告标志一次行动）。
+   * 若下一条就是行动宣告，则完整展示该行动、停在再下一次行动之前；
+   * 若处于回合标记等过渡段，则推进到首个完整行动结束。 */
+  function stepForward() {
+    if (!state.battle) return;
+    stopPlayback();
+    state.playing = true;
+    var log = state.battle.log;
+    if (state.shown >= log.length) {
+      finishPlayback();
+      return;
+    }
+    var seenAction = false;
+    while (state.shown < log.length) {
+      var entry = log[state.shown];
+      if (seenAction && entry.template === "attack_start") break;
+      if (entry.tick > state.tickPos) {
+        advanceGauges(entry.tick - state.tickPos);
+        state.tickPos = entry.tick;
+      }
+      appendLogEntry(entry);
+      state.shown++;
+      if (entry.template === "attack_start") seenAction = true;
+    }
+    if (state.shown >= log.length) {
+      finishPlayback();
+      return;
+    }
+    renderControls();
   }
 
   /* 客户端行动槽逐刻推进（每刻推进 gauge_pct_gain%），与服务器快照对齐校正 */
@@ -268,8 +323,17 @@
       if (state.shown >= log.length) return;
       state.playing = true;
       renderControls();
-      scheduleMsg();
+      if (!state.stepMode) scheduleMsg();
     }
+  }
+
+  /* 单回合递进模式开关：开启后停止自动播放，改由手动递进 */
+  function toggleStepMode(on) {
+    if (state.stepMode === !!on) return;
+    state.stepMode = !!on;
+    try { localStorage.setItem("nf_step", on ? "1" : "0"); } catch (e) { /* 忽略 */ }
+    if (on) stopPlayback();
+    renderControls();
   }
 
   /* ---------------- 渲染 ---------------- */
@@ -307,7 +371,8 @@
     return NF.h("header", { class: "app-header" },
       NF.h("div", { class: "lang-row" },
         NF.h("label", { class: "simple-toggle", title: t("simple_mode_title") },
-          simpleBox, NF.h("span", null, t("simple_mode_label")))),
+          simpleBox, NF.h("span", null, t("simple_mode_label"))),
+        NF.h("a", { class: "lang-btn", href: "/workshop.html" }, t("workshop_link"))),
       NF.h("h1", { class: "app-title" }, t("app_title")),
       NF.h("p", { class: "app-subtitle" }, t("app_subtitle"))
     );
@@ -650,7 +715,9 @@
     if (!els.controls || !state.battle) return;
     NF.clear(els.controls);
     els.controls.appendChild(NF.h("button", { class: "btn", onclick: togglePlayback },
-      state.playing ? t("playback_pause") : t("playback_play")));
+      state.playing && !state.stepMode ? t("playback_pause") : t("playback_play")));
+    els.controls.appendChild(NF.h("button", { class: "btn", onclick: stepForward },
+      t("playback_step")));
     els.controls.appendChild(NF.h("button", { class: "btn", onclick: skipPlayback },
       t("playback_skip")));
     els.controls.appendChild(NF.h("select", {
@@ -662,6 +729,14 @@
         selected: s === state.speed ? "" : null
       }, s + "x");
     })));
+    var stepBox = NF.h("input", {
+      class: "simple-box", type: "checkbox",
+      checked: state.stepMode ? "" : null,
+      onchange: function (e) { toggleStepMode(e.target.checked); }
+    });
+    els.controls.appendChild(NF.h("label", {
+      class: "simple-toggle", title: t("step_mode_title")
+    }, stepBox, NF.h("span", null, t("step_mode_label"))));
   }
 
   /* ---------- 战报富文本渲染 ----------
@@ -741,7 +816,10 @@
   /* ---------------- 启动 ---------------- */
 
   function init() {
-    try { state.simple = localStorage.getItem("nf_simple") === "1"; } catch (e) { /* 忽略 */ }
+    try {
+      state.simple = localStorage.getItem("nf_simple") === "1";
+      state.stepMode = localStorage.getItem("nf_step") === "1";
+    } catch (e) { /* 忽略 */ }
     loadText()
       .then(function () { renderAll(); })
       .catch(function (e) {

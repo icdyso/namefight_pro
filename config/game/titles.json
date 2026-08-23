@@ -1,45 +1,336 @@
 {
   "structures": [
-    { "id": "core",          "weight": 20, "fields": ["core"] },
-    { "id": "prefix_core",   "weight": 26, "fields": ["prefix", "core"],   "connectors": [""] },
-    { "id": "core_suffix",   "weight": 22, "fields": ["core", "suffix"],   "connectors": ["·"] },
-    { "id": "dual_core",     "weight": 18, "fields": ["core", "core2"],    "connectors": ["·"] },
-    { "id": "full",          "weight": 14, "fields": ["prefix", "core", "suffix"], "connectors": ["", "·"] }
+    {
+      "id": "core",
+      "weight": 20,
+      "fields": [
+        "core"
+      ]
+    },
+    {
+      "id": "prefix_core",
+      "weight": 26,
+      "fields": [
+        "prefix",
+        "core"
+      ],
+      "connectors": [
+        ""
+      ]
+    },
+    {
+      "id": "core_suffix",
+      "weight": 22,
+      "fields": [
+        "core",
+        "suffix"
+      ],
+      "connectors": [
+        "·"
+      ]
+    },
+    {
+      "id": "dual_core",
+      "weight": 18,
+      "fields": [
+        "core",
+        "core2"
+      ],
+      "connectors": [
+        "·"
+      ]
+    },
+    {
+      "id": "full",
+      "weight": 14,
+      "fields": [
+        "prefix",
+        "core",
+        "suffix"
+      ],
+      "connectors": [
+        "",
+        "·"
+      ]
+    }
   ],
   "prefixes": [
-    { "id": "dark_night", "name": "暗夜", "desc": "行于暗夜",   "weight": 10, "bonus": { "dodge": 1 } },
-    { "id": "blood_moon", "name": "血月", "desc": "生于血月之下", "weight": 9,  "bonus": { "atk": 100 } },
-    { "id": "abyss",      "name": "深渊", "desc": "自深渊归来", "weight": 9,  "bonus": { "def": 100 } },
-    { "id": "sky",        "name": "苍穹", "desc": "仰望苍穹",   "weight": 10, "bonus": { "spd": 100 } },
-    { "id": "flame",      "name": "烈焰", "desc": "浴于烈焰",   "weight": 10, "bonus": { "atk": 100 } },
-    { "id": "frost",      "name": "寒霜", "desc": "饮尽寒霜",   "weight": 10, "bonus": { "def": 100 } },
-    { "id": "thunder",    "name": "雷霆", "desc": "雷霆加身",   "weight": 10, "bonus": { "spd": 100 } },
-    { "id": "boundless",  "name": "无极", "desc": "踏入无极",   "weight": 8,  "bonus": { "hp": 400 } },
-    { "id": "aloof",      "name": "孤高", "desc": "生性孤高",   "weight": 8,  "bonus": { "crit": 1 } },
-    { "id": "silent",     "name": "缄默", "desc": "缄默不语",   "weight": 8,  "bonus": { "dodge": 1 } }
+    {
+      "id": "dark_night",
+      "name": "暗夜",
+      "desc": "行于暗夜",
+      "weight": 10,
+      "bonus": {
+        "dodge": 1
+      }
+    },
+    {
+      "id": "blood_moon",
+      "name": "血月",
+      "desc": "生于血月之下",
+      "weight": 9,
+      "bonus": {
+        "atk": 100
+      }
+    },
+    {
+      "id": "abyss",
+      "name": "深渊",
+      "desc": "自深渊归来",
+      "weight": 9,
+      "bonus": {
+        "def": 50
+      }
+    },
+    {
+      "id": "sky",
+      "name": "苍穹",
+      "desc": "仰望苍穹",
+      "weight": 10,
+      "bonus": {
+        "spd": 1
+      }
+    },
+    {
+      "id": "flame",
+      "name": "烈焰",
+      "desc": "浴于烈焰",
+      "weight": 10,
+      "bonus": {
+        "atk": 100
+      }
+    },
+    {
+      "id": "frost",
+      "name": "寒霜",
+      "desc": "饮尽寒霜",
+      "weight": 10,
+      "bonus": {
+        "def": 50
+      }
+    },
+    {
+      "id": "thunder",
+      "name": "雷霆",
+      "desc": "雷霆加身",
+      "weight": 10,
+      "bonus": {
+        "spd": 1
+      }
+    },
+    {
+      "id": "boundless",
+      "name": "无极",
+      "desc": "踏入无极",
+      "weight": 8,
+      "bonus": {
+        "hp": 400
+      }
+    },
+    {
+      "id": "aloof",
+      "name": "孤高",
+      "desc": "生性孤高",
+      "weight": 8,
+      "bonus": {
+        "crit": 1
+      }
+    },
+    {
+      "id": "silent",
+      "name": "缄默",
+      "desc": "缄默不语",
+      "weight": 8,
+      "bonus": {
+        "dodge": 1
+      }
+    }
   ],
   "cores": [
-    { "id": "sword_saint", "name": "剑圣", "desc": "剑之圣者",   "weight": 10, "bonus": { "crit": 1 } },
-    { "id": "fist_king",   "name": "拳王", "desc": "拳台之王",   "weight": 8,  "bonus": { "atk": 100 } },
-    { "id": "warlock",     "name": "术士", "desc": "禁忌术士",   "weight": 8,  "bonus": { "hp": 600 } },
-    { "id": "berserker",   "name": "狂战", "desc": "狂怒战士",   "weight": 9,  "bonus": { "atk": 100 } },
-    { "id": "assassin",    "name": "刺客", "desc": "影中刺客",   "weight": 9,  "bonus": { "crit": 1 } },
-    { "id": "sage",        "name": "贤者", "desc": "战场贤者",   "weight": 7,  "bonus": { "def": 100 } },
-    { "id": "ranger",      "name": "游侠", "desc": "浪迹游侠",   "weight": 9,  "bonus": { "spd": 100 } },
-    { "id": "war_god",     "name": "武神", "desc": "不灭武神",   "weight": 4,  "bonus": { "atk": 200 } },
-    { "id": "drunkard",    "name": "酒仙", "desc": "醉里仙人",   "weight": 7,  "bonus": { "hp": 600 } },
-    { "id": "phantom",     "name": "幻影", "desc": "无形幻影",   "weight": 8,  "bonus": { "dodge": 1 } },
-    { "id": "medic",       "name": "神医", "desc": "起死回生",   "weight": 5,  "bonus": { "hp": 800 } },
-    { "id": "gambler",     "name": "赌徒", "desc": "命运赌徒",   "weight": 8,  "bonus": { "crit": 1 } }
+    {
+      "id": "sword_saint",
+      "name": "剑圣",
+      "desc": "剑之圣者",
+      "weight": 10,
+      "bonus": {
+        "crit": 1
+      }
+    },
+    {
+      "id": "fist_king",
+      "name": "拳王",
+      "desc": "拳台之王",
+      "weight": 8,
+      "bonus": {
+        "atk": 100
+      }
+    },
+    {
+      "id": "warlock",
+      "name": "术士",
+      "desc": "禁忌术士",
+      "weight": 8,
+      "bonus": {
+        "hp": 600
+      }
+    },
+    {
+      "id": "berserker",
+      "name": "狂战",
+      "desc": "狂怒战士",
+      "weight": 9,
+      "bonus": {
+        "atk": 100
+      }
+    },
+    {
+      "id": "assassin",
+      "name": "刺客",
+      "desc": "影中刺客",
+      "weight": 9,
+      "bonus": {
+        "crit": 1
+      }
+    },
+    {
+      "id": "sage",
+      "name": "贤者",
+      "desc": "战场贤者",
+      "weight": 7,
+      "bonus": {
+        "def": 50
+      }
+    },
+    {
+      "id": "ranger",
+      "name": "游侠",
+      "desc": "浪迹游侠",
+      "weight": 9,
+      "bonus": {
+        "spd": 1
+      }
+    },
+    {
+      "id": "war_god",
+      "name": "武神",
+      "desc": "不灭武神",
+      "weight": 4,
+      "bonus": {
+        "atk": 200
+      }
+    },
+    {
+      "id": "drunkard",
+      "name": "酒仙",
+      "desc": "醉里仙人",
+      "weight": 7,
+      "bonus": {
+        "hp": 600
+      }
+    },
+    {
+      "id": "phantom",
+      "name": "幻影",
+      "desc": "无形幻影",
+      "weight": 8,
+      "bonus": {
+        "dodge": 1
+      }
+    },
+    {
+      "id": "medic",
+      "name": "神医",
+      "desc": "起死回生",
+      "weight": 5,
+      "bonus": {
+        "hp": 800
+      }
+    },
+    {
+      "id": "gambler",
+      "name": "赌徒",
+      "desc": "命运赌徒",
+      "weight": 8,
+      "bonus": {
+        "crit": 1
+      }
+    }
   ],
   "suffixes": [
-    { "id": "peerless",   "name": "无双", "desc": "举世无双",   "weight": 4,  "bonus": { "atk": 100, "crit": 1 } },
-    { "id": "awakened",   "name": "觉醒", "desc": "已然觉醒",   "weight": 5,  "bonus": { "crit": 1, "dodge": 1 } },
-    { "id": "returned",   "name": "再临", "desc": "再度降临",   "weight": 5,  "bonus": { "hp": 600 } },
-    { "id": "legend",     "name": "传说", "desc": "活着的传说", "weight": 3,  "bonus": { "atk": 200 } },
-    { "id": "guard",      "name": "亲卫", "desc": "亲卫队员",   "weight": 6,  "bonus": { "def": 200 } },
-    { "id": "trainee",    "name": "见习", "desc": "尚在见习",   "weight": 10, "bonus": { "crit": 1 } },
-    { "id": "substitute", "name": "候补", "desc": "勉强候补",   "weight": 12, "bonus": { "atk": -100 } },
-    { "id": "retired",    "name": "退役", "desc": "光荣退役",   "weight": 8,  "bonus": { "spd": -100, "def": 100 } }
+    {
+      "id": "peerless",
+      "name": "无双",
+      "desc": "举世无双",
+      "weight": 4,
+      "bonus": {
+        "atk": 100,
+        "crit": 1
+      }
+    },
+    {
+      "id": "awakened",
+      "name": "觉醒",
+      "desc": "已然觉醒",
+      "weight": 5,
+      "bonus": {
+        "crit": 1,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "returned",
+      "name": "再临",
+      "desc": "再度降临",
+      "weight": 5,
+      "bonus": {
+        "hp": 600
+      }
+    },
+    {
+      "id": "legend",
+      "name": "传说",
+      "desc": "活着的传说",
+      "weight": 3,
+      "bonus": {
+        "atk": 200
+      }
+    },
+    {
+      "id": "guard",
+      "name": "亲卫",
+      "desc": "亲卫队员",
+      "weight": 6,
+      "bonus": {
+        "def": 100
+      }
+    },
+    {
+      "id": "trainee",
+      "name": "见习",
+      "desc": "尚在见习",
+      "weight": 10,
+      "bonus": {
+        "crit": 1
+      }
+    },
+    {
+      "id": "substitute",
+      "name": "候补",
+      "desc": "勉强候补",
+      "weight": 12,
+      "bonus": {
+        "atk": -100
+      }
+    },
+    {
+      "id": "retired",
+      "name": "退役",
+      "desc": "光荣退役",
+      "weight": 8,
+      "bonus": {
+        "spd": -1,
+        "def": 50
+      }
+    }
   ]
 }

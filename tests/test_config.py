@@ -113,6 +113,8 @@ class GameConfigTests(unittest.TestCase):
         self.assertGreater(GAME.battle.gauge_threshold, 0)
         self.assertGreater(GAME.battle.defense_constant, 0)
         self.assertGreaterEqual(GAME.battle.message_delay_ms, 16)
+        self.assertGreaterEqual(GAME.battle.action_pause_every, 1)
+        self.assertGreaterEqual(GAME.battle.action_pause_ms, 0)
 
 
 class ConfigTextTests(unittest.TestCase):

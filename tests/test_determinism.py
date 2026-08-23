@@ -231,6 +231,22 @@ class FighterDeterminism(unittest.TestCase):
                 seen += 1
         self.assertGreater(seen, 100)
 
+    def test_mastery_gaussian_distribution(self):
+        """熟练度分布契约（v1.0.0）：服从 [0,100] 高斯分布--均值靠近 50，
+        中段（±1σ 内）占比应显著高于均匀分布的 50%。"""
+        values = []
+        for i in range(120):
+            f = derive_fighter("熟练度分布%03d" % i, GAME)
+            for sdef, eff in personalized_effects(f, GAME):
+                values.append(eff["mastery"])
+        self.assertGreater(len(values), 200)
+        mean = sum(values) / len(values)
+        self.assertGreater(mean, 40.0, "熟练度均值应靠近 50（实测 %.1f）" % mean)
+        self.assertLess(mean, 60.0, "熟练度均值应靠近 50（实测 %.1f）" % mean)
+        mid = sum(1 for v in values if 25 <= v <= 75) / len(values)
+        self.assertGreater(mid, 0.58,
+                           "熟练度中段占比应显著高于均匀分布（实测 %.2f）" % mid)
+
     def test_trigger_chances_distinct_and_capped(self):
         """触发率契约（v0.9.1）：各技能基础触发率按强度互不相同；
         个性化后的触发率始终不超过 100%。"""
@@ -364,13 +380,13 @@ class FighterDeterminism(unittest.TestCase):
                     self.assertIn(key, snap)
 
     def test_real_value_display(self):
-        """量纲契约（v0.10.0）：引擎与显示统一为真实值。攻/防/速投掷区间
-        [1000, 2000]（×100 整数量纲）、生命翻倍 [16000, 24000]；
-        API 的 value 即引擎原始值（不再换算白板单位）。"""
+        """量纲契约（v1.0.0）：引擎与显示统一为真实值。攻击 [1000, 2000]
+        （×100 整数量纲）、防御减半 [500, 1000]、速度回退旧版 [6, 14]、
+        生命 [16000, 24000]；API 的 value 即引擎原始值（不再换算白板单位）。"""
         expect = {"hp": (20000, 16000, 24000),
                   "atk": (1500, 1000, 2000),
-                  "def": (1500, 1000, 2000),
-                  "spd": (1500, 1000, 2000),
+                  "def": (750, 500, 1000),
+                  "spd": (10, 6, 14),
                   "crit": (12, 5, 20),
                   "dodge": (10, 5, 15)}
         for a in GAME.attributes:
@@ -405,9 +421,10 @@ class FighterDeterminism(unittest.TestCase):
                 snap["gauge_threshold"], GAME.battle.gauge_threshold, places=1)
 
     def test_defense_reciprocal_reduction(self):
-        """防御契约（v0.10.0）：倒数百分比免伤 dmg = raw × (1 − DEF/(DEF+K))，
+        """防御契约（v0.10.0/v1.0.0）：倒数百分比免伤 dmg = raw × (1 − DEF/(DEF+K))，
         不再直接扣减；穿透按比例抵消灭伤率（pen=1 时无视全部防御）。"""
         bc = GAME.battle
+        atk_v, def_v = 1500.0, 750.0
 
         def mk(atk, dfn):
             c = _make_combatant(derive_fighter("防御测试", GAME), 0, GAME)
@@ -415,22 +432,22 @@ class FighterDeterminism(unittest.TestCase):
             c.defense = dfn
             return c
 
-        actor, enemy = mk(1500.0, 1500.0), mk(1500.0, 1500.0)
+        actor, enemy = mk(atk_v, def_v), mk(atk_v, def_v)
         rng = DetRng(7)
         dmg = _compute_damage(actor, enemy, 1.0, False, GAME, rng)
         rng2 = DetRng(7)
         variance = rng2.next_gaussian(bc.variance_lo, bc.variance_hi)
-        reduction = 1500.0 / (1500.0 + bc.defense_constant)
-        self.assertAlmostEqual(dmg, 1500.0 * variance * (1.0 - reduction), places=6)
+        reduction = def_v / (def_v + bc.defense_constant)
+        self.assertAlmostEqual(dmg, atk_v * variance * (1.0 - reduction), places=6)
         # 零防御：无免伤
         enemy.defense = 0.0
         dmg0 = _compute_damage(actor, enemy, 1.0, False, GAME, DetRng(7))
         reduction0 = 0.0 / (0.0 + bc.defense_constant)
-        self.assertAlmostEqual(dmg0, 1500.0 * variance * (1.0 - reduction0), places=6)
+        self.assertAlmostEqual(dmg0, atk_v * variance * (1.0 - reduction0), places=6)
         # 全穿透：免伤率被完全抵消
-        dmg_pen = _compute_damage(actor, mk(1500.0, 2000.0), 1.0, False, GAME,
+        dmg_pen = _compute_damage(actor, mk(atk_v, 1000.0), 1.0, False, GAME,
                                   DetRng(7), pen=1.0)
-        self.assertAlmostEqual(dmg_pen, 1500.0 * variance, places=6)
+        self.assertAlmostEqual(dmg_pen, atk_v * variance, places=6)
 
     def test_integer_results_policy(self):
         """取整契约（v0.10.0）：多步浮点计算只在最终应用时取整一次--
@@ -571,6 +588,34 @@ class BattleDeterminism(unittest.TestCase):
         first = outcome.events[0]["state"]
         self.assertEqual(first["a"]["hp"], first["a"]["max_hp"])
         self.assertEqual(first["b"]["hp"], first["b"]["max_hp"])
+
+    def test_attack_start_logged_before_attacks(self):
+        """普通攻击宣告契约（v1.0.0）：每次攻击行动（普攻/蓄力释放/雷罚）
+        之前都先输出 attack_start 战报；斩断反击属于快速打击，不经过宣告。"""
+        fa = derive_fighter("普攻甲", GAME)
+        fb = derive_fighter("普攻乙", GAME)
+        outcome = run_battle(fa, fb, GAME)
+        marker = {}
+        starts = attacks = with_start = 0
+        for e in outcome.events:
+            tpl = e["template"]
+            if tpl == "attack_start":
+                marker[e["params"]["a"]] = "start"
+                starts += 1
+            elif tpl == "sever_proc":
+                marker[e["params"]["a"]] = "sever"
+            elif tpl in ("attack_hit", "attack_miss", "thunder_cast",
+                         "charge_release"):
+                attacks += 1
+                state = marker.get(e["params"]["a"])
+                self.assertIn(state, ("start", "sever"),
+                              "攻击事件 %s 前缺少 attack_start/sever_proc" % tpl)
+                if state == "start":
+                    with_start += 1
+        self.assertGreater(starts, 0, "应出现普通攻击宣告")
+        self.assertGreaterEqual(starts, with_start)
+        self.assertGreater(with_start, attacks // 2,
+                           "绝大多数攻击应由 attack_start 宣告")
 
     def test_faster_fighter_acts_first(self):
         # 属性正态投掷（v0.9.1），速度差异普遍存在
