@@ -13,11 +13,12 @@ tick 战斗模型：
   （伤害/治疗/吸血/毒/流血/破甲/叠速等），百分数内容保持 2 位小数；
 - 防御为倒数百分比免伤：免伤率 = DEF / (DEF + defense_constant)，
   不再从伤害中直接扣减；破甲降低 DEF，穿透按比例抵消灭伤率；
-- 行动开始时依次结算：斩断打断 -> 毒发 -> 流血 -> 行动开始技能（血契/回春/净化）
-  -> 眩晕判定 -> 背水一战 -> 攻击；行动结束后结算：大器晚成叠速、
+- 行动开始时依次结算：斩断打断 -> 流血 -> 行动开始技能（血契/回春/净化）
+  -> 眩晕判定 -> 背水一战 -> 攻击；行动结束后结算：大器晚成叠速叠攻、
   嗜血增益递减、血契吸血转化（累计到 pact_total_gain）；
 - 持续类状态（中毒/流血/眩晕/破甲/回春/怨念/锻痕）均以「刻」为期限，
-  于每刻开始时统一结算与过期；
+  于每刻开始时统一结算与过期；毒在每刻开始时结算伤害（v1.1.0），
+  流血仍在拥有者行动时结算；
 - 技能参数经 fighter.personalized_effects 按斗士 MD5 个性化
   （熟练度影响触发概率，共鸣变数修正其余数值字段）；
 - 对战种子 = md5(字典序排序后的双方规范化名字，以配置分隔符连接)；
@@ -132,6 +133,7 @@ class _Combatant:
     last_stand_spd: float = 0.0
     tempo_stacks: int = 0        # 大器晚成层数
     tempo_total: int = 0         # 大器晚成累计速度增量（每次应用时取整后累加）
+    tempo_atk_total: int = 0     # 大器晚成累计攻击增量（v1.1.0）
     will_chance: float = 0.0     # 不屈意志当前触发概率
     will_decay: float = 0.0
     will_heal: float = 0.0
@@ -245,12 +247,12 @@ def _make_combatant(f: Fighter, pos: int, game: GameCfg) -> _Combatant:
 def _compute_damage(actor, enemy, mult, crit, game: GameCfg, rng, pen=0.0) -> float:
     """伤害公式（v0.10.0）：防御为倒数百分比免伤。
 
-    raw      = 有效ATK × atk_factor × 高斯浮动 × 暴击倍率 × 技能倍率
+    raw      = 有效ATK × atk_factor × 三角形浮动 × 暴击倍率 × 技能倍率
     免伤率    = 有效DEF / (有效DEF + defense_constant) × (1 − 穿透率)
     dmg      = max( min_damage, raw × (1 − 免伤率) )
     """
     bc = game.battle
-    variance = rng.next_gaussian(bc.variance_lo, bc.variance_hi)
+    variance = rng.next_triangular(bc.variance_lo, bc.variance_hi)
     crit_mult = bc.crit_multiplier if crit else 1.0
     raw = _eff_atk(actor) * bc.atk_factor * variance * crit_mult * mult
     armor = _eff_def(enemy)
@@ -325,7 +327,8 @@ def _snapshot(combatants, threshold: float, tick: int) -> dict:
             elif sdef.trigger == "passive" and t == "tempo" and c.tempo_stacks > 0:
                 buffs.append({"id": "tempo", "params": {
                     "stacks": c.tempo_stacks,
-                    "value": format_num(c.tempo_total)}})
+                    "value": format_num(c.tempo_total),
+                    "atk": format_num(c.tempo_atk_total)}})
         if c.pact_total_gain > 0:
             buffs.append({"id": "blood_pact",
                           "params": {"value": format_num(c.pact_total_gain)}})
@@ -449,6 +452,19 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                 c.regen_next += max(1, c.regen_interval)
             c.grudge_exp = [t for t in c.grudge_exp if t > tick - 1]
             c.guard_exp = [t for t in c.guard_exp if t > tick - 1]
+        # ---- 每刻毒发（v1.1.0：中毒改为每刻结算伤害，持续以刻计） ----
+        for c in internal:
+            if c.hp <= 0 or c.poison_until <= tick:
+                continue
+            dmg = c.poison_damage
+            _hurt(c, dmg, ev, rng)
+            ev("poison_tick", {"a": c.name, "damage": format_num(dmg)})
+            if c.hp <= 0:
+                ev("poison_death", {"a": c.name})
+                winner = internal[1] if c is internal[0] else internal[0]
+                break
+        if winner is not None:
+            break
         # ---- 行动槽推进 ----
         for c in combatants:
             if c.hp > 0:
@@ -483,16 +499,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                 if _settle_deaths(enemy, actor):
                     break
                 continue
-            # ---- 毒发（拥有者行动时机；眩晕与打断不影响毒的到期，仅跳过行动） ----
-            if actor.poison_until > tick:
-                dmg = actor.poison_damage
-                _hurt(actor, dmg, ev, rng)
-                ev("poison_tick", {"a": actor.name, "damage": format_num(dmg)})
-                if actor.hp <= 0:
-                    ev("poison_death", {"a": actor.name})
-                    winner = enemy
-                    break
-            # ---- 流血 ----
+            # ---- 流血（拥有者行动时机） ----
             if actor.bleed_until > tick:
                 dmg = actor.bleed_damage
                 _hurt(actor, dmg, ev, rng)
@@ -570,7 +577,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
             _attack(actor, enemy, game, rng, ev, tick)
             if _settle_deaths(actor, enemy):
                 break
-            # ---- 行动结束后：大器晚成叠速 / 嗜血增益递减 / 血契转化 ----
+            # ---- 行动结束后：大器晚成叠速叠攻 / 嗜血增益递减 / 血契转化 ----
             if actor.hp > 0:
                 for sdef, eff in actor.skills:
                     if (sdef.trigger != "passive" or eff.get("type") != "tempo"):
@@ -579,11 +586,15 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                         continue
                     proc = _proc_eff_of(actor, enemy, eff, game)
                     gain = _r(float(proc.get("value", 0.0)))
+                    gain_atk = _r(float(proc.get("atk", 0.0)))
                     actor.spd += gain
+                    actor.atk += gain_atk
                     actor.tempo_stacks += 1
                     actor.tempo_total += gain
+                    actor.tempo_atk_total += gain_atk
                     ev("tempo_stack", {"a": actor.name, "stacks": actor.tempo_stacks,
-                                       "spd": format_num(actor.spd)})
+                                       "spd": format_num(actor.spd),
+                                       "atk": format_num(actor.atk)})
                     break
             if actor.ls_turns > 0:
                 actor.ls_turns -= 1
@@ -939,18 +950,23 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
         for i in range(1, max_hits + 1):
             if i > 1 and rng.next_float() >= chance * (decay ** (i - 1)):
                 break
-            dmg = _r(max(float(bc.min_damage),
-                         _eff_atk(actor) * bc.atk_factor * value
-                         * rng.next_gaussian(bc.variance_lo, bc.variance_hi)))
-            _hurt(enemy, dmg, ev, rng)
-            actor.damage_dealt += dmg
-            landed += 1
-            ev("thunder_hit", {"a": actor.name, "b": enemy.name,
-                               "damage": format_num(dmg),
-                               "hit": i,
-                               "hp": format_num(max(0, enemy.hp))})
-            _on_hit_reactions(actor, enemy, dmg, False, game, rng, ev, tick)
-            if enemy.hp <= 0:
+            raw = max(float(bc.min_damage),
+                      _eff_atk(actor) * bc.atk_factor * value
+                      * rng.next_triangular(bc.variance_lo, bc.variance_hi))
+            # v1.1.0：真实伤害视作一次攻击--无视防御，但走防守结算
+            # （锻痕/壁垒/反甲等伤害减免可生效），并触发受击反应
+            dmg = _defend(enemy, actor, raw, game, rng, ev, tick)
+            dmg = _r(dmg)
+            if dmg > 0:
+                _hurt(enemy, dmg, ev, rng)
+                actor.damage_dealt += dmg
+                landed += 1
+                ev("thunder_hit", {"a": actor.name, "b": enemy.name,
+                                   "damage": format_num(dmg),
+                                   "hit": i,
+                                   "hp": format_num(max(0, enemy.hp))})
+                _on_hit_reactions(actor, enemy, dmg, False, game, rng, ev, tick)
+            if enemy.hp <= 0 or actor.hp <= 0:
                 break
         return  # 攻击已被替换：不结算吸血/上毒/眩晕等
 

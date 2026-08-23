@@ -56,9 +56,13 @@ class FighterDeterminism(unittest.TestCase):
             self.assertEqual(base, derive_fighter("张三", GAME))
 
     def test_case_folding_follows_config(self):
-        # system.json 默认 case_sensitive=false：大小写不同视为同一名字
-        self.assertEqual(_game_data(derive_fighter("Alice", GAME)),
-                         _game_data(derive_fighter("alice", GAME)))
+        # 大小写折叠跟随 system.json 的 case_sensitive 配置（v1.1.0 用户设为 true）
+        if GAME.system.name_case_sensitive:
+            self.assertNotEqual(_game_data(derive_fighter("Alice", GAME)),
+                                _game_data(derive_fighter("alice", GAME)))
+        else:
+            self.assertEqual(_game_data(derive_fighter("Alice", GAME)),
+                             _game_data(derive_fighter("alice", GAME)))
         self.assertNotEqual(_game_data(derive_fighter("Alice", GAME)),
                             _game_data(derive_fighter("Bob", GAME)))
 
@@ -66,7 +70,7 @@ class FighterDeterminism(unittest.TestCase):
         fa = derive_fighter("张三", GAME)
         fb = derive_fighter("李四", GAME)
         self.assertNotEqual(fa.digest, fb.digest)
-        # 属性正态投掷（v0.9.1）+ 技能与称号组合应不同
+        # 属性投掷（v1.1.0 三角形分布）+ 技能与称号组合应不同
         differing = (
             fa.skill_ids != fb.skill_ids
             or fa.title_structure_id != fb.title_structure_id
@@ -75,17 +79,19 @@ class FighterDeterminism(unittest.TestCase):
         )
         self.assertTrue(differing, "两个不同名字的派生结果不应完全相同")
 
-    def test_attributes_gaussian_rolled(self):
-        """属性正态投掷契约（v0.9.1/v0.10.0）：[min, max] 内、同名一致、
-        不同名显著变化且集中于区间中点附近；非百分比属性为整数。"""
+    def test_attributes_triangular_rolled(self):
+        """属性三角形分布投掷契约（v1.1.0，两均匀数取均值）：[min, max] 内、
+        同名一致、不同名显著变化且集中于区间中点附近、端点无截断堆积；
+        非百分比属性为整数。"""
         base = derive_fighter("attrRoll", GAME)
         self.assertEqual(derive_fighter("attrRoll", GAME).attrs, base.attrs)
-        names = ["gauss%03d" % i for i in range(60)]
+        names = ["tri%03d" % i for i in range(60)]
         for a in GAME.attributes:
             values = set()
             inside = 0
             mid = (a.min + a.max) / 2.0
-            half = (a.max - a.min) / 4.0  # σ = 区间宽 / 4
+            half = (a.max - a.min) / 4.0  # 中段带宽 = 区间宽 / 2（中点 ±宽/4）
+            at_bound = 0
             for n in names:
                 f = derive_fighter(n, GAME)
                 structure = next(s for s in GAME.title_structures
@@ -96,6 +102,8 @@ class FighterDeterminism(unittest.TestCase):
                 rolled = f.attrs[a.id] - delta if f.attrs[a.id] > 1.0 else f.attrs[a.id]
                 self.assertGreaterEqual(rolled, a.min - 1e-9)
                 self.assertLessEqual(rolled, a.max + 1e-9)
+                if rolled == a.min or rolled == a.max:
+                    at_bound += 1
                 values.add(round(rolled, 4))
                 if abs(rolled - mid) <= half:
                     inside += 1
@@ -107,6 +115,9 @@ class FighterDeterminism(unittest.TestCase):
             self.assertGreater(inside / len(names), 0.55,
                                "属性 %s 应集中于区间中点附近（实测 %.2f）"
                                % (a.id, inside / len(names)))
+            self.assertLess(at_bound / len(names), 0.05,
+                            "属性 %s 端点占比过高，疑似截断堆积（实测 %.2f）"
+                            % (a.id, at_bound / len(names)))
         # 称号加成叠加在投掷值上（不消耗随机数），下限保护不低于 1
         for i in range(10):
             f = derive_fighter("bonus%02d" % i, GAME)
@@ -231,9 +242,9 @@ class FighterDeterminism(unittest.TestCase):
                 seen += 1
         self.assertGreater(seen, 100)
 
-    def test_mastery_gaussian_distribution(self):
-        """熟练度分布契约（v1.0.0）：服从 [0,100] 高斯分布--均值靠近 50，
-        中段（±1σ 内）占比应显著高于均匀分布的 50%。"""
+    def test_mastery_triangular_distribution(self):
+        """熟练度分布契约（v1.1.0，三角形分布）：集中于 50--
+        均值靠近 50，中段占比显著高于均匀分布，端点无截断堆积。"""
         values = []
         for i in range(120):
             f = derive_fighter("熟练度分布%03d" % i, GAME)
@@ -241,11 +252,14 @@ class FighterDeterminism(unittest.TestCase):
                 values.append(eff["mastery"])
         self.assertGreater(len(values), 200)
         mean = sum(values) / len(values)
-        self.assertGreater(mean, 40.0, "熟练度均值应靠近 50（实测 %.1f）" % mean)
-        self.assertLess(mean, 60.0, "熟练度均值应靠近 50（实测 %.1f）" % mean)
+        self.assertGreater(mean, 42.0, "熟练度均值应靠近 50（实测 %.1f）" % mean)
+        self.assertLess(mean, 58.0, "熟练度均值应靠近 50（实测 %.1f）" % mean)
         mid = sum(1 for v in values if 25 <= v <= 75) / len(values)
-        self.assertGreater(mid, 0.58,
+        self.assertGreater(mid, 0.65,
                            "熟练度中段占比应显著高于均匀分布（实测 %.2f）" % mid)
+        edge = sum(1 for v in values if v <= 2 or v >= 98) / len(values)
+        self.assertLess(edge, 0.02,
+                        "熟练度极端值占比过高，疑似截断堆积（实测 %.3f）" % edge)
 
     def test_trigger_chances_distinct_and_capped(self):
         """触发率契约（v0.9.1）：各技能基础触发率按强度互不相同；
@@ -381,13 +395,15 @@ class FighterDeterminism(unittest.TestCase):
 
     def test_real_value_display(self):
         """量纲契约（v1.0.0）：引擎与显示统一为真实值。攻击 [1000, 2000]
-        （×100 整数量纲）、防御减半 [500, 1000]、速度回退旧版 [6, 14]、
-        生命 [16000, 24000]；API 的 value 即引擎原始值（不再换算白板单位）。"""
-        expect = {"hp": (20000, 16000, 24000),
+        （×100 整数量纲）、防御 [500, 1000]；生命/速度/暴击区间为 v1.1.0
+        用户手动调参后的现值（生命加宽至 [10000, 30000]、速度 [5, 15]、
+        暴击 [5, 30]，见 docs/updates/2026-08-23-v1.1.0.md）；
+        API 的 value 即引擎原始值（不再换算白板单位）。"""
+        expect = {"hp": (20000, 10000, 30000),
                   "atk": (1500, 1000, 2000),
                   "def": (750, 500, 1000),
-                  "spd": (10, 6, 14),
-                  "crit": (12, 5, 20),
+                  "spd": (10, 5, 15),
+                  "crit": (15, 5, 30),
                   "dodge": (10, 5, 15)}
         for a in GAME.attributes:
             base, lo, hi = expect[a.id]
@@ -436,7 +452,7 @@ class FighterDeterminism(unittest.TestCase):
         rng = DetRng(7)
         dmg = _compute_damage(actor, enemy, 1.0, False, GAME, rng)
         rng2 = DetRng(7)
-        variance = rng2.next_gaussian(bc.variance_lo, bc.variance_hi)
+        variance = rng2.next_triangular(bc.variance_lo, bc.variance_hi)
         reduction = def_v / (def_v + bc.defense_constant)
         self.assertAlmostEqual(dmg, atk_v * variance * (1.0 - reduction), places=6)
         # 零防御：无免伤
@@ -618,7 +634,7 @@ class BattleDeterminism(unittest.TestCase):
                            "绝大多数攻击应由 attack_start 宣告")
 
     def test_faster_fighter_acts_first(self):
-        # 属性正态投掷（v0.9.1），速度差异普遍存在
+        # 属性投掷（v1.1.0 三角形分布），速度差异普遍存在
         pair = None
         for i in range(80):
             fa = derive_fighter("paceA%02d" % i, GAME)

@@ -1,12 +1,12 @@
 {
   "skill_count": {
-    "min": 2,
+    "min": 1,
     "max": 3
   },
   "md5_variance": {
     "value": [
-      0.8,
-      1.3
+      0.5,
+      1.5
     ]
   },
   "variable_link": {
@@ -166,8 +166,8 @@
     "prefix_chance": 0.5,
     "suffix_chance": 0.4,
     "mod_variance": [
-      0.7,
-      1.3
+      0.5,
+      1.5
     ],
     "prefixes": [
       {
@@ -210,6 +210,15 @@
           "value": 0.05,
           "chance": 0.02
         }
+      },
+      {
+        "id": "ex",
+        "name": "极限",
+        "weight": 3,
+        "mod": {
+          "value": 0.1,
+          "chance": -0.02
+        }
       }
     ],
     "suffixes": [
@@ -223,7 +232,7 @@
       },
       {
         "id": "opportune",
-        "name": "蹈隙",
+        "name": "突袭",
         "weight": 3,
         "mod": {
           "chance": 0.04
@@ -257,31 +266,31 @@
     ]
   },
   "stats": {
-    "nat_charge": "攻击时有 {chance} 概率进入蓄力（蓄力占用一次行动）：下次行动进行一次必定命中、暴击率 +{crit} 的攻击，伤害提升至 {value}。",
+    "nat_charge": "攻击时有 {chance} 概率改为蓄力：下次攻击必定命中、暴击率 +{crit}，伤害提升至 {value}。",
     "nat_execution": "当敌方生命低于 {threshold} 时，攻击有 {chance} 概率使伤害提升至 {value}。",
     "nat_lifesteal": "攻击时有 {chance} 概率进入嗜血：{turns} 次行动内，所造成伤害的 {value} 转化为自身生命。",
-    "nat_poison": "攻击时有 {chance} 概率使敌方中毒：其每次行动损失 {damage} 点生命，持续 {ticks} 刻。",
-    "nat_concussive": "攻击时有 {chance} 概率挥出破防重击：本次攻击无视敌方 {value} 的防御，命中则令其 {ticks} 刻内无法行动。",
-    "nat_thunder": "攻击时有 {chance} 概率以雷罚替换本次攻击：连续劈落至多 {max} 道真实伤害，每道为攻击的 {value}，之后每道概率为前道的 {decay}。",
-    "nat_sever": "敌方即将行动时有 {chance} 概率斩断其回合：打断该次行动并立即反击，造成 {value} 的伤害，其行动槽倒退 {delay}。",
+    "nat_poison": "攻击时有 {chance} 概率使敌方中毒：其每刻损失 {damage} 点生命，持续 {ticks} 刻。",
+    "nat_concussive": "攻击时有 {chance} 概率改为重击：无视敌方 {value} 的防御，命中则令其 {ticks} 刻内无法行动。",
+    "nat_thunder": "攻击时有 {chance} 概率改为雷罚：劈下至多 {max} 道真伤落雷，每道为攻击的 {value}，之后每道概率为前道的 {decay}。",
+    "nat_sever": "敌方即将行动时有 {chance} 概率打断其行动并立即反击，造成 {value} 的伤害，其行动槽倒退 {delay}。",
     "nat_gauge_surge": "命中后有 {chance} 概率行动槽额外前进 {value}，若为暴击则改为前进 {crit_value}。",
-    "nat_damage_reduction": "每次受到攻击时有 {chance} 概率叠一层锻痕：伤害减免 +{value}，持续 {ticks} 刻，可无限叠加。",
-    "nat_reflect": "每次受到伤害时有 {chance} 概率反噬：免除该次伤害的 {value}，并将其以 {ratio} 反弹给攻击者。",
-    "nat_bulwark": "自身生命不低于 {threshold} 时，所受伤害降低 {value}，且有 {immune} 的概率完全免疫。",
+    "nat_damage_reduction": "每次受到攻击时有 {chance} 概率叠加一层锻痕：伤害减免 +{value}，持续 {ticks} 刻。",
+    "nat_reflect": "每次受到伤害时有 {chance} 概率触发反噬：免除该次伤害的 {value}，并将其以 {ratio} 反弹给攻击者。",
+    "nat_bulwark": "自身生命不低于 {threshold} 时，所受伤害降低 {value}，且有 {immune} 的概率完全免疫伤害。",
     "nat_retribution": "受到攻击时有 {chance} 概率记录该次伤害（至多 {cap} 条）：下次命中将记录总和以 {ratio} 追加打出。",
-    "nat_iron_will": "受到致命伤害时有 {chance} 概率触发不屈：回复 {value} 最大生命并撑过该次伤害；每次触发后概率衰减为前次的 {decay}。",
+    "nat_iron_will": "受到致命伤害时有 {chance} 概率重生并回复 {value} 最大生命；每次触发后概率衰减为前次的 {decay}。",
     "nat_heal": "行动开始时有 {chance} 概率回复 {value} 点生命，并施加回春印记：每 {tick} 刻回复 {regen} 点生命，持续 {duration} 刻。",
-    "nat_cleanse": "行动开始时有 {chance} 概率净化：驱散双方所有标记与增益减益（每驱散 1 种为自己回复 {per} 点生命），并回复 {value} 点生命。",
+    "nat_cleanse": "行动开始时有 {chance} 概率驱散双方所有标记与增益减益（每驱散 1 种为自己回复 {per} 点生命），并回复 {value} 点生命。",
     "nat_low_hp_atk_bonus": "生命首次低于 {threshold} 时，攻击 +{value} 且速度 +{spd}，持续到战斗结束。",
     "nat_streak_bonus": "命中时有 {chance} 概率获得 1 层乘胜：每层伤害 +{value}，至多 {cap} 层；攻击落空时清零。",
-    "nat_overload": "攻击时有 {chance} 概率燃血：消耗自身 {cost} 最大生命，使本次伤害提升至 {value}。",
-    "nat_armor_shred": "攻击时有 {chance} 概率击碎敌方护甲：防御 −{value}，持续 {ticks} 刻，至多叠加 {max_stacks} 层。",
+    "nat_overload": "攻击时有 {chance} 概率消耗自身 {cost} 最大生命，使本次伤害提升至 {value}。",
+    "nat_armor_shred": "攻击时有 {chance} 概率使对方防御 −{value}，持续 {ticks} 刻，至多叠加 {max_stacks} 层。",
     "nat_bleed": "攻击时有 {chance} 概率撕裂敌方：其每次行动损失相当于攻击者攻击 {value} 的生命，持续 {ticks} 刻。",
-    "nat_gamble": "攻击时有 {chance} 概率孤注一掷：伤害提升至 {value}，否则伤害降低至 {penalty}。",
-    "nat_tempo": "每次行动完毕有 {chance} 概率速度 +{value}，无上限持续叠加。",
+    "nat_gamble": "攻击时有 {chance} 概率伤害提升至 {value}，否则伤害降低至 {penalty}。",
+    "nat_tempo": "每次行动完毕有 {chance} 概率速度 +{value}、攻击 +{atk}。",
     "nat_armor_pen": "攻击时有 {chance} 概率洞悉弱点：本次攻击无视全部防御，且暴击率 +{crit}。",
-    "nat_blood_pact": "每次行动开始有 {chance} 概率献祭：消耗 {cost} 最大生命，本次攻击附带 {value} 吸血；行动结束后按吸血量的 {convert} 永久增加攻击。",
-    "nat_grudge": "被命中时有 {chance} 概率积攒 1 层怨念（持续 {ticks} 刻）：每层使伤害 +{value}，无层数上限。",
+    "nat_blood_pact": "每次行动开始有 {chance} 概率消耗 {cost} 最大生命，本次攻击附带 {value} 吸血；然后按吸血量的 {convert} 永久增加攻击。",
+    "nat_grudge": "被命中时有 {chance} 概率积攒 1 层怨念（持续 {ticks} 刻）：每层使伤害 +{value}。",
     "link_formula": "（{base} + {expr}*{merged}）",
     "link_expr_difference": "【{own}-{enemy}】{emoji}",
     "link_expr_sum": "【{own}+{enemy}】{emoji}",
@@ -331,7 +340,7 @@
     {
       "id": "heavy_strike",
       "name": "重击",
-      "description": "倾尽全力的一击，重若千钧。",
+      "description": "这一拳下去可能会很痛。",
       "weight": 9,
       "trigger": "on_attack",
       "mastery": [
@@ -340,15 +349,15 @@
       ],
       "effect": {
         "type": "charge",
-        "chance": 0.16,
-        "value": 3,
-        "crit": 40
+        "chance": 0.14,
+        "value": 2.2,
+        "crit": 25
       }
     },
     {
       "id": "execution",
       "name": "斩杀",
-      "description": "对奄奄一息的敌人毫不留情。",
+      "description": "弱者不配存活。",
       "weight": 6,
       "trigger": "on_attack",
       "mastery": [
@@ -365,7 +374,7 @@
     {
       "id": "bloodthirst",
       "name": "嗜血",
-      "description": "杀意涌起时，伤口即是源泉。",
+      "description": "伤口即是源泉。",
       "weight": 8,
       "trigger": "on_attack",
       "mastery": [
@@ -375,7 +384,7 @@
       "effect": {
         "type": "lifesteal",
         "chance": 0.25,
-        "value": 0.26,
+        "value": 0.28,
         "turns": 2
       }
     },
@@ -392,14 +401,14 @@
       "effect": {
         "type": "poison",
         "chance": 0.3,
-        "damage": 380,
+        "damage": 38,
         "ticks": 12
       }
     },
     {
       "id": "stun_blow",
       "name": "眩晕重锤",
-      "description": "一记闷锤，让人眼冒金星。",
+      "description": "该安静一会了。",
       "weight": 6,
       "trigger": "on_attack",
       "mastery": [
@@ -408,15 +417,15 @@
       ],
       "effect": {
         "type": "concussive",
-        "chance": 0.17,
+        "chance": 0.125,
         "value": 0.35,
-        "ticks": 6
+        "ticks": 4
       }
     },
     {
       "id": "thunder",
       "name": "雷罚",
-      "description": "天罚连绵，一道接着一道。",
+      "description": "天雷滚滚，你往哪里逃。",
       "weight": 8,
       "trigger": "on_attack",
       "mastery": [
@@ -434,7 +443,7 @@
     {
       "id": "sever",
       "name": "斩断",
-      "description": "在敌人出手的瞬间，斩断其节奏。",
+      "description": "来一场愉快的博弈吧。",
       "weight": 8,
       "trigger": "on_defense",
       "mastery": [
@@ -451,7 +460,7 @@
     {
       "id": "shadow_step",
       "name": "疾影突袭",
-      "description": "影随身动，快若闪电。",
+      "description": "我的回合，我的回合，还是我的回合。",
       "weight": 7,
       "trigger": "on_attack",
       "mastery": [
@@ -461,14 +470,14 @@
       "effect": {
         "type": "gauge_surge",
         "chance": 0.62,
-        "value": 33,
-        "crit_value": 56
+        "value": 28,
+        "crit_value": 48
       }
     },
     {
       "id": "iron_hide",
       "name": "千锤百炼",
-      "description": "每一道伤痕，都让皮肤更硬一分。",
+      "description": "杀不死我的，只会让我更强大。",
       "weight": 9,
       "trigger": "on_defense",
       "mastery": [
@@ -485,7 +494,7 @@
     {
       "id": "thorns",
       "name": "荆棘反甲",
-      "description": "伤我者，必被反噬。",
+      "description": "以彼之道，还至彼身。",
       "weight": 8,
       "trigger": "on_defense",
       "mastery": [
@@ -494,7 +503,7 @@
       ],
       "effect": {
         "type": "reflect",
-        "chance": 0.31,
+        "chance": 0.23,
         "value": 0.18,
         "ratio": 1.25
       }
@@ -502,7 +511,7 @@
     {
       "id": "bulwark",
       "name": "坚守壁垒",
-      "description": "气势如虹时，坚不可摧。",
+      "description": "气势如虹，坚不可摧。",
       "weight": 8,
       "trigger": "on_defense",
       "mastery": [
@@ -512,15 +521,15 @@
       "mastery_on": "immune",
       "effect": {
         "type": "bulwark",
-        "threshold": 0.6,
-        "value": 0.25,
-        "immune": 0.09
+        "threshold": 0.7,
+        "value": 0.08,
+        "immune": 0.03
       }
     },
     {
       "id": "retribution",
       "name": "以牙还牙",
-      "description": "你打我的每一拳，我都记在账上。",
+      "description": "这个仇，我记下了。",
       "weight": 7,
       "trigger": "on_defense",
       "mastery": [
@@ -530,7 +539,7 @@
       "effect": {
         "type": "retribution",
         "chance": 0.29,
-        "ratio": 0.6,
+        "ratio": 0.38,
         "cap": 6
       }
     },
@@ -546,15 +555,15 @@
       ],
       "effect": {
         "type": "iron_will",
-        "chance": 0.44,
-        "value": 0.2,
-        "decay": 0.3
+        "chance": 0.52,
+        "value": 0.28,
+        "decay": 0.5
       }
     },
     {
       "id": "spring_heal",
       "name": "回春术",
-      "description": "体内涌起温和的暖流。",
+      "description": "他想去哪就去哪。",
       "weight": 8,
       "trigger": "on_turn_start",
       "mastery": [
@@ -582,15 +591,15 @@
       ],
       "effect": {
         "type": "cleanse",
-        "chance": 0.26,
-        "value": 260,
-        "per": 320
+        "chance": 0.13,
+        "value": 215,
+        "per": 190
       }
     },
     {
       "id": "last_stand",
       "name": "背水一战",
-      "description": "绝境之中，爆发潜能。",
+      "description": "不残血，不会玩。",
       "weight": 7,
       "trigger": "passive",
       "mastery": [
@@ -601,14 +610,14 @@
       "effect": {
         "type": "low_hp_atk_bonus",
         "threshold": 0.3,
-        "value": 0.21,
+        "value": 0.2,
         "spd": 0.2
       }
     },
     {
       "id": "momentum",
       "name": "乘胜追击",
-      "description": "攻势如潮，一浪高过一浪。",
+      "description": "白帝圣剑，御剑跟着我。",
       "weight": 8,
       "trigger": "on_attack",
       "mastery": [
@@ -642,7 +651,7 @@
     {
       "id": "rupture",
       "name": "破甲连打",
-      "description": "专敲护甲的接缝处。",
+      "description": "你的防御毫无作用。",
       "weight": 8,
       "trigger": "on_attack",
       "mastery": [
@@ -687,7 +696,7 @@
       "effect": {
         "type": "gamble",
         "chance": 0.39,
-        "value": 2.1,
+        "value": 2.2,
         "penalty": 0.5
       }
     },
@@ -703,8 +712,9 @@
       ],
       "effect": {
         "type": "tempo",
-        "chance": 0.27,
-        "value": 1
+        "chance": 0.16,
+        "value": 1,
+        "atk": 10
       }
     },
     {
@@ -720,13 +730,13 @@
       "effect": {
         "type": "armor_pen",
         "chance": 0.42,
-        "crit": 5
+        "crit": 6
       }
     },
     {
       "id": "blood_pact",
       "name": "血契",
-      "description": "以血为契，换取力量。",
+      "description": "血祭血神……",
       "weight": 6,
       "trigger": "on_turn_start",
       "mastery": [
@@ -738,13 +748,13 @@
         "chance": 0.4,
         "cost": 0.06,
         "value": 0.68,
-        "convert": 0.1
+        "convert": 0.11
       }
     },
     {
       "id": "grudge",
-      "name": "怨念深重",
-      "description": "每一道伤疤，都在积蓄力量。",
+      "name": "厚积薄发",
+      "description": "每一道伤痕，都是在积蓄力量。",
       "weight": 8,
       "trigger": "on_defense",
       "mastery": [

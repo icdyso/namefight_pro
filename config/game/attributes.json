@@ -5,8 +5,8 @@
       "name": "生命",
       "emoji": "❤️",
       "base": 20000,
-      "min": 16000,
-      "max": 24000,
+      "min": 10000,
+      "max": 30000,
       "format": "int",
       "power_weight": 1
     },
@@ -35,8 +35,8 @@
       "name": "速度",
       "emoji": "👟",
       "base": 10,
-      "min": 6,
-      "max": 14,
+      "min": 5,
+      "max": 15,
       "format": "int",
       "power_weight": 2
     },
@@ -44,9 +44,9 @@
       "id": "crit",
       "name": "暴击",
       "emoji": "🎯",
-      "base": 12,
+      "base": 15,
       "min": 5,
-      "max": 20,
+      "max": 30,
       "format": "percent",
       "power_weight": 2
     },

@@ -10,8 +10,8 @@
   "max_ticks": 600,
   "gauge_threshold": 100,
   "crit_cap": 100,
-  "dodge_cap": 60,
-  "seed_separator": "\u001f",
+  "dodge_cap": 80,
+  "seed_separator": "-",
   "playback": {
     "message_delay_ms": 320,
     "action_pause_every": 5,
@@ -58,7 +58,7 @@
     "immune": "　　🛡️ {b} 壁垒坚不可摧，完全免疫了这次伤害！",
     "guard_stack": "　　🔨 {b} 千锤百炼：锻痕 {stacks} 层，伤害减免 {value}！",
     "grudge_stack": "　　😤 {a} 怨念 +1（{stacks} 层，伤害倍率 {mult}）！",
-    "tempo_stack": "　　⏩ {a} 渐入佳境（{stacks} 层），速度 {spd}！",
+    "tempo_stack": "　　⏩ {a} 渐入佳境（{stacks} 层），速度 {spd}，攻击 {atk}！",
     "lifesteal_buff": "　　🩸 {a} 进入嗜血状态：{turns} 次行动内吸血 {value}！",
     "shred_apply": "　　🔨 护甲被击碎！{b} 防御 −{value}（当前防御 {def}）。",
     "bleed_apply": "　　🩸 {b} 被撕裂，开始流血！",
@@ -73,8 +73,8 @@
   "buffs": {
     "poison": {
       "name": "中毒",
-      "detail": "每次行动损失 {damage} 点生命（剩 {turns} 刻）",
-      "desc": "毒发在行动时结算，持续以刻计。"
+      "detail": "每刻损失 {damage} 点生命（剩 {turns} 刻）",
+      "desc": "毒发每刻结算，持续以刻计。"
     },
     "bleed": {
       "name": "流血",
@@ -143,7 +143,7 @@
     },
     "tempo": {
       "name": "渐入佳境",
-      "detail": "速度 +{value}（{stacks} 层）",
+      "detail": "速度 +{value}，攻击 +{atk}（{stacks} 层）",
       "desc": "行动后概率叠加，无上限。"
     },
     "blood_pact": {

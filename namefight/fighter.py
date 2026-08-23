@@ -2,16 +2,17 @@
 
 确定性契约（AGENTS.md 2.1.1）：派生结果是 (归一化名字, 配置快照) 的纯函数。
 
-- 主派生 PRNG 消耗顺序固定（v0.9.1）：属性（配置顺序，正态投掷）-> 技能数量
+- 主派生 PRNG 消耗顺序固定（v0.9.1）：属性（配置顺序，三角形分布投掷）-> 技能数量
   -> 技能抽取 -> 称号结构 -> 称号字段（按结构字段顺序）。
-- 属性在 [min, max] 内正态投掷（均值 = 区间中点，σ = 宽 / 4，截断到区间）；
+- 属性在 [min, max] 内三角形分布投掷（两个均匀数取均值，中点密度最高，
+  天然不越界、端点无截断堆积，v1.1.0 起替代正态投掷）；
   命/攻为 ×100 整数量纲（命 20000 / 攻 1500），防御 750（v1.0.0 减半），
   速度为小整数量纲（6~14，v1.0.0 回退旧版）；投掷结果**取整**；
   crit/dodge 为百分数，保持浮点；
   全部数值**直接以引擎真实值显示**（不再换算白板 100 单位）。
 - 技能个性化（熟练度/数值/词缀/变数随 MD5 扰动）使用独立种子
   md5(规范化名字 + ":" + 技能id)，与主派生流互不影响；熟练度为
-  [0,100] 的高斯投掷（v1.0.0 起）。
+  [0,100] 的三角形分布投掷（v1.1.0 起）。
 - v0.9.0 起每个技能附带一个熟练度（0~100）与至多两个变数槽位：
   熟练度按技能各自的区间缩放触发概率（或条件型的效果值），
   变数槽位以 25% 概率实际成为共鸣变数（公式括号紧跟对应数值）。
@@ -99,6 +100,7 @@ RESONANCE_SPECS = {
     ("gamble", "value"): ("pct", 0.5, 6.0),
     ("gamble", "penalty"): ("pct", 0.1, 1.0),
     ("tempo", "value"): ("num", 0.0, None),
+    ("tempo", "atk"): ("num", 0.0, None),
     ("armor_pen", "crit"): ("num", 0.0, 200.0),
     ("blood_pact", "value"): ("pct", 0.05, 1.5),
     ("blood_pact", "convert"): ("pct", 0.05, 2.0),
@@ -123,6 +125,7 @@ _FIELD_UNITS = {
     ("gauge_surge", "value"): "gauge",
     ("gauge_surge", "crit_value"): "gauge",
     ("tempo", "value"): "spd",
+    ("tempo", "atk"): "atk",
 }
 
 
@@ -144,7 +147,7 @@ class Fighter:
     name: str            # 原始输入（仅用于展示）
     normalized: str      # 归一化名字（MD5 与对战种子的依据）
     digest: str          # md5 hex
-    attrs: dict          # 属性 id -> 正态投掷值（浮点）；crit/dodge 以百分数存储
+    attrs: dict          # 属性 id -> 三角形分布投掷值（浮点）；crit/dodge 以百分数存储
     skill_ids: tuple     # 按抽取顺序
     title_structure_id: str
     title_fields: dict   # 字段名 -> 字段 id
@@ -170,15 +173,15 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
     digest = hashlib.md5(normalized.encode("utf-8")).hexdigest()
     rng = DetRng(int(digest, 16))
 
-    # 属性正态投掷：[min, max] 内近似正态（均值 = 区间中点，σ = 宽 / 4，截断），
+    # 属性三角形分布投掷：[min, max] 内（两均匀数取均值，中点密度最高），
     # 消耗顺序 = 配置顺序。v0.10.0：非百分比属性为 ×100 整数量纲，投掷即取整；
     # crit/dodge 为百分数，保持浮点
     attrs = {}
     for a in game.attributes:
-        roll = rng.next_gaussian(a.min, a.max)
+        roll = rng.next_triangular(a.min, a.max)
         attrs[a.id] = round(roll) if a.format != "percent" else roll
 
-    count = rng.next_gaussian_range(game.skill_count_min, game.skill_count_max)
+    count = rng.next_triangular_range(game.skill_count_min, game.skill_count_max)
     skills = rng.sample_weighted(((s, s.weight) for s in game.skills), count)
 
     structure = rng.pick_weighted((s, s.weight) for s in game.title_structures)
@@ -243,9 +246,9 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
         eff = dict(sdef.effect)
         seed_hex = hashlib.md5((fighter.normalized + ":" + sid).encode("utf-8")).hexdigest()
         rng = DetRng(int(seed_hex, 16))
-        # 熟练度：[0,100] 高斯投掷（集中于 50），按技能区间换算为触发概率
-        # （或效果值）倍率。v1.0.0 起使用离散高斯 next_gaussian_range。
-        mastery = rng.next_gaussian_range(0, 100)
+        # 熟练度：[0,100] 三角形分布投掷（集中于 50），按技能区间换算为触发概率
+        # （或效果值）倍率。v1.1.0 起使用离散三角形 next_triangular_range。
+        mastery = rng.next_triangular_range(0, 100)
         lo, hi = sdef.mastery
         mult = lo + (hi - lo) * mastery / 100.0
         eff["mastery"] = mastery
@@ -262,14 +265,14 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                 eff[param] = scaled
         for key in ("value", "damage"):
             if key in eff:
-                factor = rng.next_gaussian(var.value_lo, var.value_hi)
+                factor = rng.next_triangular(var.value_lo, var.value_hi)
                 eff[key] = float(eff[key]) * factor
         if name_mod.prefix_chance > 0 and rng.next_float() < name_mod.prefix_chance:
             eff["prefix"] = rng.pick_weighted((m, m.weight) for m in name_mod.prefixes).id
-            eff["prefix_scale"] = rng.next_gaussian(name_mod.scale_lo, name_mod.scale_hi)
+            eff["prefix_scale"] = rng.next_triangular(name_mod.scale_lo, name_mod.scale_hi)
         if name_mod.suffix_chance > 0 and rng.next_float() < name_mod.suffix_chance:
             eff["suffix"] = rng.pick_weighted((m, m.weight) for m in name_mod.suffixes).id
-            eff["suffix_scale"] = rng.next_gaussian(name_mod.scale_lo, name_mod.scale_hi)
+            eff["suffix_scale"] = rng.next_triangular(name_mod.scale_lo, name_mod.scale_hi)
         for pool, mod_id, scale_key in ((name_mod.prefixes, eff.get("prefix"), "prefix_scale"),
                                         (name_mod.suffixes, eff.get("suffix"), "suffix_scale")):
             if not mod_id:
@@ -289,7 +292,7 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                     continue
                 mode = rng.pick_weighted(link_cfg.mode_weights)
                 vdef = rng.pick_weighted((v, v.weight) for v in link_cfg.variables)
-                rate = rng.next_gaussian(vdef.rate_lo, vdef.rate_hi)
+                rate = rng.next_triangular(vdef.rate_lo, vdef.rate_hi)
                 links.append({"field": field, "variable": vdef.id,
                               "rate": rate, "mode": mode})
         if links:
@@ -536,7 +539,8 @@ def _nat_params(display_eff: dict, game: GameCfg):
     if ttype == "tempo":
         return "nat_tempo", {
             "chance": format_pct(chance),
-            "value": num("value")}
+            "value": num("value"),
+            "atk": num("atk")}
     if ttype == "armor_pen":
         return "nat_armor_pen", {
             "chance": format_pct(chance),
@@ -561,6 +565,8 @@ def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
     1. 内联最简线性公式（紧跟对应数值）：最终值 = 基数 + 变量式 * 合并系数；
        变量式以属性 emoji 表示--own 省略范围词、enemy 前缀「对方」、
        difference「【己方-对方】」、sum「【己方+对方】」；
+       v1.1.0 起百分数字段括号内为纯数字（两位小数）、百分号移到括号外，
+       如（355.61+❤️*0.01）%；绝对数值字段仍以整数基数 + 百分数系数表示；
     2. 尾句依赖描述（使用属性全名，如「己方攻击越高，效果值越高。」）。
     """
     tmpl = game.stats
@@ -575,8 +581,15 @@ def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
     field_word = str(tmpl.get("field_" + field, field))
     fmt = _res_spec(eff, field)[0]
     eff_raw = float(eff.get(field, 0.0))
-    base_display = format_field(eff_raw, fmt)
-    merged = format_pct(eff_raw * float(link.get("rate", 0.0)) / base)
+    merged_raw = eff_raw * float(link.get("rate", 0.0)) / base
+    if fmt == "pct":
+        # v1.1.0：百分数字段括号内为纯数字（两位小数），百分号移到括号外，
+        # 如「伤害提升至 375.52%（355.61+❤️*0.01）%」
+        base_display = "%.2f" % (eff_raw * 100.0)
+        merged = "%.2f" % (merged_raw * 100.0)
+    else:
+        base_display = format_field(eff_raw, fmt)
+        merged = format_pct(merged_raw)
     against = var_id
     if mode in ("difference", "sum"):
         vdef = next((v for v in game.skill_variable_link.variables if v.id == var_id), None)
@@ -604,6 +617,8 @@ def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
     formula = render_template(tmpl.get("link_formula", ""),
                               {"base": base_display, "expr": expr, "merged": merged},
                               game)
+    if fmt == "pct":
+        formula += "%"
     return formula, tail
 
 

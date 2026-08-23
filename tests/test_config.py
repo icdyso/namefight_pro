@@ -171,31 +171,37 @@ class RngAndTextTests(unittest.TestCase):
         self.assertEqual([a.next_u64() for _ in range(10)],
                          [b.next_u64() for _ in range(10)])
 
-    def test_gaussian_deterministic_and_bounded(self):
+    def test_triangular_deterministic_and_bounded(self):
+        """三角形分布（v1.1.0，两均匀数取均值）：同种子同序列、
+        永远落在区间内且不出现截断堆积（端点值不会被硬压到边界）。"""
         a, b = DetRng(7), DetRng(7)
+        at_bound = 0
         for _ in range(50):
-            x = a.next_gaussian(0.85, 1.15)
-            y = b.next_gaussian(0.85, 1.15)
+            x = a.next_triangular(0.85, 1.15)
+            y = b.next_triangular(0.85, 1.15)
             self.assertEqual(x, y)
             self.assertGreaterEqual(x, 0.85)
             self.assertLessEqual(x, 1.15)
+            if x == 0.85 or x == 1.15:
+                at_bound += 1
+        self.assertEqual(at_bound, 0, "三角形分布不应出现边界截断堆积")
 
-    def test_gaussian_concentrates_near_midpoint(self):
+    def test_triangular_concentrates_near_midpoint(self):
         rng = DetRng(99)
         inside = 0
         total = 300
         for _ in range(total):
-            x = rng.next_gaussian(0.0, 1.0)
+            x = rng.next_triangular(0.0, 1.0)
             if 0.25 <= x <= 0.75:
                 inside += 1
-        self.assertGreater(inside / total, 0.5,
-                           "高斯抽样应集中在区间中段（实测 %.2f）" % (inside / total))
+        self.assertGreater(inside / total, 0.65,
+                           "三角形抽样应集中在区间中段（实测 %.2f）" % (inside / total))
 
-    def test_gaussian_range_discrete(self):
+    def test_triangular_range_discrete(self):
         rng = DetRng(42)
         counts = {2: 0, 3: 0}
         for _ in range(200):
-            value = rng.next_gaussian_range(2, 3)
+            value = rng.next_triangular_range(2, 3)
             self.assertIn(value, (2, 3))
             counts[value] += 1
         self.assertTrue(counts[2] and counts[3])

@@ -1,9 +1,9 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "language": "zh",
   "name": {
     "trim": true,
-    "case_sensitive": false,
+    "case_sensitive": true,
     "min_length": 1,
     "max_length": 32
   }
