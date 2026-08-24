@@ -16,9 +16,9 @@ if str(REPO_ROOT) not in sys.path:
 from namefight.battle import (_Combatant, _compute_damage, _make_combatant,
                               _snapshot, battle_to_api, run_battle)
 from namefight.config import load_game_config
-from namefight.fighter import (_format_formula_number, derive_fighter,
-                               fighter_to_api, personalized_effects,
-                               title_bonus_items)
+from namefight.fighter import (_format_formula_number, compose_title_name,
+                               derive_fighter, fighter_to_api,
+                               personalized_effects, title_bonus_items)
 from namefight.rng import DetRng
 from namefight.text import format_num, format_pct
 
@@ -464,15 +464,14 @@ class FighterDeterminism(unittest.TestCase):
                     self.assertIn(key, snap)
 
     def test_real_value_display(self):
-        """量纲契约（v1.0.0）：引擎与显示统一为真实值。攻击 [1000, 2000]
-        （×100 整数量纲）、防御 [500, 1000]；生命/速度/暴击区间为 v1.1.0
-        用户手动调参后的现值（生命加宽至 [10000, 30000]、速度 [5, 15]、
-        暴击 [5, 30]，见 docs/updates/2026-08-23-v1.1.0.md）；
+        """量纲契约（v1.0.0/v1.2.1）：引擎与显示统一为真实值。攻击 [1000, 2000]
+        （×100 整数量纲）、防御 [500, 1000]；生命/暴击区间为 v1.1.0 用户手动
+        调参后的现值，速度自 v1.2.1 起同为 ×100 量纲（行动槽阈值 10000 配套）；
         API 的 value 即引擎原始值（不再换算白板单位）。"""
         expect = {"hp": (20000, 10000, 30000),
                   "atk": (1500, 1000, 2000),
                   "def": (750, 500, 1000),
-                  "spd": (10, 5, 15),
+                  "spd": (1000, 500, 1500),
                   "crit": (15, 5, 30),
                   "dodge": (10, 5, 15)}
         for a in GAME.attributes:
@@ -719,7 +718,9 @@ class BattleDeterminism(unittest.TestCase):
         outcome = run_battle(fa, fb, GAME)
         for e in outcome.events:
             if e["template"] in ("attack_hit", "attack_miss"):
-                self.assertEqual(e["params"]["a"], fast.name,
+                # v1.2.1 起战报中的角色名为「【称号】名字」
+                self.assertEqual(e["params"]["a"],
+                                 "【%s】%s" % (compose_title_name(fast, GAME), fast.name),
                                  "速度更高者应先行动")
                 break
 

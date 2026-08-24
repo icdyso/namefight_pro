@@ -454,7 +454,7 @@
         "type": "sever",
         "chance": 0.085,
         "value": 0.45,
-        "delay": 9
+        "delay": 900
       }
     },
     {
@@ -470,8 +470,8 @@
       "effect": {
         "type": "gauge_surge",
         "chance": 0.62,
-        "value": 28,
-        "crit_value": 48
+        "value": 2800,
+        "crit_value": 4800
       }
     },
     {
@@ -713,7 +713,7 @@
       "effect": {
         "type": "tempo",
         "chance": 0.16,
-        "value": 1,
+        "value": 100,
         "atk": 10
       }
     },

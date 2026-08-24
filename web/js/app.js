@@ -50,6 +50,12 @@
     return state.simple && s.text_simple != null ? s.text_simple : s.text;
   }
 
+  /* 「【称号】名字」形式的全名（与后端战报口径一致，v1.2.1） */
+  function displayName(f) {
+    if (!f) return "";
+    return f.title && f.title.name ? "【" + f.title.name + "】" + f.name : f.name;
+  }
+
   function fmt(key, map) {
     var s = t(key);
     Object.keys(map || {}).forEach(function (k) {
@@ -746,11 +752,36 @@
 
   /* ---------- 战报富文本渲染 ----------
    * 后端为每条战报提供 rich 段列表：阵营名（红/蓝加粗）、技能名（各自配色
-   * 加粗）、伤害（红）、治疗（绿）、普通文本；技能使用行后附个性化描述。 */
+   * 加粗）、伤害（红）、治疗（绿）、普通文本；技能使用行后附个性化描述。
+   * v1.2.1 起角色名自带【称号】，且名字头顶挂一条无数字的简易血条：
+   * 蓝=当前生命，红=本次掉血，绿=本次回血，灰=空。
+   * 血条数据 = 本条战报快照与上一条快照的生命差值（逐条/跳过/递进模式一致）。 */
 
-  function richSeg(seg) {
-    if (seg.k === "name-a") return NF.h("b", { class: "nm nm-a" }, seg.t);
-    if (seg.k === "name-b") return NF.h("b", { class: "nm nm-b" }, seg.t);
+  function nameWidget(text, colorClass, hp) {
+    var bar = NF.h("div", { class: "nm-hp" });
+    if (hp && hp.max > 0) {
+      var cur = Math.max(0, Math.min(hp.cur, hp.max));
+      var prev = Math.max(0, Math.min(hp.prev, hp.max));
+      var pct = function (v) { return (v / hp.max * 100) + "%"; };
+      if (cur < prev) {          // 掉血：蓝=剩余，红=本次损失
+        bar.appendChild(NF.h("i", { class: "hp-cur", style: { width: pct(cur) } }));
+        bar.appendChild(NF.h("i", { class: "hp-loss", style: { width: pct(prev - cur) } }));
+      } else if (cur > prev) {   // 回血：蓝=原有，绿=本次回复
+        bar.appendChild(NF.h("i", { class: "hp-cur", style: { width: pct(prev) } }));
+        bar.appendChild(NF.h("i", { class: "hp-gain", style: { width: pct(cur - prev) } }));
+      } else {
+        bar.appendChild(NF.h("i", { class: "hp-cur", style: { width: pct(cur) } }));
+      }
+    }
+    return NF.h("span", { class: "nmw" }, bar,
+      NF.h("b", { class: "nm " + colorClass }, text));
+  }
+
+  function richSeg(seg, hpInfo) {
+    if (seg.k === "name-a" || seg.k === "name-b") {
+      return nameWidget(seg.t, seg.k === "name-a" ? "nm-a" : "nm-b",
+        hpInfo ? hpInfo[seg.k.slice(5)] : null);
+    }
     if (seg.k === "skill") {
       return NF.h("b", { class: "sk", style: { color: skillColor(seg.id) } }, seg.t);
     }
@@ -787,7 +818,18 @@
     else if (entry.template === "victory" || entry.template === "draw") cls += " log-result";
     var box = NF.h("div", { class: cls });
     if (entry.rich && entry.rich.length) {
-      entry.rich.forEach(function (seg) { box.appendChild(richSeg(seg)); });
+      // 本条快照相对上一条快照的生命差值 -> 角色名头顶血条的红/绿段；
+      // state.lastBattleState 在本函数末尾才被本条快照覆盖，此处即「上一条」
+      var hpInfo = null;
+      if (entry.state) {
+        hpInfo = {};
+        ["a", "b"].forEach(function (side) {
+          var cur = entry.state[side];
+          var prev = (state.lastBattleState && state.lastBattleState[side]) || cur;
+          hpInfo[side] = { cur: +cur.hp, prev: +prev.hp, max: +cur.max_hp };
+        });
+      }
+      entry.rich.forEach(function (seg) { box.appendChild(richSeg(seg, hpInfo)); });
     } else {
       box.appendChild(document.createTextNode(entry.text || ""));
     }
@@ -802,7 +844,8 @@
     NF.clear(els.resultBox);
     var r = state.battle.result;
     var bannerClass = r.draw ? "result-draw" : (r.winner_pos === 0 ? "result-a" : "result-b");
-    var headline = r.draw ? t("draw_text") : fmt("winner_text", { name: r.winner });
+    var headline = r.draw ? t("draw_text")
+      : fmt("winner_text", { name: displayName(state.fighters[r.winner_pos]) || r.winner });
     els.resultBox.appendChild(NF.h("div", { class: "result-banner " + bannerClass },
       NF.h("div", { class: "result-winner" }, headline),
       NF.h("div", { class: "result-summary" }, fmt("summary_text", {

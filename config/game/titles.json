@@ -1,56 +1,14 @@
 {
   "structures": [
     {
-      "id": "core",
-      "weight": 20,
-      "fields": [
-        "core"
-      ]
-    },
-    {
       "id": "prefix_core",
-      "weight": 26,
+      "weight": 1,
       "fields": [
         "prefix",
         "core"
       ],
       "connectors": [
         ""
-      ]
-    },
-    {
-      "id": "core_suffix",
-      "weight": 22,
-      "fields": [
-        "core",
-        "suffix"
-      ],
-      "connectors": [
-        "·"
-      ]
-    },
-    {
-      "id": "dual_core",
-      "weight": 18,
-      "fields": [
-        "core",
-        "core2"
-      ],
-      "connectors": [
-        "·"
-      ]
-    },
-    {
-      "id": "full",
-      "weight": 14,
-      "fields": [
-        "prefix",
-        "core",
-        "suffix"
-      ],
-      "connectors": [
-        "",
-        "·"
       ]
     }
   ],
@@ -59,7 +17,7 @@
       "id": "dark_night",
       "name": "暗夜",
       "desc": "行于暗夜",
-      "weight": 10,
+      "weight": 5,
       "bonus": {
         "dodge": 1
       }
@@ -68,7 +26,7 @@
       "id": "blood_moon",
       "name": "血月",
       "desc": "生于血月之下",
-      "weight": 9,
+      "weight": 5,
       "bonus": {
         "atk": 100
       }
@@ -77,7 +35,7 @@
       "id": "abyss",
       "name": "深渊",
       "desc": "自深渊归来",
-      "weight": 9,
+      "weight": 5,
       "bonus": {
         "def": 50
       }
@@ -86,16 +44,16 @@
       "id": "sky",
       "name": "苍穹",
       "desc": "仰望苍穹",
-      "weight": 10,
+      "weight": 5,
       "bonus": {
-        "spd": 1
+        "spd": 100
       }
     },
     {
       "id": "flame",
       "name": "烈焰",
       "desc": "浴于烈焰",
-      "weight": 10,
+      "weight": 5,
       "bonus": {
         "atk": 100
       }
@@ -104,7 +62,7 @@
       "id": "frost",
       "name": "寒霜",
       "desc": "饮尽寒霜",
-      "weight": 10,
+      "weight": 5,
       "bonus": {
         "def": 50
       }
@@ -113,16 +71,16 @@
       "id": "thunder",
       "name": "雷霆",
       "desc": "雷霆加身",
-      "weight": 10,
+      "weight": 5,
       "bonus": {
-        "spd": 1
+        "spd": 100
       }
     },
     {
       "id": "boundless",
       "name": "无极",
       "desc": "踏入无极",
-      "weight": 8,
+      "weight": 5,
       "bonus": {
         "hp": 400
       }
@@ -131,7 +89,7 @@
       "id": "aloof",
       "name": "孤高",
       "desc": "生性孤高",
-      "weight": 8,
+      "weight": 5,
       "bonus": {
         "crit": 1
       }
@@ -140,9 +98,652 @@
       "id": "silent",
       "name": "缄默",
       "desc": "缄默不语",
-      "weight": 8,
+      "weight": 5,
       "bonus": {
         "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_11",
+      "name": "恐惧",
+      "desc": "散播恐惧",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "crit": 1
+      }
+    },
+    {
+      "id": "new_title_12",
+      "name": "疯狂",
+      "desc": "陷入疯狂",
+      "weight": 5,
+      "bonus": {
+        "atk": 200,
+        "def": -50
+      }
+    },
+    {
+      "id": "new_title_13",
+      "name": "纯白",
+      "desc": "纯白无垢",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_14",
+      "name": "漆黑",
+      "desc": "漆黑如墨",
+      "weight": 5,
+      "bonus": {
+        "atk": 100,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_15",
+      "name": "可能是",
+      "desc": "真伪难辨",
+      "weight": 5,
+      "bonus": {
+        "crit": 1,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_16",
+      "name": "富有的",
+      "desc": "富可敌国",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_17",
+      "name": "无聊的",
+      "desc": "百无聊赖",
+      "weight": 5,
+      "bonus": {
+        "def": 50,
+        "spd": 100
+      }
+    },
+    {
+      "id": "new_title_18",
+      "name": "忠诚的",
+      "desc": "忠心耿耿",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_19",
+      "name": "背叛的",
+      "desc": "背信弃义",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "crit": 2,
+        "def": -50
+      }
+    },
+    {
+      "id": "new_title_20",
+      "name": "神圣",
+      "desc": "圣光加护",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_21",
+      "name": "倒霉的",
+      "desc": "时运不济",
+      "weight": 5,
+      "bonus": {
+        "hp": -200,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_22",
+      "name": "地狱",
+      "desc": "出身地狱",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "hp": 200,
+        "def": -50
+      }
+    },
+    {
+      "id": "new_title_23",
+      "name": "天国",
+      "desc": "来自天国",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "def": 50
+      }
+    },
+    {
+      "id": "new_title_24",
+      "name": "流浪",
+      "desc": "浪迹天涯",
+      "weight": 5,
+      "bonus": {
+        "spd": 150,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_25",
+      "name": "老练的",
+      "desc": "老练沉稳",
+      "weight": 5,
+      "bonus": {
+        "crit": 1,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_26",
+      "name": "胆小的",
+      "desc": "胆小如鼠",
+      "weight": 5,
+      "bonus": {
+        "dodge": 2,
+        "spd": 100,
+        "atk": -100
+      }
+    },
+    {
+      "id": "new_title_27",
+      "name": "小个子",
+      "desc": "身形灵活",
+      "weight": 5,
+      "bonus": {
+        "dodge": 2,
+        "spd": 100,
+        "hp": -300
+      }
+    },
+    {
+      "id": "new_title_28",
+      "name": "大块头",
+      "desc": "身大力不亏",
+      "weight": 5,
+      "bonus": {
+        "hp": 800,
+        "atk": 100,
+        "spd": -150
+      }
+    },
+    {
+      "id": "new_title_29",
+      "name": "懒惰的",
+      "desc": "懒得动弹",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "spd": -200,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_30",
+      "name": "高塔",
+      "desc": "高塔之上",
+      "weight": 5,
+      "bonus": {
+        "def": 150,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_31",
+      "name": "王庭",
+      "desc": "王庭出身",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "def": 100,
+        "spd": -50
+      }
+    },
+    {
+      "id": "new_title_32",
+      "name": "打败恶龙的",
+      "desc": "恶龙俯首",
+      "weight": 5,
+      "bonus": {
+        "atk": 200,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_33",
+      "name": "并不是",
+      "desc": "名不副实",
+      "weight": 5,
+      "bonus": {
+        "hp": 200,
+        "atk": -50,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_34",
+      "name": "理想的",
+      "desc": "心怀理想",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "crit": 1
+      }
+    },
+    {
+      "id": "new_title_35",
+      "name": "大",
+      "desc": "大而有当",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "atk": 100,
+        "spd": -100
+      }
+    },
+    {
+      "id": "new_title_36",
+      "name": "多首的",
+      "desc": "首级众多",
+      "weight": 5,
+      "bonus": {
+        "hp": 800,
+        "atk": 100
+      }
+    },
+    {
+      "id": "new_title_37",
+      "name": "细心的",
+      "desc": "心思缜密",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "def": 50
+      }
+    },
+    {
+      "id": "new_title_38",
+      "name": "野兽",
+      "desc": "野兽本能",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "spd": 100,
+        "def": -50
+      }
+    },
+    {
+      "id": "new_title_39",
+      "name": "飞翔的",
+      "desc": "凌空飞翔",
+      "weight": 5,
+      "bonus": {
+        "spd": 200,
+        "dodge": 2
+      }
+    },
+    {
+      "id": "new_title_40",
+      "name": "梦想是",
+      "desc": "梦想远大",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_41",
+      "name": "为了",
+      "desc": "舍身以赴",
+      "weight": 5,
+      "bonus": {
+        "atk": 100,
+        "hp": 400
+      }
+    },
+    {
+      "id": "new_title_42",
+      "name": "永生",
+      "desc": "永生不死",
+      "weight": 5,
+      "bonus": {
+        "hp": 800
+      }
+    },
+    {
+      "id": "new_title_43",
+      "name": "自由",
+      "desc": "向往自由",
+      "weight": 5,
+      "bonus": {
+        "spd": 150,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_44",
+      "name": "悲痛的",
+      "desc": "化悲为力",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "crit": 1,
+        "hp": -200
+      }
+    },
+    {
+      "id": "new_title_45",
+      "name": "永恒的",
+      "desc": "万世不易",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_46",
+      "name": "终极",
+      "desc": "终极形态",
+      "weight": 5,
+      "bonus": {
+        "atk": 200,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_47",
+      "name": "见习",
+      "desc": "见习修行",
+      "weight": 5,
+      "bonus": {
+        "atk": -50,
+        "hp": 200,
+        "spd": 50
+      }
+    },
+    {
+      "id": "new_title_48",
+      "name": "觉醒",
+      "desc": "觉醒之力",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_49",
+      "name": "目标是",
+      "desc": "志存高远",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "spd": 100
+      }
+    },
+    {
+      "id": "new_title_50",
+      "name": "小",
+      "desc": "小巧玲珑",
+      "weight": 5,
+      "bonus": {
+        "dodge": 2,
+        "spd": 150,
+        "hp": -300
+      }
+    },
+    {
+      "id": "new_title_51",
+      "name": "皇帝的",
+      "desc": "皇帝钦点",
+      "weight": 5,
+      "bonus": {
+        "hp": 500,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_52",
+      "name": "无畏的",
+      "desc": "一往无前",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "hp": 200,
+        "dodge": -1
+      }
+    },
+    {
+      "id": "new_title_53",
+      "name": "幻想中的",
+      "desc": "幻想成真",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_54",
+      "name": "转生",
+      "desc": "转生异界",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "atk": 100
+      }
+    },
+    {
+      "id": "new_title_55",
+      "name": "异世界",
+      "desc": "异界来客",
+      "weight": 5,
+      "bonus": {
+        "atk": 100,
+        "dodge": 2
+      }
+    },
+    {
+      "id": "new_title_56",
+      "name": "无敌的",
+      "desc": "自称无敌",
+      "weight": 5,
+      "bonus": {
+        "def": 150,
+        "hp": 400,
+        "spd": -100
+      }
+    },
+    {
+      "id": "new_title_57",
+      "name": "学院派",
+      "desc": "学院正统",
+      "weight": 5,
+      "bonus": {
+        "crit": 1,
+        "def": 100,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_58",
+      "name": "不可能的",
+      "desc": "打破不可能",
+      "weight": 5,
+      "bonus": {
+        "crit": 3,
+        "atk": 100
+      }
+    },
+    {
+      "id": "new_title_59",
+      "name": "绝对",
+      "desc": "绝对意志",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_60",
+      "name": "不可接触的",
+      "desc": "无法触及",
+      "weight": 5,
+      "bonus": {
+        "dodge": 3,
+        "spd": 100,
+        "hp": -200
+      }
+    },
+    {
+      "id": "new_title_61",
+      "name": "禁忌",
+      "desc": "触碰禁忌",
+      "weight": 5,
+      "bonus": {
+        "atk": 200,
+        "hp": -300,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_62",
+      "name": "动人的",
+      "desc": "楚楚动人",
+      "weight": 5,
+      "bonus": {
+        "hp": 300,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_63",
+      "name": "被封印的",
+      "desc": "封印半解",
+      "weight": 5,
+      "bonus": {
+        "atk": 250,
+        "spd": -150,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_64",
+      "name": "我不是",
+      "desc": "极力否认",
+      "weight": 5,
+      "bonus": {
+        "dodge": 2,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_65",
+      "name": "坏心眼",
+      "desc": "一肚子坏水",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "atk": 100
+      }
+    },
+    {
+      "id": "new_title_66",
+      "name": "美少女",
+      "desc": "变身登场",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "dodge": 2,
+        "hp": -200
+      }
+    },
+    {
+      "id": "new_title_67",
+      "name": "保守派",
+      "desc": "稳字当头",
+      "weight": 5,
+      "bonus": {
+        "def": 150,
+        "hp": 300,
+        "spd": -100
+      }
+    },
+    {
+      "id": "new_title_68",
+      "name": "热心肠",
+      "desc": "热心热忱",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "atk": 50,
+        "def": 50
+      }
+    },
+    {
+      "id": "new_title_69",
+      "name": "想要成为",
+      "desc": "心怀憧憬",
+      "weight": 5,
+      "bonus": {
+        "spd": 100,
+        "crit": 1,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_70",
+      "name": "无价的",
+      "desc": "价值连城",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "def": 50
+      }
+    },
+    {
+      "id": "new_title_71",
+      "name": "免费的",
+      "desc": "白给的力量",
+      "weight": 5,
+      "bonus": {
+        "atk": 100,
+        "hp": -100
+      }
+    },
+    {
+      "id": "new_title_72",
+      "name": "昂贵的",
+      "desc": "造价不菲",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "def": 150,
+        "spd": -100
       }
     }
   ],
@@ -151,7 +752,7 @@
       "id": "sword_saint",
       "name": "剑圣",
       "desc": "剑之圣者",
-      "weight": 10,
+      "weight": 5,
       "bonus": {
         "crit": 1
       }
@@ -160,7 +761,7 @@
       "id": "fist_king",
       "name": "拳王",
       "desc": "拳台之王",
-      "weight": 8,
+      "weight": 5,
       "bonus": {
         "atk": 100
       }
@@ -169,16 +770,16 @@
       "id": "warlock",
       "name": "术士",
       "desc": "禁忌术士",
-      "weight": 8,
+      "weight": 5,
       "bonus": {
         "hp": 600
       }
     },
     {
       "id": "berserker",
-      "name": "狂战",
+      "name": "狂战士",
       "desc": "狂怒战士",
-      "weight": 9,
+      "weight": 5,
       "bonus": {
         "atk": 100
       }
@@ -187,7 +788,7 @@
       "id": "assassin",
       "name": "刺客",
       "desc": "影中刺客",
-      "weight": 9,
+      "weight": 5,
       "bonus": {
         "crit": 1
       }
@@ -196,7 +797,7 @@
       "id": "sage",
       "name": "贤者",
       "desc": "战场贤者",
-      "weight": 7,
+      "weight": 5,
       "bonus": {
         "def": 50
       }
@@ -205,16 +806,16 @@
       "id": "ranger",
       "name": "游侠",
       "desc": "浪迹游侠",
-      "weight": 9,
+      "weight": 5,
       "bonus": {
-        "spd": 1
+        "spd": 100
       }
     },
     {
       "id": "war_god",
       "name": "武神",
       "desc": "不灭武神",
-      "weight": 4,
+      "weight": 5,
       "bonus": {
         "atk": 200
       }
@@ -223,7 +824,7 @@
       "id": "drunkard",
       "name": "酒仙",
       "desc": "醉里仙人",
-      "weight": 7,
+      "weight": 5,
       "bonus": {
         "hp": 600
       }
@@ -232,7 +833,7 @@
       "id": "phantom",
       "name": "幻影",
       "desc": "无形幻影",
-      "weight": 8,
+      "weight": 5,
       "bonus": {
         "dodge": 1
       }
@@ -250,16 +851,525 @@
       "id": "gambler",
       "name": "赌徒",
       "desc": "命运赌徒",
-      "weight": 8,
+      "weight": 5,
       "bonus": {
         "crit": 1
+      }
+    },
+    {
+      "id": "new_title_13",
+      "name": "王者",
+      "desc": "王者风范",
+      "weight": 5,
+      "bonus": {
+        "hp": 500,
+        "atk": 100
+      }
+    },
+    {
+      "id": "new_title_14",
+      "name": "怪物",
+      "desc": "超乎常理",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "atk": 150,
+        "spd": -50
+      }
+    },
+    {
+      "id": "new_title_15",
+      "name": "窃贼",
+      "desc": "手疾眼快",
+      "weight": 5,
+      "bonus": {
+        "spd": 150,
+        "dodge": 2
+      }
+    },
+    {
+      "id": "new_title_16",
+      "name": "学者",
+      "desc": "博览群书",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "def": 50
+      }
+    },
+    {
+      "id": "new_title_17",
+      "name": "力量",
+      "desc": "力量化身",
+      "weight": 5,
+      "bonus": {
+        "atk": 200
+      }
+    },
+    {
+      "id": "new_title_18",
+      "name": "权柄",
+      "desc": "权柄在握",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_19",
+      "name": "恶魔",
+      "desc": "与魔交易",
+      "weight": 5,
+      "bonus": {
+        "atk": 200,
+        "hp": -200
+      }
+    },
+    {
+      "id": "new_title_20",
+      "name": "王子",
+      "desc": "王子身份",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_21",
+      "name": "仙人",
+      "desc": "修仙问道",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "spd": 50
+      }
+    },
+    {
+      "id": "new_title_22",
+      "name": "驾驶员",
+      "desc": "驾驶精湛",
+      "weight": 5,
+      "bonus": {
+        "spd": 200,
+        "crit": 1
+      }
+    },
+    {
+      "id": "new_title_23",
+      "name": "厨神",
+      "desc": "刀工了得",
+      "weight": 5,
+      "bonus": {
+        "atk": 100,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_24",
+      "name": "意志",
+      "desc": "钢铁意志",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_25",
+      "name": "希望",
+      "desc": "希望所在",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "crit": 1
+      }
+    },
+    {
+      "id": "new_title_26",
+      "name": "主人",
+      "desc": "一家之主",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_27",
+      "name": "女仆",
+      "desc": "悉心服侍",
+      "weight": 5,
+      "bonus": {
+        "hp": 300,
+        "dodge": 2
+      }
+    },
+    {
+      "id": "new_title_28",
+      "name": "魂灵",
+      "desc": "飘忽无形",
+      "weight": 5,
+      "bonus": {
+        "dodge": 3,
+        "hp": -200
+      }
+    },
+    {
+      "id": "new_title_29",
+      "name": "丑角",
+      "desc": "插科打诨",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_30",
+      "name": "富翁",
+      "desc": "家财万贯",
+      "weight": 5,
+      "bonus": {
+        "hp": 800,
+        "spd": -100
+      }
+    },
+    {
+      "id": "new_title_31",
+      "name": "放逐",
+      "desc": "放逐之身",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "spd": 100,
+        "hp": -200
+      }
+    },
+    {
+      "id": "new_title_32",
+      "name": "黑客",
+      "desc": "入侵系统",
+      "weight": 5,
+      "bonus": {
+        "crit": 2,
+        "spd": 150
+      }
+    },
+    {
+      "id": "new_title_33",
+      "name": "科学家",
+      "desc": "科学力量",
+      "weight": 5,
+      "bonus": {
+        "crit": 3,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_34",
+      "name": "鬼武士",
+      "desc": "亡魂武士",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "crit": 2,
+        "hp": -200
+      }
+    },
+    {
+      "id": "new_title_35",
+      "name": "灵能者",
+      "desc": "精神洪流",
+      "weight": 5,
+      "bonus": {
+        "crit": 3,
+        "def": -50
+      }
+    },
+    {
+      "id": "new_title_36",
+      "name": "清洁工",
+      "desc": "打扫战场",
+      "weight": 5,
+      "bonus": {
+        "atk": 100,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_37",
+      "name": "主教",
+      "desc": "圣职在身",
+      "weight": 5,
+      "bonus": {
+        "hp": 500,
+        "def": 100
+      }
+    },
+    {
+      "id": "new_title_38",
+      "name": "冒险家",
+      "desc": "历经冒险",
+      "weight": 5,
+      "bonus": {
+        "atk": 100,
+        "spd": 150
+      }
+    },
+    {
+      "id": "new_title_39",
+      "name": "服务员",
+      "desc": "笑脸相迎",
+      "weight": 5,
+      "bonus": {
+        "hp": 300,
+        "dodge": 1
+      }
+    },
+    {
+      "id": "new_title_40",
+      "name": "会长",
+      "desc": "会长威严",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "atk": 100
+      }
+    },
+    {
+      "id": "new_title_41",
+      "name": "助理",
+      "desc": "尽职尽责",
+      "weight": 5,
+      "bonus": {
+        "def": 100,
+        "spd": 100
+      }
+    },
+    {
+      "id": "new_title_42",
+      "name": "力量",
+      "desc": "蛮力觉醒",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "hp": 300
+      }
+    },
+    {
+      "id": "new_title_43",
+      "name": "意义",
+      "desc": "追寻意义",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "crit": 1
+      }
+    },
+    {
+      "id": "new_title_44",
+      "name": "商贩",
+      "desc": "精打细算",
+      "weight": 5,
+      "bonus": {
+        "hp": 300,
+        "crit": 1,
+        "spd": 50
+      }
+    },
+    {
+      "id": "new_title_45",
+      "name": "拾荒者",
+      "desc": "变废为宝",
+      "weight": 5,
+      "bonus": {
+        "def": 150,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_46",
+      "name": "大统领",
+      "desc": "统领全局",
+      "weight": 5,
+      "bonus": {
+        "hp": 500,
+        "atk": 100,
+        "spd": -100
+      }
+    },
+    {
+      "id": "new_title_47",
+      "name": "主宰",
+      "desc": "主宰一切",
+      "weight": 5,
+      "bonus": {
+        "atk": 200,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_48",
+      "name": "神射手",
+      "desc": "百步穿杨",
+      "weight": 5,
+      "bonus": {
+        "crit": 3
+      }
+    },
+    {
+      "id": "new_title_49",
+      "name": "神明",
+      "desc": "神明降世",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "atk": 150
+      }
+    },
+    {
+      "id": "new_title_50",
+      "name": "帝王",
+      "desc": "帝王气度",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "def": 150
+      }
+    },
+    {
+      "id": "new_title_51",
+      "name": "真理",
+      "desc": "掌握真理",
+      "weight": 5,
+      "bonus": {
+        "crit": 3,
+        "hp": 200
+      }
+    },
+    {
+      "id": "new_title_52",
+      "name": "利刃",
+      "desc": "利刃出鞘",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_53",
+      "name": "罪人",
+      "desc": "罪孽深重",
+      "weight": 5,
+      "bonus": {
+        "atk": 150,
+        "hp": -300,
+        "crit": 2
+      }
+    },
+    {
+      "id": "new_title_54",
+      "name": "人类",
+      "desc": "人类勇气",
+      "weight": 5,
+      "bonus": {
+        "hp": 400,
+        "atk": 100,
+        "crit": 1
+      }
+    },
+    {
+      "id": "new_title_55",
+      "name": "演员",
+      "desc": "演技高超",
+      "weight": 5,
+      "bonus": {
+        "dodge": 2,
+        "crit": 1
+      }
+    },
+    {
+      "id": "new_title_56",
+      "name": "精灵",
+      "desc": "精灵血脉",
+      "weight": 5,
+      "bonus": {
+        "spd": 150,
+        "dodge": 2
+      }
+    },
+    {
+      "id": "new_title_57",
+      "name": "矮人",
+      "desc": "矮人锻造",
+      "weight": 5,
+      "bonus": {
+        "def": 200,
+        "hp": 300,
+        "spd": -100
+      }
+    },
+    {
+      "id": "new_title_58",
+      "name": "兽人",
+      "desc": "兽人体魄",
+      "weight": 5,
+      "bonus": {
+        "hp": 500,
+        "atk": 150,
+        "dodge": -1
+      }
+    },
+    {
+      "id": "new_title_59",
+      "name": "石像鬼",
+      "desc": "石躯坚硬",
+      "weight": 5,
+      "bonus": {
+        "def": 250,
+        "hp": 300,
+        "spd": -200
+      }
+    },
+    {
+      "id": "new_title_60",
+      "name": "恶龙",
+      "desc": "恶龙咆哮",
+      "weight": 5,
+      "bonus": {
+        "hp": 600,
+        "atk": 200
+      }
+    },
+    {
+      "id": "new_title_61",
+      "name": "护卫",
+      "desc": "护卫之职",
+      "weight": 5,
+      "bonus": {
+        "def": 150,
+        "hp": 400
+      }
+    },
+    {
+      "id": "new_title_62",
+      "name": "古神",
+      "desc": "古神低语",
+      "weight": 5,
+      "bonus": {
+        "hp": 500,
+        "atk": 150,
+        "crit": 2
       }
     }
   ],
   "suffixes": [
     {
       "id": "peerless",
-      "name": "无双",
+      "name": "渴望者",
       "desc": "举世无双",
       "weight": 4,
       "bonus": {
@@ -297,7 +1407,7 @@
     },
     {
       "id": "guard",
-      "name": "亲卫",
+      "name": "卫队",
       "desc": "亲卫队员",
       "weight": 6,
       "bonus": {
@@ -306,7 +1416,7 @@
     },
     {
       "id": "trainee",
-      "name": "见习",
+      "name": "见习中",
       "desc": "尚在见习",
       "weight": 10,
       "bonus": {
@@ -315,7 +1425,7 @@
     },
     {
       "id": "substitute",
-      "name": "候补",
+      "name": "候补人",
       "desc": "勉强候补",
       "weight": 12,
       "bonus": {
@@ -328,7 +1438,7 @@
       "desc": "光荣退役",
       "weight": 8,
       "bonus": {
-        "spd": -1,
+        "spd": -100,
         "def": 50
       }
     }

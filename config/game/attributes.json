@@ -34,11 +34,11 @@
       "id": "spd",
       "name": "速度",
       "emoji": "👟",
-      "base": 10,
-      "min": 5,
-      "max": 15,
+      "base": 1000,
+      "min": 500,
+      "max": 1500,
       "format": "int",
-      "power_weight": 2
+      "power_weight": 0.02
     },
     {
       "id": "crit",

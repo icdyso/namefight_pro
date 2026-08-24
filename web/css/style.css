@@ -202,6 +202,16 @@ body {
 .log-entry .sk { font-weight: 800; }
 .log-entry .dmg { color: #ff8598; font-weight: 400; }
 .log-entry .heal { color: #5fd98f; font-weight: 400; }
+/* 角色名头顶血条（v1.2.1）：蓝=当前生命 红=本次掉血 绿=本次回血 灰=空，无数字 */
+.log-entry .nmw { display: inline-flex; flex-direction: column; align-items: center; vertical-align: bottom; padding: 0 1px; }
+.log-entry .nm-hp {
+  display: flex; width: 72px; height: 4px; border-radius: 2px; overflow: hidden;
+  background: rgba(140, 148, 176, .35); margin-bottom: 2px;
+}
+.log-entry .nm-hp i { height: 100%; flex: none; }
+.log-entry .nm-hp .hp-cur { background: var(--blue); }
+.log-entry .nm-hp .hp-loss { background: var(--red); }
+.log-entry .nm-hp .hp-gain { background: var(--green); }
 .log-desc { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 2px; }
 .result-slot:empty { display: none; }
 .result-banner {

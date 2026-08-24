@@ -2,13 +2,14 @@
 
 tick 战斗模型：
 - 每个 tick 双方行动槽（gauge）累加自身有效速度，达到阈值
-  （battle.json 的 gauge_threshold，速度 ~10 / 阈值 100 ≈ 每 10 刻一动）
+  （battle.json 的 gauge_threshold，速度 ~1000 / 阈值 10000 ≈ 每 10 刻一动）
   即可行动一次并扣回阈值；速度决定行动频率。
   同一 tick 多人可行动时，按（gauge 余量降序、内部序）依次执行；
 - 内部序 = 速度降序、规范化名字升序，与输入顺序无关；
 - v0.10.0 起快照与战报中的全部数值均为**引擎真实值**（不再换算显示单位）；
   命/攻为 ×100 整数量纲（命 20000 / 攻 1500），防御 750（v1.0.0 减半），
-  速度为小整数量纲（~10，v1.0.0 回退旧版）；
+  速度与行动槽同为 ×100 量纲（v1.2.1 起，速度 ~1000 / 阈值 10000，
+  取整粒度更细、对战斗节奏的影响更小）；
   **全部计算结果取整**：多步浮点计算只在最终应用时取整一次
   （伤害/治疗/吸血/毒/流血/破甲/叠速等），百分数内容保持 2 位小数；
 - 防御为倒数百分比免伤：免伤率 = DEF / (DEF + defense_constant)，
@@ -23,7 +24,10 @@ tick 战斗模型：
   （熟练度影响触发概率，共鸣变数修正其余数值字段）；
 - 对战种子 = md5(字典序排序后的双方规范化名字，以配置分隔符连接)；
 - 每条战报附带双方状态快照（HP/属性/暴击/闪避/行动槽/buff）与富文本段
-  （rich），前端据此实时渲染 HUD 与着色战报。
+  （rich），前端据此实时渲染 HUD 与着色战报；
+- v1.2.1 起战报中的角色名一律为「【称号】名字」（_Combatant.name），
+  受击方剩余生命不再以「（X 剩余 N）」文本呈现，改由前端在角色名头顶
+  渲染无数字的简易血条（蓝=当前生命、红=本次损失、绿=本次回复、灰=空）。
 """
 from __future__ import annotations
 
@@ -32,8 +36,9 @@ import re
 from dataclasses import dataclass, field
 
 from .config import GameCfg
-from .fighter import (Fighter, apply_resonance, format_resonance_final,
-                      personalized_effects, resonance_coeff)
+from .fighter import (Fighter, apply_resonance, compose_title_name,
+                      format_resonance_final, personalized_effects,
+                      resonance_coeff)
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
@@ -90,7 +95,8 @@ _PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
 class _Combatant:
     fighter: Fighter
     pos: int                 # 在输入中的位置 0/1（快照键 a/b 与此对应）
-    name: str
+    name: str                # 战报显示名：【称号】名字（v1.2.1）
+    plain_name: str          # 原始名字（胜负方等 API 字段用）
     max_hp: float
     hp: float
     atk: float
@@ -227,7 +233,9 @@ def _make_combatant(f: Fighter, pos: int, game: GameCfg) -> _Combatant:
     bc = game.battle
     skills = personalized_effects(f, game)
     c = _Combatant(
-        fighter=f, pos=pos, name=f.name,
+        fighter=f, pos=pos,
+        name="【%s】%s" % (compose_title_name(f, game), f.name),
+        plain_name=f.name,
         max_hp=float(f.attrs["hp"]), hp=float(f.attrs["hp"]),
         atk=float(f.attrs["atk"]), defense=float(f.attrs["def"]),
         spd=float(f.attrs["spd"]), dodge=float(f.attrs["dodge"]),
@@ -628,7 +636,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
 
     return BattleOutcome(
         winner_pos=-1 if draw else winner.pos,
-        winner_name=None if draw else winner.name,
+        winner_name=None if draw else winner.plain_name,
         draw=draw,
         ticks=tick,
         damage={0: combatants[0].damage_dealt, 1: combatants[1].damage_dealt},
@@ -816,8 +824,7 @@ def _quick_strike(attacker, victim, mult, game, rng, ev, tick):
         _hurt(victim, dmg, ev, rng)
         attacker.damage_dealt += dmg
         ev("attack_hit", {"a": attacker.name, "b": victim.name,
-                          "damage": format_num(dmg),
-                          "hp": format_num(max(0, victim.hp))})
+                          "damage": format_num(dmg)})
         _apply_lifesteal(attacker, dmg, ev)
         _on_hit_reactions(attacker, victim, dmg, crit, game, rng, ev, tick)
 
@@ -848,8 +855,7 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
             _hurt(enemy, dmg, ev, rng)
             actor.damage_dealt += dmg
             ev("attack_hit", {"a": actor.name, "b": enemy.name,
-                              "damage": format_num(dmg),
-                              "hp": format_num(max(0, enemy.hp))})
+                              "damage": format_num(dmg)})
             _apply_lifesteal(actor, dmg, ev)
             _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick)
         return
@@ -963,8 +969,7 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
                 landed += 1
                 ev("thunder_hit", {"a": actor.name, "b": enemy.name,
                                    "damage": format_num(dmg),
-                                   "hit": i,
-                                   "hp": format_num(max(0, enemy.hp))})
+                                   "hit": i})
                 _on_hit_reactions(actor, enemy, dmg, False, game, rng, ev, tick)
             if enemy.hp <= 0 or actor.hp <= 0:
                 break
@@ -1000,8 +1005,7 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
         _hurt(enemy, dmg, ev, rng)
         actor.damage_dealt += dmg
     ev("attack_hit", {"a": actor.name, "b": enemy.name,
-                      "damage": format_num(dmg),
-                      "hp": format_num(max(0, enemy.hp))})
+                      "damage": format_num(dmg)})
     _apply_lifesteal(actor, dmg, ev)
     _on_hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick)
 
@@ -1097,7 +1101,10 @@ def battle_to_api(outcome: BattleOutcome, fighters_api: list,
     v0.10.0 起全部数值为引擎真实值；每条战报附带 rich 段供前端着色。"""
     side_of_name = {}
     for i, f in enumerate(fighters_api or []):
-        side_of_name[str(f.get("name", ""))] = "a" if i == 0 else "b"
+        # 战报中的角色名为「【称号】名字」（v1.2.1），与 _Combatant.name 口径一致
+        title = str((f.get("title") or {}).get("name") or "")
+        key = ("【%s】%s" % (title, f.get("name", ""))) if title else str(f.get("name", ""))
+        side_of_name[key] = "a" if i == 0 else "b"
     texts = render_events(outcome.events, game)
     log = []
     for e, text in zip(outcome.events, texts):
