@@ -1,11 +1,13 @@
 @echo off
-chcp 65001 >nul
+rem Ò»¼üÆô¶¯£º×Ô¶¯Ìô¿ÕÏÐ¶Ë¿Ú -> Æô¶¯·þÎñÆ÷ -> ´ò¿ªä¯ÀÀÆ÷£¨µÈÐ§ python start.py£©
 cd /d %~dp0
 where python >nul 2>nul
-if errorlevel 1 (
-  echo æœªæ‰¾åˆ° pythonï¼Œè¯·å…ˆå®‰è£… Python 3 å¹¶åŠ å…¥ PATHã€‚
-  pause
-  exit /b 1
-)
+if errorlevel 1 goto nopython
 python start.py %*
+goto end
+:nopython
+echo Î´ÕÒµ½ python£¬ÇëÏÈ°²×° Python 3 ²¢¼ÓÈë PATH¡£
+pause
+exit /b 1
+:end
 pause
