@@ -88,7 +88,7 @@
     root.appendChild(NF.h("header", { class: "app-header" },
       NF.h("div", { class: "lang-row" },
         NF.h("a", { class: "lang-btn", href: "/" }, t("power_back")),
-        NF.h("a", { class: "lang-btn", href: "/workshop.html" }, t("workshop_link"))),
+        NF.h("a", { class: "lang-btn", href: "/editor.html" }, t("editor_link"))),
       NF.h("h1", { class: "app-title" }, t("power_page_title")),
       NF.h("p", { class: "app-subtitle" }, t("power_page_subtitle"))));
     root.appendChild(NF.h("section", { class: "input-panel power-panel" },

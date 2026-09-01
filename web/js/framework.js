@@ -22,13 +22,18 @@
   }
 
   function h(tag, attrs) {
-    var el = document.createElement(tag);
+    // SVG 元素必须用 createElementNS 创建：createElement 会得到 XHTML 命名空间的
+    // 未知元素（DOM 里存在、CSS 尺寸生效，但其内部的 SVG 图形永不渲染）
+    var SVG_NS = "http://www.w3.org/2000/svg";
+    var el = (tag === "svg" || tag === "path")
+      ? document.createElementNS(SVG_NS, tag)
+      : document.createElement(tag);
     attrs = attrs || {};
     Object.keys(attrs).forEach(function (k) {
       var v = attrs[k];
       if (v == null) return;
       if (k === "class") {
-        el.className = v;
+        el.setAttribute("class", v);  // SVG 元素的 className 只读，统一走 setAttribute
       } else if (k === "style" && typeof v === "object") {
         Object.keys(v).forEach(function (prop) { el.style[prop] = v[prop]; });
       } else if (k === "dataset") {

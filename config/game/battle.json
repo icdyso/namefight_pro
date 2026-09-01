@@ -11,6 +11,8 @@
   "gauge_threshold": 10000,
   "crit_cap": 100,
   "dodge_cap": 80,
+  "guard_reduction_cap": 0.75,
+  "reflect_split_cap": 0.9,
   "seed_separator": "-",
   "power_check": {
     "enemies": 10000
@@ -31,7 +33,6 @@
     "regen_tick": "🌿 {a} 回春生效，回复 {heal} 点生命。",
     "skill_proc": "{a} 使用了 {skill}！",
     "attack_start": "　🗡️ {a} 发起攻击！",
-    "effect_damage_up": "　　力量涌动，伤害倍率提升至 {mult}！",
     "effect_execution": "　　斩杀时机已到，伤害倍率提升至 {mult}！",
     "effect_lifesteal": "　　🩸 {a} 吸取了 {heal} 点生命。",
     "effect_poison": "　　🧪 {b} 中毒了！",
@@ -73,83 +74,292 @@
     "retribution_record": "　　📝 {a} 记下了这一击（{stacks} 条）！",
     "retribution_release": "　　😤 {a} 新仇旧怨一起算：追加 {value} 点伤害（记录 ×{ratio}）！"
   },
-  "buffs": {
+  "statuses": {
     "poison": {
+      "kind": "dot",
+      "timing": "every_tick",
+      "logged": true,
+      "event": "effect_poison",
+      "params": {
+        "damage": {
+          "fmt": "num",
+          "clamp": [
+            0,
+            null
+          ],
+          "link": true,
+          "unit": "hp"
+        },
+        "ticks": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true
+        }
+      },
       "name": "中毒",
       "detail": "每刻损失 {damage} 点生命（剩 {turns} 刻）",
       "desc": "毒发每刻结算，持续以刻计。"
     },
     "bleed": {
+      "kind": "dot",
+      "timing": "on_owner_action",
+      "power": "atk",
+      "logged": true,
+      "event": "bleed_apply",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.02,
+            1
+          ],
+          "link": true
+        },
+        "ticks": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true
+        }
+      },
       "name": "流血",
       "detail": "每次行动损失 {damage} 点生命（剩 {turns} 刻）",
       "desc": "撕裂伤随攻击者的攻击而定。"
     },
     "stun": {
+      "kind": "control",
+      "logged": true,
+      "event": "effect_stun",
+      "params": {
+        "ticks": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true
+        }
+      },
       "name": "眩晕",
       "detail": "{turns} 刻内无法行动",
       "desc": "眩晕在持续期间消耗对方的行动。"
     },
     "shred": {
+      "kind": "shred",
+      "logged": true,
+      "event": "shred_apply",
+      "params": {
+        "value": {
+          "fmt": "num",
+          "clamp": [
+            0,
+            null
+          ],
+          "link": true,
+          "unit": "def"
+        },
+        "ticks": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true
+        },
+        "max_stacks": {
+          "fmt": "num"
+        }
+      },
       "name": "破甲",
       "detail": "防御 −{value}（{stacks} 层，剩 {turns} 刻）",
       "desc": "护甲碎裂，防御降低。"
     },
     "charge": {
+      "kind": "charge",
+      "logged": true,
+      "params": {},
       "name": "蓄力",
       "detail": "下次行动：必定命中的巨大一击",
       "desc": "蓄力占用一次行动，可被净化驱散。"
     },
     "momentum": {
+      "kind": "momentum",
+      "logged": false,
+      "event": "streak_up",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.005,
+            0.3
+          ],
+          "link": true
+        },
+        "cap": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true
+        }
+      },
       "name": "乘胜",
       "detail": "连击 ×{stacks}，伤害倍率 {mult}",
       "desc": "攻击落空后清零。"
     },
     "grudge": {
+      "kind": "grudge",
+      "logged": false,
+      "event": "grudge_stack",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.005,
+            0.3
+          ],
+          "link": true
+        },
+        "ticks": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true
+        }
+      },
       "name": "怨念",
       "detail": "×{stacks} 层，伤害倍率 {mult}",
       "desc": "被命中时概率积攒，层数无上限，随刻消退。"
     },
     "guard": {
+      "kind": "guard",
+      "logged": true,
+      "event": "guard_stack",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.01,
+            0.3
+          ],
+          "link": true
+        },
+        "ticks": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true
+        }
+      },
       "name": "锻痕",
       "detail": "{stacks} 层，伤害减免 {value}",
       "desc": "受击时概率叠加，随刻消退。"
     },
     "retribution": {
+      "kind": "record",
+      "logged": false,
+      "params": {},
       "name": "记仇",
       "detail": "已记录 {stacks} 条（合计 {value} 点）",
       "desc": "下次命中把记录总和按倍率追加打出。"
     },
     "last_stand": {
+      "kind": "boost",
+      "logged": false,
+      "params": {},
       "name": "背水一战",
       "detail": "攻击 +{value}，速度 +{spd}",
       "desc": "濒危时爆发的斗志。"
     },
     "regen": {
+      "kind": "regen",
+      "logged": true,
+      "event": "regen_mark",
+      "params": {
+        "value": {
+          "fmt": "num",
+          "clamp": [
+            0,
+            null
+          ],
+          "link": true,
+          "unit": "hp"
+        },
+        "tick": {
+          "fmt": "num"
+        },
+        "duration": {
+          "fmt": "num"
+        }
+      },
       "name": "回春",
       "detail": "每 {tick} 刻回复 {value} 点生命（剩 {turns} 刻）",
       "desc": "回春印记缓慢滋养伤口。"
     },
     "lifesteal": {
+      "kind": "lifesteal",
+      "logged": true,
+      "event": "lifesteal_buff",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.05,
+            1.5
+          ],
+          "link": true
+        },
+        "turns": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true
+        }
+      },
       "name": "嗜血",
       "detail": "吸血 {value}（剩 {turns} 次行动）",
       "desc": "所造成伤害的一部分转化为生命。"
     },
     "will": {
+      "kind": "will",
+      "logged": false,
+      "params": {},
       "name": "不屈",
       "detail": "致命伤害：{value} 概率回复至 {heal} 生命",
       "desc": "每次触发后概率指数衰减。"
     },
     "will_used": {
+      "kind": "will",
+      "logged": false,
+      "params": {},
       "name": "不屈（概率已尽）",
       "detail": "触发概率已衰减殆尽",
       "desc": ""
     },
     "tempo": {
+      "kind": "tempo",
+      "logged": false,
+      "params": {},
       "name": "渐入佳境",
       "detail": "速度 +{value}，攻击 +{atk}（{stacks} 层）",
       "desc": "行动后概率叠加，无上限。"
     },
     "blood_pact": {
+      "kind": "pact",
+      "logged": false,
+      "params": {},
       "name": "血契",
       "detail": "累计攻击 +{value}",
       "desc": "献祭所得吸血已永久转化为攻击。"

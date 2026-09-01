@@ -380,7 +380,7 @@
         NF.h("label", { class: "simple-toggle", title: t("simple_mode_title") },
           simpleBox, NF.h("span", null, t("simple_mode_label"))),
         NF.h("a", { class: "lang-btn", href: "/power.html" }, t("power_link")),
-        NF.h("a", { class: "lang-btn", href: "/workshop.html" }, t("workshop_link"))),
+        NF.h("a", { class: "lang-btn", href: "/editor.html" }, t("editor_link"))),
       NF.h("h1", { class: "app-title" }, t("app_title")),
       NF.h("p", { class: "app-subtitle" }, t("app_subtitle"))
     );

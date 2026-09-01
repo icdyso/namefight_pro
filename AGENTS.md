@@ -39,14 +39,18 @@
 ### 2.2 配置即唯一事实来源
 
 - 六个文件（`config/game/`）：`system`（版本 / 名字规则）、`attributes`（投掷区间 /
-  战力权重 / emoji）、`skills`（技能池 + `stats` 模板 + 个性化 / 共鸣 / 词缀配置）、
-  `titles`（结构池 + 字段池）、`battle`（常数 + `battle_log` 模板 + `buffs` 文案 +
-  `playback` 回放）、`ui`（界面文案）。
-- 代码中禁止硬编码面向用户的文案（例外：工坊管理页 `web/js/workshop.js`）。
+  战力权重 / emoji）、`skills`（技能池（**节点图格式**）+ `stats` 词表 + 个性化 /
+  共鸣 / 词缀配置）、`titles`（结构池 + 字段池）、`battle`（常数 + `statuses`
+  状态定义 + `battle_log` 模板 + `playback` 回放）、`ui`（界面文案）。
+- 代码中禁止硬编码面向用户的文案（例外：编辑器管理页 `web/js/editor.js`）。
 - 战报以「模板 id + 参数」结构化存储；技能 / 属性等参数以 `{"ref","id"}` 传递；
   每条战报附带 `rich` 富文本段与双方状态快照（前端渲染依据）。
-- 扩展：新技能 = `skills.json` 加条目（效果类型须在引擎 `SUPPORTED_EFFECTS` 中）+
-  `stats` 补模板；新称号字段 = `titles.json` 对应池加条目（name/desc/bonus，
+- 扩展（v2.0.0 起均为纯配置操作，不改引擎）：**新技能** = `skills.json` 加条目，
+  `effect` 为节点图 `{nodes, edges}`（触发钩子 / 条件 / 效果原语类型与参数规格
+  须在 `namefight/effects.py` 注册表中，`GET /api/schema` 可查）+ `stats` 补
+  `op_*` 等词表；**新状态** = `battle.json` 的 `statuses` 加条目（kind 须为
+  `namefight/statuses.py` 注册的行为种类，同 kind 新状态自动被引擎结算覆盖）；
+  新称号字段 = `titles.json` 对应池加条目（name/desc/bonus，
   **bonus 最多三种属性、可负**）。
 
 ### 2.3 技术约束
@@ -75,23 +79,35 @@
 namefight_pro/
 ├── server.py                 # 启动入口
 ├── namefight/                # 后端：rng / config / fighter / battle / text / power / server
+│                             #   + effects（钩子/条件/op 注册表与图编译）/ statuses（状态 kind 系统）
 ├── config/game/              # 六个配置 JSON（数值 + 文案同条目，单语言）
-├── web/                      # 前端：index + power + workshop 三页 + css + js(app/framework/power/workshop)
-├── tests/                    # unittest（test_determinism 核心不变量 / test_config 完整性）
+├── web/                      # 前端：index + power + editor 三页 + css + js(app/framework/power/editor)
+├── tests/                    # unittest（test_determinism 核心不变量 / test_config 完整性与图校验）
 ├── tools/balance_check.py    # 技能平衡蒙特卡洛（固定种子）
 └── docs/                     # GAME_SPEC.md 规则手册 + updates/ 更新文档 + title_candidates.md 称号候选库
 ```
 
 ## 5. 运行与 API
 
-- 启动：`python server.py [--host 127.0.0.1] [--port 8000]`；创意工坊：`/workshop.html`。
+- 启动：`python server.py [--host 127.0.0.1] [--port 8000]`；可视化编辑器：`/editor.html`。
 - API：`GET /api/health`、`GET /api/text`、`GET /api/fighter?name=`、
   `POST /api/battle`、`POST /api/battle/fast`、`POST /api/power`（真战力）、
-  `GET /api/config`、`POST /api/config/preview`、`POST /api/config/save`（工坊保存 + 热重载）。
+  `GET /api/schema`（引擎自描述，编辑器表单驱动源）、
+  `GET /api/config`、`POST /api/config/preview`、`POST /api/config/save`（编辑器保存 + 热重载）。
 - 错误统一 `{"error": "<code>"}` + 4xx/5xx。
 
 ## 6. 设计备忘（现行规则速查）
 
+- **技能图模型（v2.0.0）**：技能逻辑 = 节点图 `{nodes, edges}`，三类节点——
+  trigger（9 钩子：battle_start / action_interrupt / action_start / before_attack /
+  on_attack / on_defend / on_hit_landed / on_hit_taken / after_action）、
+  condition（8 种，失败即跳过下游子树）、op（23 种效果原语）；注册表与参数
+  规格在 `namefight/effects.py`，执行顺序 = 技能派生顺序 × 触发节点数组顺序 ×
+  边数组顺序（**改变即 breaking**）；引用状态的 op 声明 `status_kind`，
+  加载时校验兼容。
+- **状态系统（v2.0.0）**：运行时容器 `_Combatant.st` + `markers`；定义数据化于
+  `battle.json` 的 `statuses`（kind + 参数 + 事件模板 + 文案）；施加与各结算点
+  按 kind 分发（`statuses.by_kind`），新建同 kind 状态无需改引擎。
 - **tick 模型**：每刻双方 gauge += 自身有效速度，达阈值（10000）行动一次并扣回；
   同刻多人按（gauge 余量降序、内部序）行动。
 - **伤害**：`raw = 有效ATK × 三角浮动 × 暴击倍率 × 技能倍率`，
@@ -99,8 +115,9 @@ namefight_pro/
 - **行动顺序**：斩断打断 -> 流血 -> 行动开始技能（血契/回春/净化）-> 眩晕 ->
   背水一战 -> 攻击（蓄力释放优先）；行动后：大器晚成叠速叠攻、嗜血递减、血契转化。
   毒每刻结算；超时按剩余生命比例判定，完全相同则平局。
-- **熟练度** 0~100 缩放触发率（`mastery_on` 指定作用字段，条件型缩放效果值）；
-  **共鸣**双槽位各 25%，模式 own10 : enemy3 : difference2 : sum1，公式
+- **熟练度** 0~100 缩放触发率（`mastery_on` 指定作用字段，可为数组，条件型缩放
+  效果值）；**共鸣**双槽位各 25%（可共鸣资格由 op 参数规格的 `link` 标记声明），
+  模式 own10 : enemy3 : difference2 : sum1，公式
   「基数 + 变量式*合并系数」直显真实值；live 文本占位符 = `\u0001 + 槽位序号`
   （对应 `link_calc` 下标），前端按序号替换。
 - **称号（v1.2.1）**：结构固定为「前缀+主体」（structures 仅 `prefix_core`，

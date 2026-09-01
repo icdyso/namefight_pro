@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from . import effects, statuses
 from .battle import battle_to_api, run_battle
 from .config import (CONFIG_FILES, ConfigError, load_game_config,
                      load_game_config_from_data, save_game_config)
@@ -175,11 +176,61 @@ def make_handler(state: AppState):
                 fighter = derive_fighter(name, game)
                 self._send_json(fighter_to_api(fighter, game))
             elif path == "/api/config":
-                # 创意工坊：当前配置原文（编辑器初值）
+                # 编辑器：当前配置原文（编辑器初值）
                 self._send_json({"version": game.system.version,
                                  "files": state.read_raw_files()})
+            elif path == "/api/schema":
+                self._send_json(self._schema_payload(game))
             else:
                 self._send_error_json("not_found", 404)
+
+        @staticmethod
+        def _schema_payload(game):
+            """引擎自描述（v2.0.0）：钩子 / 条件 / 效果原语 / 状态种类的注册表
+            元数据，可视化编辑器据此渲染表单，前端不再硬编码任何效果类型。"""
+
+            def ps_json(ps):
+                return {"key": ps.key, "kind": ps.kind, "fmt": ps.fmt,
+                        "unit": ps.unit, "link": ps.link, "required": ps.required,
+                        "clamp": list(ps.clamp) if ps.clamp else None,
+                        "options": list(ps.options) if ps.options else None}
+
+            def entry_json(meta):
+                return {"params": [ps_json(ps) for ps in meta["params"]],
+                        "text_key": meta["text_key"]}
+
+            ops = {}
+            for t, meta in effects.OPS.items():
+                entry = {"hooks": list(meta["hooks"]), "logged": meta["logged"],
+                         "text_key": meta["text_key"],
+                         "params": [ps_json(ps) for ps in meta["params"]]}
+                if t == "apply_status":
+                    entry["status_params"] = True  # 数值参数随所选状态定义而定
+                if "status_kind" in meta:
+                    # 携带 status 参数的原语要求的状态行为种类（编辑器过滤下拉框）
+                    entry["status_kind"] = meta["status_kind"]
+                ops[t] = entry
+            conds = {t: entry_json(meta) for t, meta in effects.CONDITIONS.items()}
+            kinds = {k: {"params": list(v["params"]),
+                         "dispellable": v["dispellable"]}
+                     for k, v in statuses.STATUS_KINDS.items()}
+            status_defs = {}
+            for sid, entry in game.statuses.items():
+                status_defs[sid] = {
+                    "kind": entry.get("kind"),
+                    "logged": bool(entry.get("logged", False)),
+                    "timing": entry.get("timing"),
+                    "power": entry.get("power"),
+                    "params": [ps_json(ps) for ps in game.status_specs[sid].values()],
+                }
+            return {
+                "version": game.system.version,
+                "hooks": list(effects.HOOKS),
+                "conditions": conds,
+                "ops": ops,
+                "status_kinds": kinds,
+                "statuses": status_defs,
+            }
 
         def _api_battle(self, payload):
             game = state.game

@@ -23,7 +23,6 @@
   "step_mode_label": "单回合递进",
   "step_mode_title": "每次点击只推进一次角色行动的战报",
   "speed_label": "速度",
-  "workshop_link": "创意工坊",
   "power_link": "真战力",
   "power_page_title": "真战力试炼",
   "power_page_subtitle": "与固定编号大军各战一场，胜场数即真战力",
@@ -50,5 +49,6 @@
   "error_bad_request": "请求格式错误",
   "error_not_found": "资源不存在",
   "error_internal_error": "服务器内部错误",
-  "error_request": "请求失败，请稍后重试"
+  "error_request": "请求失败，请稍后重试",
+  "editor_link": "可视化编辑器"
 }

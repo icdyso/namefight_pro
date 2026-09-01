@@ -4,8 +4,12 @@ v0.10.0 起：数值规则与文案**合并在 config/game/*.json 单层配置**
 每个条目（属性/技能/称号字段/词缀）的文字与其数值/加成保存在同一条目内，
 不再拆分 locales 目录（英文等多语言支持已移除，单语言 zh）。
 
-启动时一次性加载并校验；v1.0.0 起创意工坊（/workshop.html）可通过
-/api/config/save 在运行时校验并保存配置、随后热重载，无需重启进程。
+v2.0.0 起：技能 effect 为「节点 + 连边」的技能图（effects.compile_graph
+校验并编译），状态定义（行为种类 + 参数规格 + 文案）位于 battle.json 的
+statuses 节（statuses.STATUS_KINDS 校验行为种类）。
+
+启动时一次性加载并校验；v1.0.0 起创意工坊可通过 /api/config/save 在运行时
+校验并保存配置、随后热重载，无需重启进程。
 """
 from __future__ import annotations
 
@@ -14,6 +18,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from . import effects, statuses
 
 # 引擎依赖的属性 id（battle.py 直接按这些 key 取值，配置必须提供）
 REQUIRED_ATTRIBUTE_IDS = ("hp", "atk", "def", "spd", "crit", "dodge")
@@ -67,10 +73,10 @@ class SkillDef:
     name: str          # 显示名（与效果数值同条目保存）
     description: str   # 风味短句（不重复数值）
     weight: float
-    trigger: str         # on_attack / on_defense / on_turn_start / passive
-    effect: dict         # {type: 效果类型, ...参数}
-    mastery: tuple       # 熟练度 -> 倍率区间 (lo, hi)，作用于 mastery_on 字段
-    mastery_on: str      # 熟练度作用的参数（默认 chance；条件触发型技能可为 value 等）
+    effect: dict       # 技能图 {nodes: [...], edges: [...]}（原始参数）
+    plan: dict         # 编译后的执行计划 {hook: ((node, (子树, ...)), ...)}
+    mastery: tuple       # 熟练度 -> 倍率区间 (lo, hi)，作用于 mastery_on 参数
+    mastery_on: tuple    # 熟练度作用的参数名（默认 ("chance",)；可为多项如 ("value","spd")）
 
 
 @dataclass(frozen=True)
@@ -92,16 +98,17 @@ class VariableLinkDef:
 
 @dataclass(frozen=True)
 class SkillLinkCfg:
-    """技能变量共鸣配置（v0.9.0 起每技能两个变数槽位）：
+    """技能变量共鸣配置（v2.0.0 起槽位由参数元数据驱动）：
 
     - chance：单个槽位实际成为变数的概率；
     - mode_weights：own（己方单值）/ enemy（敌方单值）/ difference（差值）/ sum（并值）权重；
-    - targets：效果类型 -> 可共鸣参数字段列表（依序为槽位一 / 槽位二）；
+    - max_slots：每技能至多几个共鸣槽位（候选 = 各节点 link=True 的参数，
+      按节点数组顺序 × 参数声明顺序遍历）；
     - variables：可共鸣的属性变量池。"""
     chance: float
     variables: tuple         # (VariableLinkDef, ...)
     mode_weights: tuple      # (("own", w), ...)
-    targets: dict            # {效果类型: (字段名, ...)}
+    max_slots: int
 
 
 VALID_LINK_MODES = ("own", "enemy", "difference", "sum")
@@ -156,6 +163,8 @@ class BattleCfg:
     gauge_threshold: float    # 行动槽阈值：每 tick 累加速度值，满阈值即可行动
     crit_cap: float           # 百分数上限
     dodge_cap: float          # 百分数上限
+    guard_reduction_cap: float  # 锻痕叠层减伤上限（v2.0.0 起入配置）
+    reflect_split_cap: float    # 反甲免伤上限（v2.0.0 起入配置）
     seed_separator: str
     power_enemies: int        # 真战力测量：固定编号敌人数（名字 "1".."N"）
     message_delay_ms: int     # 前端战报逐条播放的停顿时长（可配置）
@@ -179,7 +188,8 @@ class GameCfg:
     battle: BattleCfg
     stats: dict          # 技能参数标签模板 + 共鸣句式（skills.json -> stats）
     battle_log: dict     # 战报模板（battle.json -> battle_log）
-    buffs: dict          # buff 名称/说明模板（battle.json -> buffs）
+    statuses: dict       # 状态定义（行为种类 + 文案；battle.json -> statuses）
+    status_specs: dict   # {状态id: {参数名: ParamSpec}}（校验/共鸣/编辑器共用）
     ui: dict             # 界面文案（ui.json）
 
     def attr(self, attr_id: str) -> AttributeDef:
@@ -297,8 +307,46 @@ def build_game_config(data: dict) -> GameCfg:
     if missing:
         raise ConfigError("attributes.json 缺少引擎必需属性: %s" % missing)
 
+    # 状态定义（battle.json -> statuses）：行为种类 + 参数规格 + 文案；
+    # 必须先于技能解析（apply_status 的参数校验依赖状态定义）
+    statuses_data = battle_data.get("statuses", {})
+    if not isinstance(statuses_data, dict) or not statuses_data:
+        raise ConfigError("battle.json 的 statuses 必须是非空对象")
+    status_specs = {}
+    for sid, entry in statuses_data.items():
+        if not isinstance(entry, dict):
+            raise ConfigError("状态 %s 的定义必须是对象" % sid)
+        kind = str(entry.get("kind", ""))
+        kdef = statuses.STATUS_KINDS.get(kind)
+        if kdef is None:
+            raise ConfigError("状态 %s 的行为种类未注册: %s" % (sid, kind))
+        if not str(entry.get("name", "")) or "detail" not in entry:
+            raise ConfigError("状态 %s 缺少 name/detail 文案" % sid)
+        if kind == "dot":
+            timing = str(entry.get("timing", "every_tick"))
+            if timing not in kdef["timings"]:
+                raise ConfigError("dot 状态 %s 的 timing 非法: %s" % (sid, timing))
+            power = str(entry.get("power", ""))
+            if power not in kdef["powers"]:
+                raise ConfigError("dot 状态 %s 的 power 非法: %s" % (sid, power))
+        specs = statuses.status_param_specs(entry)
+        for key in specs:
+            if key not in kdef["params"]:
+                raise ConfigError("状态 %s 的参数 %s 不属于行为种类 %s"
+                                  % (sid, key, kind))
+        status_specs[str(sid)] = specs
+
     skills = []
     seen_skills = set()
+
+    def _status_specs(sid):
+        """技能图校验用的状态参数规格回调（apply_status）。"""
+        if not sid:
+            return None
+        if sid not in status_specs:
+            raise ValueError("apply_status 引用了未定义的状态: %s" % sid)
+        return status_specs[sid]
+
     for s in skills_data.get("skills", []):
         if s["id"] in seen_skills:
             raise ConfigError("技能 id 重复: %s" % s["id"])
@@ -309,13 +357,42 @@ def build_game_config(data: dict) -> GameCfg:
         if (len(mastery) != 2 or float(mastery[0]) <= 0
                 or float(mastery[0]) > float(mastery[1])):
             raise ConfigError("技能 %s 的熟练度区间非法" % s["id"])
+        mastery_on = s.get("mastery_on", "chance")
+        if isinstance(mastery_on, str):
+            mastery_on = (mastery_on,)
+        mastery_on = tuple(str(x) for x in mastery_on)
+        if not mastery_on:
+            raise ConfigError("技能 %s 的 mastery_on 不能为空" % s["id"])
+        try:
+            plan = effects.compile_graph(s.get("effect", {}), _status_specs)
+        except ValueError as e:
+            raise ConfigError("技能 %s 的技能图非法: %s" % (s["id"], e)) from e
+        # 携带 status 参数的原语：状态必须存在且行为种类匹配
+        #（apply_status 的 "apply" = 任意可施加种类，见 statuses.APPLY_KINDS）
+        for node in s.get("effect", {}).get("nodes", []):
+            if node.get("kind") != "op":
+                continue
+            req_kind = effects.OPS.get(node.get("type"), {}).get("status_kind")
+            if req_kind is None:
+                continue
+            sid = (node.get("params") or {}).get("status")
+            if not sid or sid not in statuses_data:
+                raise ConfigError("技能 %s 的原语 %s 引用了未定义状态: %s"
+                                  % (s["id"], node["type"], sid))
+            want = statuses.APPLY_KINDS if req_kind == "apply" else {req_kind}
+            actual = statuses_data[sid].get("kind")
+            if actual not in want:
+                raise ConfigError(
+                    "技能 %s 的原语 %s 需要行为种类 %s 的状态，%s（%s）不匹配"
+                    % (s["id"], node["type"],
+                       "/".join(sorted(want)), sid, actual))
         skills.append(SkillDef(
             id=str(s["id"]), name=str(s.get("name", s["id"])),
             description=str(s.get("description", "")),
             weight=float(s.get("weight", 1)),
-            trigger=str(s.get("trigger", "passive")), effect=dict(s.get("effect", {})),
+            effect=dict(s.get("effect", {})), plan=plan,
             mastery=(float(mastery[0]), float(mastery[1])),
-            mastery_on=str(s.get("mastery_on", "chance")),
+            mastery_on=mastery_on,
         ))
     if not skills:
         raise ConfigError("技能池为空")
@@ -365,26 +442,18 @@ def build_game_config(data: dict) -> GameCfg:
     for mode, _ in mode_weights:
         if mode not in VALID_LINK_MODES:
             raise ConfigError("共鸣模式非法: %s" % mode)
-    targets = {}
-    for effect_type, fields in (link_data.get("targets", {}) or {}).items():
-        if isinstance(fields, str):
-            fields = [fields]
-        fields = tuple(str(x) for x in fields)
-        if not fields or len(fields) > 2:
-            raise ConfigError("共鸣目标字段应为 1~2 个: %s" % effect_type)
-        targets[str(effect_type)] = fields
     skill_variable_link = SkillLinkCfg(
         chance=float(link_data.get("chance", 0)),
         variables=tuple(link_variables),
         mode_weights=mode_weights or (("own", 1.0),),
-        targets=targets,
+        max_slots=int(link_data.get("max_slots", 2)),
     )
     if not 0.0 <= skill_variable_link.chance <= 1.0:
         raise ConfigError("variable_link.chance 必须在 [0, 1]")
+    if not 1 <= skill_variable_link.max_slots <= 4:
+        raise ConfigError("variable_link.max_slots 必须在 [1, 4]")
     if skill_variable_link.chance > 0 and not link_variables:
         raise ConfigError("variable_link.chance > 0 但变量池为空")
-    if skill_variable_link.chance > 0 and not targets:
-        raise ConfigError("variable_link.chance > 0 但 targets 为空")
 
     # 技能名称词缀（前缀/后缀，附带微小参数修正；名称与修正值同条目）
     mod_data = skills_data.get("name_modifiers", {})
@@ -486,6 +555,8 @@ def build_game_config(data: dict) -> GameCfg:
         gauge_threshold=float(battle_data.get("gauge_threshold", 100)),
         crit_cap=float(battle_data.get("crit_cap", 100)),
         dodge_cap=float(battle_data.get("dodge_cap", 60)),
+        guard_reduction_cap=float(battle_data.get("guard_reduction_cap", 0.75)),
+        reflect_split_cap=float(battle_data.get("reflect_split_cap", 0.9)),
         seed_separator=str(battle_data.get("seed_separator", "")),
         power_enemies=int(power_check.get("enemies", 10000)),
         message_delay_ms=int(playback.get("message_delay_ms", 320)),
@@ -510,14 +581,17 @@ def build_game_config(data: dict) -> GameCfg:
         raise ConfigError("playback.action_pause_ms 必须 >= 0")
     if battle.variance_lo > battle.variance_hi:
         raise ConfigError("variance 区间非法")
+    if not 0.0 < battle.guard_reduction_cap < 1.0:
+        raise ConfigError("guard_reduction_cap 必须在 (0, 1)")
+    if not 0.0 < battle.reflect_split_cap <= 1.0:
+        raise ConfigError("reflect_split_cap 必须在 (0, 1]")
 
     stats = skills_data.get("stats", {})
     if not isinstance(stats, dict):
         raise ConfigError("skills.json 的 stats 必须是对象")
     battle_log = battle_data.get("battle_log", {})
-    buffs = battle_data.get("buffs", {})
-    if not isinstance(battle_log, dict) or not isinstance(buffs, dict):
-        raise ConfigError("battle.json 的 battle_log/buffs 必须是对象")
+    if not isinstance(battle_log, dict):
+        raise ConfigError("battle.json 的 battle_log 必须是对象")
     if not isinstance(ui_data, dict):
         raise ConfigError("ui.json 必须是对象")
 
@@ -530,5 +604,6 @@ def build_game_config(data: dict) -> GameCfg:
         skill_variable_link=skill_variable_link,
         skill_name_modifiers=skill_name_modifiers,
         battle=battle,
-        stats=stats, battle_log=battle_log, buffs=buffs, ui=ui_data,
+        stats=stats, battle_log=battle_log,
+        statuses=statuses_data, status_specs=status_specs, ui=ui_data,
     )

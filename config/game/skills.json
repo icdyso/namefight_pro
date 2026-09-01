@@ -11,111 +11,12 @@
   },
   "variable_link": {
     "chance": 0.25,
+    "max_slots": 2,
     "mode_weights": {
       "own": 10,
       "enemy": 3,
       "difference": 2,
       "sum": 1
-    },
-    "targets": {
-      "charge": [
-        "value",
-        "crit"
-      ],
-      "damage_multiplier": [
-        "value",
-        "threshold"
-      ],
-      "lifesteal": [
-        "value",
-        "turns"
-      ],
-      "poison": [
-        "damage",
-        "ticks"
-      ],
-      "concussive": [
-        "value",
-        "ticks"
-      ],
-      "thunder": [
-        "value",
-        "decay"
-      ],
-      "sever": [
-        "value",
-        "delay"
-      ],
-      "gauge_surge": [
-        "value",
-        "crit_value"
-      ],
-      "damage_reduction": [
-        "value",
-        "ticks"
-      ],
-      "reflect": [
-        "value",
-        "ratio"
-      ],
-      "bulwark": [
-        "value",
-        "threshold"
-      ],
-      "retribution": [
-        "ratio",
-        "cap"
-      ],
-      "iron_will": [
-        "value",
-        "decay"
-      ],
-      "heal": [
-        "value",
-        "regen"
-      ],
-      "cleanse": [
-        "value",
-        "per"
-      ],
-      "low_hp_atk_bonus": [
-        "value",
-        "spd"
-      ],
-      "streak_bonus": [
-        "value",
-        "cap"
-      ],
-      "overload": [
-        "value",
-        "cost"
-      ],
-      "armor_shred": [
-        "value",
-        "ticks"
-      ],
-      "bleed": [
-        "value",
-        "ticks"
-      ],
-      "gamble": [
-        "value",
-        "penalty"
-      ],
-      "tempo": [
-        "value"
-      ],
-      "armor_pen": [
-        "crit"
-      ],
-      "blood_pact": [
-        "value",
-        "convert"
-      ],
-      "grudge": [
-        "value",
-        "ticks"
-      ]
     },
     "variables": {
       "atk": {
@@ -266,31 +167,50 @@
     ]
   },
   "stats": {
-    "nat_charge": "攻击时有 {chance} 概率改为蓄力：下次攻击必定命中、暴击率 +{crit}，伤害提升至 {value}。",
-    "nat_execution": "当敌方生命低于 {threshold} 时，攻击有 {chance} 概率使伤害提升至 {value}。",
-    "nat_lifesteal": "攻击时有 {chance} 概率进入嗜血：{turns} 次行动内，所造成伤害的 {value} 转化为自身生命。",
-    "nat_poison": "攻击时有 {chance} 概率使敌方中毒：其每刻损失 {damage} 点生命，持续 {ticks} 刻。",
-    "nat_concussive": "攻击时有 {chance} 概率改为重击：无视敌方 {value} 的防御，命中则令其 {ticks} 刻内无法行动。",
-    "nat_thunder": "攻击时有 {chance} 概率改为雷罚：劈下至多 {max} 道真伤落雷，每道为攻击的 {value}，之后每道概率为前道的 {decay}。",
-    "nat_sever": "敌方即将行动时有 {chance} 概率打断其行动并立即反击，造成 {value} 的伤害，其行动槽倒退 {delay}。",
-    "nat_gauge_surge": "命中后有 {chance} 概率行动槽额外前进 {value}，若为暴击则改为前进 {crit_value}。",
-    "nat_damage_reduction": "每次受到攻击时有 {chance} 概率叠加一层锻痕：伤害减免 +{value}，持续 {ticks} 刻。",
-    "nat_reflect": "每次受到伤害时有 {chance} 概率触发反噬：免除该次伤害的 {value}，并将其以 {ratio} 反弹给攻击者。",
-    "nat_bulwark": "自身生命不低于 {threshold} 时，所受伤害降低 {value}，且有 {immune} 的概率完全免疫伤害。",
-    "nat_retribution": "受到攻击时有 {chance} 概率记录该次伤害（至多 {cap} 条）：下次命中将记录总和以 {ratio} 追加打出。",
-    "nat_iron_will": "受到致命伤害时有 {chance} 概率重生并回复 {value} 最大生命；每次触发后概率衰减为前次的 {decay}。",
-    "nat_heal": "行动开始时有 {chance} 概率回复 {value} 点生命，并施加回春印记：每 {tick} 刻回复 {regen} 点生命，持续 {duration} 刻。",
-    "nat_cleanse": "行动开始时有 {chance} 概率驱散双方所有标记与增益减益（每驱散 1 种为自己回复 {per} 点生命），并回复 {value} 点生命。",
-    "nat_low_hp_atk_bonus": "生命首次低于 {threshold} 时，攻击 +{value} 且速度 +{spd}，持续到战斗结束。",
-    "nat_streak_bonus": "命中时有 {chance} 概率获得 1 层乘胜：每层伤害 +{value}，至多 {cap} 层；攻击落空时清零。",
-    "nat_overload": "攻击时有 {chance} 概率消耗自身 {cost} 最大生命，使本次伤害提升至 {value}。",
-    "nat_armor_shred": "攻击时有 {chance} 概率使对方防御 −{value}，持续 {ticks} 刻，至多叠加 {max_stacks} 层。",
-    "nat_bleed": "攻击时有 {chance} 概率撕裂敌方：其每次行动损失相当于攻击者攻击 {value} 的生命，持续 {ticks} 刻。",
-    "nat_gamble": "攻击时有 {chance} 概率伤害提升至 {value}，否则伤害降低至 {penalty}。",
-    "nat_tempo": "每次行动完毕有 {chance} 概率速度 +{value}、攻击 +{atk}。",
-    "nat_armor_pen": "攻击时有 {chance} 概率洞悉弱点：本次攻击无视全部防御，且暴击率 +{crit}。",
-    "nat_blood_pact": "每次行动开始有 {chance} 概率消耗 {cost} 最大生命，本次攻击附带 {value} 吸血；然后按吸血量的 {convert} 永久增加攻击。",
-    "nat_grudge": "被命中时有 {chance} 概率积攒 1 层怨念（持续 {ticks} 刻）：每层使伤害 +{value}。",
+    "hook_battle_start": "",
+    "hook_action_interrupt": "敌方即将行动时",
+    "hook_action_start": "行动开始时",
+    "hook_before_attack": "",
+    "hook_on_attack": "攻击时",
+    "hook_on_defend": "受到伤害时",
+    "hook_on_hit_landed": "命中时",
+    "hook_on_hit_taken": "被命中时",
+    "hook_after_action": "每次行动完毕",
+    "cond_chance": "有 {chance} 概率",
+    "cond_self_hp_below": "自身生命低于 {threshold} 时",
+    "cond_self_hp_above": "自身生命不低于 {threshold} 时",
+    "cond_target_hp_below": "敌方生命低于 {threshold} 时",
+    "cond_target_hp_above": "敌方生命高于 {threshold} 时",
+    "cond_has_marker": "带有标记 {marker} 时",
+    "cond_no_marker": "没有标记 {marker} 时",
+    "cond_once_per_battle": "（每场战斗一次）",
+    "op_prepare_charge": "改为蓄力：下次攻击必定命中、暴击率 +{crit}，伤害提升至 {value}",
+    "op_thunder_strike": "改为雷罚：劈下至多 {max_hits} 道真伤落雷，每道为攻击的 {value}，之后每道概率为前道的 {decay}",
+    "op_attack_mult": "使伤害提升至 {value}",
+    "op_random_mult": "进行一场豪赌：{win} 概率使伤害提升至 {value}，否则伤害降低至 {penalty}",
+    "op_momentum_mult": "伤害按乘胜层数提升（每层 +{value}，至多 {cap} 层）",
+    "op_armor_pen_flat": "改为重击：本次攻击无视敌方 {value} 的防御",
+    "op_armor_pen_full": "洞悉弱点：本次攻击无视全部防御，且暴击率 +{crit}",
+    "op_self_cost": "消耗自身 {cost} 最大生命",
+    "op_heal": "回复 {value} 点生命",
+    "op_cleanse": "驱散双方所有标记与增益减益（每驱散 1 种为自己回复 {per} 点生命），并回复 {value} 点生命",
+    "op_gauge_add": "使行动槽额外前进 {value}（若为暴击则改为 {crit_value}）",
+    "op_gauge_delay": "打断其行动并使行动槽倒退 {delay}",
+    "op_quick_strike": "立即反击，造成 {value} 的伤害",
+    "op_stat_gain": "速度 +{value}、攻击 +{atk}",
+    "op_stat_boost_once": "攻击 +{value} 且速度 +{spd}，持续到战斗结束",
+    "op_will_register": "受到致命伤害时有 {chance} 概率重生并回复 {value} 最大生命；每次触发后概率衰减为前次的 {decay}",
+    "op_record_damage": "记录该次伤害（至多 {cap} 条）：下次命中将记录总和以 {ratio} 追加打出",
+    "op_reflect_damage": "触发反噬：免除该次伤害的 {value}，并将其以 {ratio} 反弹给攻击者",
+    "st_poison": "使敌方中毒：其每刻损失 {damage} 点生命，持续 {ticks} 刻",
+    "st_bleed": "撕裂敌方：其每次行动损失相当于攻击者攻击 {value} 的生命，持续 {ticks} 刻",
+    "st_stun": "命中则令其 {ticks} 刻内无法行动",
+    "st_shred": "使对方防御 −{value}，持续 {ticks} 刻，至多叠加 {max_stacks} 层",
+    "st_guard": "叠加一层锻痕：伤害减免 +{value}，持续 {ticks} 刻",
+    "st_momentum": "获得 1 层乘胜（每层伤害 +{value}，至多 {cap} 层；攻击落空时清零）",
+    "st_grudge": "积攒 1 层怨念（持续 {ticks} 刻）：每层使伤害 +{value}",
+    "st_lifesteal": "进入嗜血：{turns} 次行动内，所造成伤害的 {value} 转化为自身生命",
+    "st_regen": "获得回春印记：每 {tick} 刻回复 {value} 点生命，持续 {duration} 刻",
     "link_formula": "（{base} + {expr}*{merged}）",
     "link_expr_difference": "【{own}-{enemy}】{emoji}",
     "link_expr_sum": "【{own}+{enemy}】{emoji}",
@@ -315,9 +235,9 @@
     "field_cost": "消耗比例",
     "field_convert": "转化比例",
     "field_per": "驱散回复量",
-    "field_regen": "回春回复量",
     "field_spd": "速度加成",
     "field_penalty": "惩罚倍率",
+    "field_atk": "攻击加成",
     "mod_chance": "触发率 {v}",
     "mod_value": "效果值 {v}",
     "mod_damage": "毒伤 {v}",
@@ -334,7 +254,51 @@
     "link_spd": "疾",
     "link_hp": "命",
     "link_crit": "锐",
-    "link_dodge": "影"
+    "link_dodge": "影",
+    "lbl_battle_start": "战斗开始",
+    "lbl_action_interrupt": "敌方将行动",
+    "lbl_action_start": "行动开始",
+    "lbl_before_attack": "攻击前",
+    "lbl_on_attack": "攻击时",
+    "lbl_on_defend": "受击时",
+    "lbl_on_hit_landed": "命中后",
+    "lbl_on_hit_taken": "被命中后",
+    "lbl_after_action": "行动后",
+    "lbl_chance": "概率",
+    "lbl_self_hp_below": "自身生命 <",
+    "lbl_self_hp_above": "自身生命 ≥",
+    "lbl_target_hp_below": "敌方生命 ≤",
+    "lbl_target_hp_above": "敌方生命 >",
+    "lbl_has_marker": "有标记",
+    "lbl_no_marker": "无标记",
+    "lbl_once_per_battle": "每场一次",
+    "lbl_prepare_charge": "蓄力",
+    "lbl_thunder_strike": "雷罚",
+    "lbl_attack_mult": "伤害倍率",
+    "lbl_random_mult": "豪赌",
+    "lbl_momentum_mult": "乘胜增伤",
+    "lbl_armor_pen_flat": "部分穿透",
+    "lbl_armor_pen_full": "全穿+暴击",
+    "lbl_self_cost": "燃血自耗",
+    "lbl_apply_status": "施加状态",
+    "lbl_heal": "即时回复",
+    "lbl_cleanse": "驱散净化",
+    "lbl_gauge_add": "行动槽前进",
+    "lbl_gauge_delay": "行动槽倒退",
+    "lbl_quick_strike": "抢先打击",
+    "lbl_stat_gain": "永久成长",
+    "lbl_stat_boost_once": "一次性爆发",
+    "lbl_will_register": "注册不屈",
+    "lbl_record_damage": "记录伤害",
+    "lbl_reflect_damage": "反弹伤害",
+    "op_damage_reduce": "所受伤害降低 {value}",
+    "op_immune_chance": "且有 {immune} 的概率完全免疫伤害",
+    "op_pact_cost": "消耗 {cost} 最大生命，本次攻击附带 {value} 吸血，并按吸血量的 {convert} 永久增加攻击",
+    "op_pact_convert": "把本次吸血按血契比例永久转化为攻击",
+    "lbl_damage_reduce": "减伤",
+    "lbl_immune_chance": "概率免疫",
+    "lbl_pact_cost": "血契献祭",
+    "lbl_pact_convert": "血契转化"
   },
   "skills": [
     {
@@ -342,16 +306,59 @@
       "name": "重击",
       "description": "这一拳下去可能会很痛。",
       "weight": 9,
-      "trigger": "on_attack",
       "mastery": [
         0.55,
         1.65
       ],
       "effect": {
-        "type": "charge",
-        "chance": 0.14,
-        "value": 2.2,
-        "crit": 0.25
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.14
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "prepare_charge",
+            "params": {
+              "status": "charge",
+              "value": 2.2,
+              "crit": 0.25
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -359,16 +366,73 @@
       "name": "斩杀",
       "description": "弱者不配存活。",
       "weight": 6,
-      "trigger": "on_attack",
       "mastery": [
         0.7,
         1.5
       ],
       "effect": {
-        "type": "damage_multiplier",
-        "chance": 0.33,
-        "value": 2.45,
-        "threshold": 0.33
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.33
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "condition",
+            "type": "target_hp_below",
+            "params": {
+              "threshold": 0.33
+            },
+            "pos": [
+              520,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "attack_mult",
+            "params": {
+              "value": 2.45
+            },
+            "pos": [
+              800,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n3",
+            "to": "n4"
+          }
+        ]
       }
     },
     {
@@ -376,16 +440,60 @@
       "name": "嗜血",
       "description": "伤口即是源泉。",
       "weight": 8,
-      "trigger": "on_attack",
       "mastery": [
         0.75,
         1.35
       ],
       "effect": {
-        "type": "lifesteal",
-        "chance": 0.25,
-        "value": 0.28,
-        "turns": 2
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.25
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "lifesteal",
+              "target": "self",
+              "value": 0.28,
+              "turns": 2
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -393,16 +501,60 @@
       "name": "淬毒之刃",
       "description": "刀锋上的毒液缓慢侵蚀敌人。",
       "weight": 9,
-      "trigger": "on_attack",
       "mastery": [
         0.8,
         1.3
       ],
       "effect": {
-        "type": "poison",
-        "chance": 0.3,
-        "damage": 38,
-        "ticks": 12
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.3
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "poison",
+              "target": "enemy",
+              "damage": 38,
+              "ticks": 12
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -410,16 +562,75 @@
       "name": "眩晕重锤",
       "description": "该安静一会了。",
       "weight": 6,
-      "trigger": "on_attack",
       "mastery": [
         0.6,
         1.55
       ],
       "effect": {
-        "type": "concussive",
-        "chance": 0.125,
-        "value": 0.35,
-        "ticks": 4
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.125
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "armor_pen_flat",
+            "params": {
+              "value": 0.35
+            },
+            "pos": [
+              560,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "stun",
+              "target": "enemy",
+              "ticks": 4
+            },
+            "pos": [
+              840,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n3",
+            "to": "n4"
+          }
+        ]
       }
     },
     {
@@ -427,17 +638,60 @@
       "name": "雷罚",
       "description": "天雷滚滚，你往哪里逃。",
       "weight": 8,
-      "trigger": "on_attack",
       "mastery": [
         0.85,
         1.15
       ],
       "effect": {
-        "type": "thunder",
-        "chance": 0.78,
-        "value": 0.27,
-        "decay": 0.93,
-        "max_hits": 9
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.78
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "thunder_strike",
+            "params": {
+              "value": 0.27,
+              "decay": 0.93,
+              "chain": 0.78,
+              "max_hits": 9
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -445,16 +699,73 @@
       "name": "斩断",
       "description": "来一场愉快的博弈吧。",
       "weight": 8,
-      "trigger": "on_defense",
       "mastery": [
         0.65,
         1.5
       ],
       "effect": {
-        "type": "sever",
-        "chance": 0.085,
-        "value": 0.45,
-        "delay": 900
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "action_interrupt",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.085
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "gauge_delay",
+            "params": {
+              "delay": 900
+            },
+            "pos": [
+              560,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "quick_strike",
+            "params": {
+              "value": 0.45
+            },
+            "pos": [
+              840,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n3",
+            "to": "n4"
+          }
+        ]
       }
     },
     {
@@ -462,16 +773,58 @@
       "name": "疾影突袭",
       "description": "我的回合，我的回合，还是我的回合。",
       "weight": 7,
-      "trigger": "on_attack",
       "mastery": [
         0.7,
         1.45
       ],
       "effect": {
-        "type": "gauge_surge",
-        "chance": 0.62,
-        "value": 2800,
-        "crit_value": 4800
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.62
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "gauge_add",
+            "params": {
+              "value": 2800,
+              "crit_value": 4800
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -479,16 +832,60 @@
       "name": "千锤百炼",
       "description": "杀不死我的，只会让我更强大。",
       "weight": 9,
-      "trigger": "on_defense",
       "mastery": [
         0.8,
         1.25
       ],
       "effect": {
-        "type": "damage_reduction",
-        "chance": 0.65,
-        "value": 0.07,
-        "ticks": 20
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_defend",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.65
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "guard",
+              "target": "self",
+              "value": 0.07,
+              "ticks": 20
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -496,16 +893,58 @@
       "name": "荆棘反甲",
       "description": "以彼之道，还至彼身。",
       "weight": 8,
-      "trigger": "on_defense",
       "mastery": [
         0.7,
         1.4
       ],
       "effect": {
-        "type": "reflect",
-        "chance": 0.23,
-        "value": 0.18,
-        "ratio": 1.25
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_defend",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.23
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "reflect_damage",
+            "params": {
+              "value": 0.18,
+              "ratio": 1.25
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -513,17 +952,74 @@
       "name": "坚守壁垒",
       "description": "气势如虹，坚不可摧。",
       "weight": 8,
-      "trigger": "on_defense",
       "mastery": [
         0.6,
         1.6
       ],
       "mastery_on": "immune",
       "effect": {
-        "type": "bulwark",
-        "threshold": 0.7,
-        "value": 0.08,
-        "immune": 0.03
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_defend",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "self_hp_above",
+            "params": {
+              "threshold": 0.7
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "damage_reduce",
+            "params": {
+              "value": 0.08
+            },
+            "pos": [
+              560,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "immune_chance",
+            "params": {
+              "immune": 0.03
+            },
+            "pos": [
+              840,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n3",
+            "to": "n4"
+          }
+        ]
       }
     },
     {
@@ -531,16 +1027,59 @@
       "name": "以牙还牙",
       "description": "这个仇，我记下了。",
       "weight": 7,
-      "trigger": "on_defense",
       "mastery": [
         0.7,
         1.45
       ],
       "effect": {
-        "type": "retribution",
-        "chance": 0.29,
-        "ratio": 0.38,
-        "cap": 6
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_hit_taken",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.29
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "record_damage",
+            "params": {
+              "status": "retribution",
+              "ratio": 0.38,
+              "cap": 6
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -548,16 +1087,44 @@
       "name": "不屈意志",
       "description": "只要还站着，就还没输。",
       "weight": 6,
-      "trigger": "passive",
       "mastery": [
         0.5,
         1.5
       ],
       "effect": {
-        "type": "iron_will",
-        "chance": 0.52,
-        "value": 0.28,
-        "decay": 0.5
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "battle_start",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "will_register",
+            "params": {
+              "status": "will",
+              "chance": 0.52,
+              "value": 0.28,
+              "decay": 0.5
+            },
+            "pos": [
+              280,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          }
+        ]
       }
     },
     {
@@ -565,18 +1132,77 @@
       "name": "回春术",
       "description": "他想去哪就去哪。",
       "weight": 8,
-      "trigger": "on_turn_start",
       "mastery": [
         0.75,
         1.4
       ],
       "effect": {
-        "type": "heal",
-        "chance": 0.15,
-        "value": 550,
-        "regen": 150,
-        "tick": 10,
-        "duration": 30
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "action_start",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.15
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "heal",
+            "params": {
+              "value": 550
+            },
+            "pos": [
+              560,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "regen",
+              "target": "self",
+              "value": 150,
+              "tick": 10,
+              "duration": 30
+            },
+            "pos": [
+              840,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n3",
+            "to": "n4"
+          }
+        ]
       }
     },
     {
@@ -584,16 +1210,58 @@
       "name": "净化",
       "description": "一念清光，万般污秽俱散。",
       "weight": 5,
-      "trigger": "on_turn_start",
       "mastery": [
         0.7,
         1.5
       ],
       "effect": {
-        "type": "cleanse",
-        "chance": 0.13,
-        "value": 215,
-        "per": 190
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "action_start",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.13
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "cleanse",
+            "params": {
+              "value": 215,
+              "per": 190
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -601,17 +1269,63 @@
       "name": "背水一战",
       "description": "不残血，不会玩。",
       "weight": 7,
-      "trigger": "passive",
       "mastery": [
         0.8,
         1.3
       ],
-      "mastery_on": "value",
+      "mastery_on": [
+        "value",
+        "spd"
+      ],
       "effect": {
-        "type": "low_hp_atk_bonus",
-        "threshold": 0.3,
-        "value": 0.2,
-        "spd": 0.2
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "before_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "self_hp_below",
+            "params": {
+              "threshold": 0.3
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "stat_boost_once",
+            "params": {
+              "status": "last_stand",
+              "value": 0.2,
+              "spd": 0.2
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -619,16 +1333,103 @@
       "name": "乘胜追击",
       "description": "白帝圣剑，御剑跟着我。",
       "weight": 8,
-      "trigger": "on_attack",
       "mastery": [
         0.85,
         1.2
       ],
       "effect": {
-        "type": "streak_bonus",
-        "chance": 0.8,
-        "value": 0.065,
-        "cap": 5
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.8
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "momentum_mult",
+            "params": {
+              "value": 0.065,
+              "cap": 5
+            },
+            "pos": [
+              560,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "trigger",
+            "type": "on_hit_landed",
+            "params": {},
+            "pos": [
+              40,
+              260
+            ]
+          },
+          {
+            "id": "n5",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.8
+            },
+            "pos": [
+              280,
+              260
+            ]
+          },
+          {
+            "id": "n6",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "momentum",
+              "target": "self",
+              "value": 0.065,
+              "cap": 5
+            },
+            "pos": [
+              560,
+              260
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n4",
+            "to": "n5"
+          },
+          {
+            "from": "n5",
+            "to": "n6"
+          }
+        ]
       }
     },
     {
@@ -636,16 +1437,74 @@
       "name": "燃血轰击",
       "description": "以生命为薪，燃尽一切。",
       "weight": 7,
-      "trigger": "on_attack",
       "mastery": [
         0.65,
         1.55
       ],
       "effect": {
-        "type": "overload",
-        "chance": 0.35,
-        "value": 2.15,
-        "cost": 0.05
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.35
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "attack_mult",
+            "params": {
+              "value": 2.15,
+              "announce": false
+            },
+            "pos": [
+              560,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "self_cost",
+            "params": {
+              "cost": 0.05
+            },
+            "pos": [
+              840,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n3",
+            "to": "n4"
+          }
+        ]
       }
     },
     {
@@ -653,17 +1512,61 @@
       "name": "破甲连打",
       "description": "你的防御毫无作用。",
       "weight": 8,
-      "trigger": "on_attack",
       "mastery": [
         0.75,
         1.35
       ],
       "effect": {
-        "type": "armor_shred",
-        "chance": 0.36,
-        "value": 340,
-        "ticks": 16,
-        "max_stacks": 3
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.36
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "shred",
+              "target": "enemy",
+              "value": 340,
+              "ticks": 16,
+              "max_stacks": 3
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -671,16 +1574,60 @@
       "name": "撕裂",
       "description": "伤口绽开，血流不止。",
       "weight": 8,
-      "trigger": "on_attack",
       "mastery": [
         0.75,
         1.35
       ],
       "effect": {
-        "type": "bleed",
-        "chance": 0.32,
-        "value": 0.2,
-        "ticks": 12
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.32
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "bleed",
+              "target": "enemy",
+              "value": 0.2,
+              "ticks": 12
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -688,16 +1635,59 @@
       "name": "孤注一掷",
       "description": "要么轰轰烈烈，要么一无所有。",
       "weight": 8,
-      "trigger": "on_attack",
       "mastery": [
         0.7,
         1.5
       ],
       "effect": {
-        "type": "gamble",
-        "chance": 0.39,
-        "value": 2.2,
-        "penalty": 0.5
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.39
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "random_mult",
+            "params": {
+              "win": 0.39,
+              "value": 2.2,
+              "penalty": 0.5
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -705,16 +1695,59 @@
       "name": "大器晚成",
       "description": "越战越勇，渐入佳境。",
       "weight": 7,
-      "trigger": "passive",
       "mastery": [
         0.85,
         1.15
       ],
       "effect": {
-        "type": "tempo",
-        "chance": 0.16,
-        "value": 100,
-        "atk": 10
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "after_action",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.16
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "stat_gain",
+            "params": {
+              "status": "tempo",
+              "value": 100,
+              "atk": 10
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -722,15 +1755,57 @@
       "name": "洞悉",
       "description": "再厚的护甲也有弱点。",
       "weight": 8,
-      "trigger": "on_attack",
       "mastery": [
         0.7,
         1.45
       ],
       "effect": {
-        "type": "armor_pen",
-        "chance": 0.42,
-        "crit": 0.06
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.42
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "armor_pen_full",
+            "params": {
+              "crit": 0.06
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     },
     {
@@ -738,17 +1813,86 @@
       "name": "血契",
       "description": "血祭血神……",
       "weight": 6,
-      "trigger": "on_turn_start",
       "mastery": [
         0.7,
         1.45
       ],
       "effect": {
-        "type": "blood_pact",
-        "chance": 0.4,
-        "cost": 0.06,
-        "value": 0.68,
-        "convert": 0.11
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "action_start",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.4
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "pact_cost",
+            "params": {
+              "status": "blood_pact",
+              "cost": 0.06,
+              "value": 0.68,
+              "convert": 0.11
+            },
+            "pos": [
+              560,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "trigger",
+            "type": "after_action",
+            "params": {},
+            "pos": [
+              40,
+              260
+            ]
+          },
+          {
+            "id": "n5",
+            "kind": "op",
+            "type": "pact_convert",
+            "params": {
+              "status": "blood_pact"
+            },
+            "pos": [
+              280,
+              260
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n4",
+            "to": "n5"
+          }
+        ]
       }
     },
     {
@@ -756,16 +1900,60 @@
       "name": "厚积薄发",
       "description": "每一道伤痕，都是在积蓄力量。",
       "weight": 8,
-      "trigger": "on_defense",
       "mastery": [
         0.75,
         1.4
       ],
       "effect": {
-        "type": "grudge",
-        "chance": 0.6,
-        "value": 0.07,
-        "ticks": 20
+        "nodes": [
+          {
+            "id": "n1",
+            "kind": "trigger",
+            "type": "on_hit_taken",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.6
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "grudge",
+              "target": "self",
+              "value": 0.07,
+              "ticks": 20
+            },
+            "pos": [
+              560,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          }
+        ]
       }
     }
   ]

@@ -16,14 +16,29 @@ if str(REPO_ROOT) not in sys.path:
 from namefight.battle import (_Combatant, _compute_damage, _make_combatant,
                               _snapshot, battle_to_api, run_battle)
 from namefight.config import load_game_config
-from namefight.fighter import (_format_formula_number, compose_title_name,
-                               derive_fighter, fighter_to_api,
-                               personalized_effects, title_bonus_items)
+from namefight.fighter import (_format_formula_number, _param_spec,
+                               _walk_links, apply_resonance,
+                               compose_title_name, derive_fighter,
+                               fighter_to_api, personalized_effects,
+                               resonance_coeff, title_bonus_items)
 from namefight.rng import DetRng
 from namefight.text import format_num, format_pct
 
 CONFIG_ROOT = REPO_ROOT / "config"
 GAME = load_game_config(CONFIG_ROOT)
+
+
+def _skill_links(pgraph):
+    """技能图的全部共鸣链接（按节点数组顺序展平，与 link_calc 一致）。"""
+    return _walk_links(pgraph)
+
+
+def _graph_param(pgraph, name, default=None):
+    """技能图内首个该名参数的值。"""
+    for node in pgraph.get("nodes", ()):
+        if name in node.get("params", {}):
+            return node["params"][name]
+    return default
 
 
 def _outcome_payload(outcome):
@@ -136,8 +151,13 @@ class FighterDeterminism(unittest.TestCase):
         values = defaultdict(set)
         for i in range(30):
             f = derive_fighter("fighter%02d" % i, GAME)
-            for sdef, eff in personalized_effects(f, GAME):
-                values[sdef.id].add((eff.get("chance"), eff.get("value"), eff.get("damage")))
+            for sdef, pg in personalized_effects(f, GAME):
+                snapshot = []
+                for node in pg["nodes"]:
+                    for key in ("chance", "value", "damage"):
+                        if key in node["params"]:
+                            snapshot.append(round(float(node["params"][key]), 6))
+                values[sdef.id].add(tuple(snapshot))
         varied = [sid for sid, vs in values.items() if len(vs) > 1]
         self.assertTrue(varied, "技能个性化参数应随名字（MD5）变化")
 
@@ -176,22 +196,23 @@ class FighterDeterminism(unittest.TestCase):
         dual = 0
         for i in range(60):
             f = derive_fighter("linker%02d" % i, GAME)
-            for sdef, eff in personalized_effects(f, GAME):
-                for link in eff.get("links", ()):
+            for sdef, pg in personalized_effects(f, GAME):
+                for node, link in _skill_links(pg):
                     self.assertIn(link["mode"], modes)
                     self.assertIn(link["variable"], f.attrs)
-                    self.assertIn(link["field"], eff)
+                    self.assertIn(link["param"], node["params"])
                     vdef = next(v for v in link_cfg.variables
                                 if v.id == link["variable"])
                     rate = link["rate"]
                     self.assertGreaterEqual(rate, vdef.rate_lo - 1e-9)
                     self.assertLessEqual(rate, vdef.rate_hi + 1e-9)
-                if eff.get("links"):
-                    linked.append((f, sdef, eff))
-                    if len(eff["links"]) == 2:
+                links = _skill_links(pg)
+                if links:
+                    linked.append((f, sdef, pg))
+                    if len(links) == 2:
                         dual += 1
-                if "prefix" in eff or "suffix" in eff:
-                    modded.append((f, eff))
+                if "prefix" in pg or "suffix" in pg:
+                    modded.append((f, pg))
         self.assertTrue(linked, "应有技能获得变量共鸣")
         self.assertGreater(dual, 0, "应采样到双变数技能")
         self.assertTrue(modded, "应有技能获得词缀")
@@ -199,7 +220,7 @@ class FighterDeterminism(unittest.TestCase):
         f, sdef, eff = linked[0]
         api = fighter_to_api(f, GAME)
         entry = next(s for s in api["skills"] if s["id"] == sdef.id)
-        if eff.get("links"):
+        if _skill_links(eff):
             self.assertIn("越", entry["text"])
             self.assertIn("%", entry["text"])
             self.assertIn("（", entry["text"])
@@ -282,9 +303,9 @@ class FighterDeterminism(unittest.TestCase):
         total = with_link = 0
         for i in range(150):
             f = derive_fighter("quota%03d" % i, GAME)
-            for sdef, eff in personalized_effects(f, GAME):
+            for sdef, pg in personalized_effects(f, GAME):
                 total += 1
-                if eff.get("links"):
+                if _skill_links(pg):
                     with_link += 1
         rate = with_link / total
         self.assertGreater(rate, 0.30, "变数出现率过低: %.3f" % rate)
@@ -297,15 +318,17 @@ class FighterDeterminism(unittest.TestCase):
         for i in range(60):
             f = derive_fighter("mastery%02d" % i, GAME)
             api = fighter_to_api(f, GAME)
-            for sdef, eff in personalized_effects(f, GAME):
+            for sdef, pg in personalized_effects(f, GAME):
                 entry = next(s for s in api["skills"] if s["id"] == sdef.id)
-                self.assertIn("mastery", eff)
-                self.assertTrue(0 <= eff["mastery"] <= 100)
+                self.assertIn("mastery", pg)
+                self.assertTrue(0 <= pg["mastery"] <= 100)
                 self.assertTrue(entry["mastery_text"])
-                if sdef.mastery_on == "chance" and "chance" in eff:
-                    self.assertGreaterEqual(eff["chance"], 0.02)
-                    self.assertLessEqual(eff["chance"], 0.95)
-                if sdef.mastery_on != "value":
+                if "chance" in sdef.mastery_on:
+                    chance = _graph_param(pg, "chance")
+                    if chance is not None:
+                        self.assertGreaterEqual(chance, 0.02)
+                        self.assertLessEqual(chance, 0.95)
+                if "value" not in sdef.mastery_on:
                     # 触发率类文案为最终概率（含百分号），不再是 >100% 的倍率
                     self.assertIn("%", entry["mastery_text"])
                     self.assertNotIn("×", entry["mastery_text"])
@@ -318,8 +341,8 @@ class FighterDeterminism(unittest.TestCase):
         values = []
         for i in range(120):
             f = derive_fighter("熟练度分布%03d" % i, GAME)
-            for sdef, eff in personalized_effects(f, GAME):
-                values.append(eff["mastery"])
+            for sdef, pg in personalized_effects(f, GAME):
+                values.append(pg["mastery"])
         self.assertGreater(len(values), 200)
         mean = sum(values) / len(values)
         self.assertGreater(mean, 42.0, "熟练度均值应靠近 50（实测 %.1f）" % mean)
@@ -333,21 +356,29 @@ class FighterDeterminism(unittest.TestCase):
 
     def test_trigger_chances_distinct_and_capped(self):
         """触发率契约（v0.9.1）：各技能基础触发率按强度互不相同；
-        个性化后的触发率始终不超过 100%。"""
+        个性化后的触发率始终不超过 100%（基配置触发率取自技能图各节点的
+        chance 参数）。"""
         chances = {}
         for s in GAME.skills:
-            if "chance" in s.effect:
-                self.assertGreater(s.effect["chance"], 0)
-                self.assertLessEqual(s.effect["chance"], 0.95)
-                chances[s.id] = round(float(s.effect["chance"]), 6)
+            for node in s.effect.get("nodes", ()):
+                params = node.get("params", {})
+                if "chance" in params:
+                    self.assertGreater(params["chance"], 0)
+                    self.assertLessEqual(params["chance"], 0.95)
+                    if s.id in chances:
+                        # 同一技能的多个 chance（如乘胜两条链）应相同
+                        self.assertEqual(chances[s.id],
+                                         round(float(params["chance"]), 6))
+                    chances[s.id] = round(float(params["chance"]), 6)
         self.assertGreater(len(chances), 10)
         self.assertEqual(len(chances), len(set(chances.values())),
                          "技能基础触发率应互不相同: %s" % sorted(chances.items()))
         for i in range(40):
             f = derive_fighter("cap%02d" % i, GAME)
-            for sdef, eff in personalized_effects(f, GAME):
-                if "chance" in eff:
-                    self.assertLessEqual(eff["chance"], 0.95)
+            for sdef, pg in personalized_effects(f, GAME):
+                chance = _graph_param(pg, "chance")
+                if chance is not None:
+                    self.assertLessEqual(chance, 0.95)
 
     def test_effect_link_appears_in_battles(self):
         found = 0
@@ -368,9 +399,9 @@ class FighterDeterminism(unittest.TestCase):
         linked = []
         for i in range(300):
             f = derive_fighter("live%03d" % i, GAME)
-            for sdef, eff in personalized_effects(f, GAME):
-                if eff.get("links"):
-                    linked.append((f, sdef, eff))
+            for sdef, pg in personalized_effects(f, GAME):
+                if _skill_links(pg):
+                    linked.append((f, sdef, pg))
             if len(linked) >= count:
                 break
         return linked
@@ -384,7 +415,7 @@ class FighterDeterminism(unittest.TestCase):
         for f, sdef, eff in linked:
             api = fighter_to_api(f, GAME)
             entry = next(s for s in api["skills"] if s["id"] == sdef.id)
-            links = eff.get("links")
+            links = _skill_links(eff)
             if not links:
                 continue
             self.assertIn("live_text", entry)
@@ -402,37 +433,34 @@ class FighterDeterminism(unittest.TestCase):
 
     def test_link_calc_matches_engine_resonance(self):
         """前端实时公式（base + 变量式 × coeff + 上下限）与引擎
-        resonance_coeff + apply_resonance 逐点一致（v0.10.0 起均为引擎真实值）。"""
-        from namefight.fighter import apply_resonance, resonance_coeff
+        resonance_coeff + apply_resonance 逐点一致（v0.10.0 起均为引擎真实值；
+        v2.0.0 共鸣挂点为技能图节点参数，link_calc 与节点链接按序一一对应）。"""
         from namefight.battle import _live_value
         linked = self._collect_linked(25)
         enemy = _make_combatant(derive_fighter("对照者", GAME), 1, GAME)
         checked = 0
-        for f, sdef, eff in linked:
-            links = eff.get("links")
-            if not links:
-                continue
+        for f, sdef, pg in linked:
             api = fighter_to_api(f, GAME)
             entry = next(s for s in api["skills"] if s["id"] == sdef.id)
             actor = _make_combatant(f, 0, GAME)
-            proc = dict(eff)
-            for lc in entry["link_calc"]:
-                field = lc["field"]
+            for (node, link), lc in zip(_skill_links(pg), entry["link_calc"]):
+                param = lc["field"]
+                self.assertEqual(param, link["param"])
+                spec = _param_spec(node, param, GAME)
                 # 引擎路径：按当前值计算系数并修正参数
-                coeff = resonance_coeff(lambda vid: _live_value(actor, vid),
-                                        lambda vid: _live_value(enemy, vid),
-                                        next(l for l in links if l["field"] == field),
-                                        GAME)
-                proc = apply_resonance(proc, coeff, field)
+                coeff = resonance_coeff(lambda vid: _live_value(actor, vid, GAME),
+                                        lambda vid: _live_value(enemy, vid, GAME),
+                                        link, GAME)
+                proc = apply_resonance(node["params"], coeff, param, spec)
                 # 前端路径（同一真实值口径）：base + 变量式 × coeff（+ 上下限）
                 if lc["mode"] in ("difference", "sum"):
-                    own = _live_value(actor, lc["variable"])
-                    other = _live_value(enemy, lc["against"])
+                    own = _live_value(actor, lc["variable"], GAME)
+                    other = _live_value(enemy, lc["against"], GAME)
                     expr = own - other if lc["mode"] == "difference" else own + other
                 elif lc["mode"] == "enemy":
-                    expr = _live_value(enemy, lc["variable"])
+                    expr = _live_value(enemy, lc["variable"], GAME)
                 else:
-                    expr = _live_value(actor, lc["variable"])
+                    expr = _live_value(actor, lc["variable"], GAME)
                 value = lc["base"] + expr * lc["coeff"]
                 lo, hi = lc["clamp"]
                 if lo is not None:
@@ -441,11 +469,11 @@ class FighterDeterminism(unittest.TestCase):
                     value = min(hi, value)
                 if lc["fmt"] == "turns":
                     value = max(1, int(round(value)))
-                    self.assertEqual(int(proc[field]), value)
+                    self.assertEqual(int(proc[param]), value)
                 else:
-                    self.assertAlmostEqual(proc[field], value, places=5,
-                                           msg="技能 %s 字段 %s 实时公式与引擎不一致"
-                                               % (sdef.id, field))
+                    self.assertAlmostEqual(proc[param], value, places=5,
+                                           msg="技能 %s 参数 %s 实时公式与引擎不一致"
+                                               % (sdef.id, param))
                 checked += 1
         self.assertGreater(checked, 15)
 
@@ -554,16 +582,18 @@ class FighterDeterminism(unittest.TestCase):
                                        msg="生命应保持整数值（实测 %r）" % hp)
 
     def test_blood_pact_buff_shows_accumulated_atk(self):
-        """血契标记契约（v0.10.0）：只显示累计转化的攻击量。"""
+        """血契标记契约（v0.10.0）：只显示累计转化的攻击量（v2.0.0 起
+        存于通用状态容器 blood_pact.total_gain）。"""
+        from namefight.statuses import ensure
         fa = derive_fighter("血契甲", GAME)
         fb = derive_fighter("血契乙", GAME)
         ca = _make_combatant(fa, 0, GAME)
         cb = _make_combatant(fb, 1, GAME)
-        snap = _snapshot([ca, cb], GAME.battle.gauge_threshold, 0)
+        snap = _snapshot([ca, cb], GAME.battle.gauge_threshold, 0, GAME)
         self.assertEqual([b for b in snap["a"]["buffs"] if b["id"] == "blood_pact"], [],
                          "未转化过攻击时不显示血契标记")
-        ca.pact_total_gain = 237.6
-        snap = _snapshot([ca, cb], GAME.battle.gauge_threshold, 0)
+        ensure(ca, "blood_pact")["total_gain"] = 237.6
+        snap = _snapshot([ca, cb], GAME.battle.gauge_threshold, 0, GAME)
         pact = [b for b in snap["a"]["buffs"] if b["id"] == "blood_pact"]
         self.assertEqual(len(pact), 1)
         self.assertEqual(sorted(pact[0]["params"].keys()), ["value"])

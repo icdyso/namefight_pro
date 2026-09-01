@@ -8,15 +8,18 @@
   天然不越界、端点无截断堆积，v1.1.0 起替代正态投掷）；
   命/攻为 ×100 整数量纲（命 20000 / 攻 1500），防御 750（v1.0.0 减半），
   速度同为 ×100 量纲（v1.2.1 起，~1000，与行动槽阈值 10000 配套）；
-  投掷结果**取整**；
-  crit/dodge 为百分数，保持浮点；
+  投掷结果**取整**；crit/dodge 为百分数，保持浮点；
   全部数值**直接以引擎真实值显示**（不再换算白板 100 单位）。
 - 技能个性化（熟练度/数值/词缀/变数随 MD5 扰动）使用独立种子
   md5(规范化名字 + ":" + 技能id)，与主派生流互不影响；熟练度为
   [0,100] 的三角形分布投掷（v1.1.0 起）。
-- v0.9.0 起每个技能附带一个熟练度（0~100）与至多两个变数槽位：
-  熟练度按技能各自的区间缩放触发概率（或条件型的效果值），
-  变数槽位以 25% 概率实际成为共鸣变数（公式括号紧跟对应数值）。
+- v2.0.0 起技能为「节点 + 连边」的技能图（见 effects.py）：个性化直接作用
+  于图的节点参数，消耗顺序固定：熟练度 -> value -> damage -> 前缀
+  (是否 -> 抽取 -> 缩放) -> 后缀(同前) -> 共鸣槽位（按节点数组顺序 ×
+  参数声明顺序，至多 variable_link.max_slots 个）。
+- 共鸣的展示格式 / 上下限 / 量纲全部来自注册表元数据（effects.OPS /
+  CONDITIONS 与 battle.json statuses 的参数规格），不再维护独立的
+  规格表；技能描述改为「触发词 + 条件从句 + 效果原语句」沿链组合。
 - 文案（技能名/属性名/称号字段名等）与数值自 v0.10.0 起合并在
   config/game 同一条目内保存，本模块直接从 GameCfg 读取。
 """
@@ -25,116 +28,44 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
+from . import effects
 from .config import GameCfg, TITLE_FIELD_POOLS
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
-# 技能参数标签模板键（测试据此校验配置都有对应文案）
-STATS_KEYS_USED = frozenset({
-    "link_sep", "link_formula", "link_expr_difference", "link_expr_sum",
-    "link_ratio", "link_difference", "link_sum",
-    "scope_own", "scope_enemy", "scope_difference", "scope_sum",
-    "field_value", "field_crit", "field_threshold", "field_turns",
-    "field_damage", "field_ticks", "field_decay", "field_delay",
-    "field_crit_value", "field_ratio", "field_cap", "field_cost",
-    "field_convert", "field_per", "field_regen", "field_spd", "field_penalty",
-    "mod_chance", "mod_value", "mod_damage", "mod_turns", "mod_ticks",
-    "final_damage", "final_turns",
-    "mastery_text", "mastery_text_value", "mastery_text_immune",
-    "nat_charge", "nat_execution", "nat_lifesteal", "nat_poison",
-    "nat_concussive", "nat_thunder", "nat_sever", "nat_gauge_surge",
-    "nat_damage_reduction", "nat_reflect", "nat_bulwark", "nat_retribution",
-    "nat_iron_will", "nat_heal", "nat_cleanse", "nat_low_hp_atk_bonus",
-    "nat_streak_bonus", "nat_overload", "nat_armor_shred", "nat_bleed",
-    "nat_gamble", "nat_tempo", "nat_armor_pen", "nat_blood_pact", "nat_grudge",
-})
+# 可共鸣参数名（注册表声明 link=True 的参数；状态定义声明的可共鸣参数
+# 与之同名，量纲/格式在 battle.json statuses 中声明）
+_LINK_FIELD_KEYS = set()
+for _reg in (effects.CONDITIONS, effects.OPS):
+    for _meta in _reg.values():
+        for _ps in _meta["params"]:
+            if _ps.link:
+                _LINK_FIELD_KEYS.add(_ps.key)
+
+# 技能参数标签模板键（测试据此校验配置都有对应文案；st_<状态id> 由
+# apply_status 引用的状态动态校验，不在此列）
+STATS_KEYS_USED = frozenset(
+    {"link_sep", "link_formula", "link_expr_difference", "link_expr_sum",
+     "link_ratio", "link_difference", "link_sum",
+     "scope_own", "scope_enemy", "scope_difference", "scope_sum",
+     "mod_chance", "mod_value", "mod_damage", "mod_turns", "mod_ticks",
+     "final_damage", "final_turns",
+     "mastery_text", "mastery_text_value", "mastery_text_immune"}
+    # 状态定义声明的可共鸣参数（damage/ticks/turns）不在注册表内，手工补齐；
+    # apply_status 的描述模板为 st_<状态id>，无通用 op 模板
+    | {"field_damage", "field_ticks", "field_turns"}
+    | {"field_" + k for k in _LINK_FIELD_KEYS}
+    | {"hook_" + h for h in effects.HOOKS}
+    | {"cond_" + c for c in effects.CONDITIONS}
+    | {"op_" + o for o in effects.OPS if o != "apply_status"}
+)
 
 # 对战实时技能数据的占位符：live 文本中每个共鸣数值位 = 该标记 + 槽位序号，
-# 序号 = 该变数在 eff["links"] 中的下标（与 link_calc 数组下标一致）。
-# 前端按序号（而非占位符在文本中的位置）取值后替换，避免模板参数顺序
-# 与共鸣槽位顺序不一致时数值交叉错位（v1.2.0 修复）。每技能至多两个占位符。
+# 序号 = 该变数在技能全部 links（按节点数组顺序展平）中的下标
+# （与 link_calc 数组下标一致）。前端按序号（而非占位符在文本中的位置）
+# 取值后替换，避免模板参数顺序与共鸣槽位顺序不一致时数值交叉错位
+# （v1.2.0 修复）。每技能至多 variable_link.max_slots 个占位符。
 LIVE_MARKER = "\x01"
-
-# 共鸣字段的展示格式与上下限：(效果类型, 字段) -> (fmt, lo, hi)
-# fmt: pct 百分数 2 位小数 / num 取整 / turns 整数且至少 1。
-# 与 apply_resonance 保持一致，前端实时计算复用同一张表。
-_TURNS = ("turns", 1, 20)
-RESONANCE_SPECS = {
-    ("charge", "value"): ("pct", 0.5, 8.0),
-    ("charge", "crit"): ("pct", 0.0, 1.0),
-    ("damage_multiplier", "value"): ("pct", 0.1, 6.0),
-    ("damage_multiplier", "threshold"): ("pct", 0.05, 0.9),
-    ("lifesteal", "value"): ("pct", 0.05, 1.5),
-    ("lifesteal", "turns"): _TURNS,
-    ("poison", "damage"): ("num", 0.0, None),
-    ("poison", "ticks"): _TURNS,
-    ("concussive", "value"): ("pct", 0.05, 1.0),
-    ("concussive", "ticks"): _TURNS,
-    ("thunder", "value"): ("pct", 0.05, 1.0),
-    ("thunder", "decay"): ("pct", 0.5, 0.99),
-    ("sever", "value"): ("pct", 0.1, 2.0),
-    ("sever", "delay"): ("num", 0.0, None),
-    ("gauge_surge", "value"): ("num", 0.0, None),
-    ("gauge_surge", "crit_value"): ("num", 0.0, None),
-    ("damage_reduction", "value"): ("pct", 0.01, 0.3),
-    ("damage_reduction", "ticks"): _TURNS,
-    ("reflect", "value"): ("pct", 0.05, 0.9),
-    ("reflect", "ratio"): ("pct", 0.2, 4.0),
-    ("bulwark", "value"): ("pct", 0.05, 0.9),
-    ("bulwark", "threshold"): ("pct", 0.1, 0.9),
-    ("retribution", "ratio"): ("pct", 0.2, 3.0),
-    ("retribution", "cap"): _TURNS,
-    ("iron_will", "value"): ("pct", 0.05, 0.9),
-    ("iron_will", "decay"): ("pct", 0.05, 0.9),
-    ("heal", "value"): ("num", 0.0, None),
-    ("heal", "regen"): ("num", 0.0, None),
-    ("cleanse", "value"): ("num", 0.0, None),
-    ("cleanse", "per"): ("num", 0.0, None),
-    ("low_hp_atk_bonus", "value"): ("pct", 0.05, 3.0),
-    ("low_hp_atk_bonus", "spd"): ("pct", 0.05, 3.0),
-    ("streak_bonus", "value"): ("pct", 0.005, 0.3),
-    ("streak_bonus", "cap"): _TURNS,
-    ("overload", "value"): ("pct", 0.5, 6.0),
-    ("overload", "cost"): ("pct", 0.01, 0.4),
-    ("armor_shred", "value"): ("num", 0.0, None),
-    ("armor_shred", "ticks"): _TURNS,
-    ("bleed", "value"): ("pct", 0.02, 1.0),
-    ("bleed", "ticks"): _TURNS,
-    ("gamble", "value"): ("pct", 0.5, 6.0),
-    ("gamble", "penalty"): ("pct", 0.1, 1.0),
-    ("tempo", "value"): ("num", 0.0, None),
-    ("tempo", "atk"): ("num", 0.0, None),
-    ("armor_pen", "crit"): ("pct", 0.0, 1.0),
-    ("blood_pact", "value"): ("pct", 0.05, 1.5),
-    ("blood_pact", "convert"): ("pct", 0.05, 2.0),
-    ("grudge", "value"): ("pct", 0.005, 0.3),
-    ("grudge", "ticks"): _TURNS,
-}
-
-# 熟练度作用字段 -> 实际缩放的参数列表（条件触发型技能缩放效果值而非概率）
-_MASTERY_PARAMS = {"chance": ("chance",), "value": ("value", "spd"), "immune": ("immune",)}
-
-# 绝对数值字段表：(效果类型, 字段) -> 有量纲。
-# v0.10.0 起仅用于词缀文案的展示语义：有量纲字段的词缀增量以整数展示，
-# 纯倍率字段以百分数展示；数值本身一律以引擎真实值直显（不再换算）。
-_FIELD_UNITS = {
-    ("poison", "damage"): "hp",
-    ("heal", "value"): "hp",
-    ("heal", "regen"): "hp",
-    ("cleanse", "value"): "hp",
-    ("cleanse", "per"): "hp",
-    ("armor_shred", "value"): "def",
-    ("sever", "delay"): "gauge",
-    ("gauge_surge", "value"): "gauge",
-    ("gauge_surge", "crit_value"): "gauge",
-    ("tempo", "value"): "spd",
-    ("tempo", "atk"): "atk",
-}
-
-
-def field_unit(eff: dict, field: str):
-    """效果数值字段是否为绝对数值（None = 纯倍率/百分比，直接展示）。"""
-    return _FIELD_UNITS.get((str(eff.get("type")), field))
 
 
 class InvalidName(Exception):
@@ -215,30 +146,85 @@ def derive_fighter(raw_name, game: GameCfg) -> Fighter:
     )
 
 
-def _apply_modifier(eff: dict, mod: dict) -> None:
-    """词缀修正：仅作用于技能已有的参数（chance 截断到 [0.02, 0.95]，计数至少 1）。"""
-    for key, delta in mod.items():
-        if key not in eff:
-            continue
-        if key == "chance":
-            eff["chance"] = min(0.95, max(0.02, float(eff["chance"]) + float(delta)))
-        elif key in ("turns", "ticks", "cap"):
-            eff[key] = max(1, int(round(float(eff[key]))) + int(round(float(delta))))
-        else:
-            eff[key] = float(eff[key]) + float(delta)
+# ---- 节点参数规格 / 量纲查询（注册表驱动） ----
+
+def _node_specs(node: dict, game: GameCfg):
+    """节点参数规格表（apply_status 按状态定义展开）。"""
+    if node.get("kind") == "op" and node.get("type") == "apply_status":
+        sid = node.get("params", {}).get("status")
+        return effects.param_specs("op", "apply_status",
+                                   lambda: game.status_specs.get(sid))
+    return effects.param_specs(str(node.get("kind")), str(node.get("type")))
+
+
+def _param_spec(node: dict, param: str, game: GameCfg):
+    """单参数的 (fmt, lo, hi)；未声明回落默认规格。"""
+    ps = _node_specs(node, game).get(param)
+    if ps is not None and (ps.fmt or ps.clamp):
+        lo, hi = (ps.clamp or (None, None))
+        return (ps.fmt, lo, hi)
+    return effects.DEFAULT_RESONANCE_SPEC
+
+
+def _param_unit(node: dict, param: str, game: GameCfg):
+    ps = _node_specs(node, game).get(param)
+    return ps.unit if ps is not None else None
+
+
+def graph_param_unit(pgraph: dict, param: str, game: GameCfg):
+    """技能图内首个该名参数的量纲（词缀文案展示用；None = 纯倍率/百分比）。"""
+    for node in pgraph.get("nodes", ()):
+        if param in node.get("params", {}):
+            return _param_unit(node, param, game)
+    return None
+
+
+def graph_param_value(pgraph: dict, param: str, default=0.0):
+    """技能图内首个该名参数的值（熟练度文案等展示用）。"""
+    for node in pgraph.get("nodes", ()):
+        params = node.get("params", {})
+        if param in params:
+            return params[param]
+    return default
+
+
+def _walk_links(pgraph: dict):
+    """按节点数组顺序展平全部共鸣链接（槽位顺序的唯一次序依据）。"""
+    out = []
+    for node in pgraph.get("nodes", ()):
+        for link in node.get("links") or ():
+            out.append((node, link))
+    return out
+
+
+def _apply_modifier(nodes: list, mod: dict) -> None:
+    """词缀修正：仅作用于节点已有的参数（chance 截断到 [0.02, 0.95]，
+    turns/ticks/cap 计数至少 1）。"""
+    for node in nodes:
+        params = node.get("params", {})
+        for key, delta in mod.items():
+            if key not in params:
+                continue
+            if key == "chance":
+                params["chance"] = min(0.95, max(0.02, float(params["chance"]) + float(delta)))
+            elif key in ("turns", "ticks", "cap"):
+                params[key] = max(1, int(round(float(params[key]))) + int(round(float(delta))))
+            else:
+                params[key] = float(params[key]) + float(delta)
 
 
 def personalized_effects(fighter: Fighter, game: GameCfg):
     """技能个性化：以 md5(规范化名字:技能id) 为种子做确定性扰动。
 
-    消耗顺序固定（v0.9.0）：
+    消耗顺序固定（v0.9.0 起，v2.0.0 作用于技能图节点参数）：
     熟练度 -> value -> damage -> 前缀(是否 -> 抽取 -> 缩放) -> 后缀(是否 -> 抽取 -> 缩放)
-    -> 变数槽位一(是否 -> 模式 -> 变量 -> 倍率) -> 变数槽位二(同前)。
+    -> 共鸣槽位（节点数组顺序 × 参数声明顺序，每槽位：是否 -> 模式 -> 变量 -> 倍率）。
 
-    熟练度（0~100）按技能各自区间缩放 mastery_on 字段（默认触发概率）；
-    每个变数槽位独立以 link.chance 概率成为共鸣变数。
+    熟练度（0~100）按技能各自区间缩放 mastery_on 声明的参数（默认触发概率；
+    同名参数全部缩放，chance/immune 按惯例钳制）；value/damage 按节点数组
+    顺序逐个抽取倍率（同名参数各一次）。
 
-    返回 [(SkillDef, 个性化后的效果dict), ...]，顺序与 fighter.skill_ids 一致。
+    返回 [(SkillDef, 个性化后的技能图dict), ...]，顺序与 fighter.skill_ids 一致。
     """
     var = game.skill_md5_variance
     link_cfg = game.skill_variable_link
@@ -246,68 +232,82 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
     out = []
     for sid in fighter.skill_ids:
         sdef = next(s for s in game.skills if s.id == sid)
-        eff = dict(sdef.effect)
+        nodes = []
+        for n in sdef.effect.get("nodes", []):
+            node = {"id": n["id"], "kind": n["kind"], "type": n["type"],
+                    "params": dict(n.get("params") or {})}
+            if "pos" in n:
+                node["pos"] = n["pos"]
+            nodes.append(node)
+        graph = {"nodes": nodes,
+                 "edges": [dict(e) for e in sdef.effect.get("edges", [])]}
         seed_hex = hashlib.md5((fighter.normalized + ":" + sid).encode("utf-8")).hexdigest()
         rng = DetRng(int(seed_hex, 16))
-        # 熟练度：[0,100] 三角形分布投掷（集中于 50），按技能区间换算为触发概率
-        # （或效果值）倍率。v1.1.0 起使用离散三角形 next_triangular_range。
+        # 熟练度：[0,100] 三角形分布投掷（集中于 50），按技能区间换算为倍率
         mastery = rng.next_triangular_range(0, 100)
         lo, hi = sdef.mastery
         mult = lo + (hi - lo) * mastery / 100.0
-        eff["mastery"] = mastery
-        eff["mastery_mult"] = mult
-        for param in _MASTERY_PARAMS.get(sdef.mastery_on, ("chance",)):
-            if param not in eff:
-                continue
-            scaled = float(eff[param]) * mult
-            if param == "chance":
-                eff["chance"] = min(0.95, max(0.02, scaled))
-            elif param == "immune":
-                eff["immune"] = min(0.5, max(0.01, scaled))
-            else:
-                eff[param] = scaled
+        graph["mastery"] = mastery
+        graph["mastery_mult"] = mult
+        for param in sdef.mastery_on:
+            for node in nodes:
+                params = node["params"]
+                if param not in params:
+                    continue
+                scaled = float(params[param]) * mult
+                if param == "chance":
+                    params["chance"] = min(0.95, max(0.02, scaled))
+                elif param == "immune":
+                    params["immune"] = min(0.5, max(0.01, scaled))
+                else:
+                    params[param] = scaled
         for key in ("value", "damage"):
-            if key in eff:
-                factor = rng.next_triangular(var.value_lo, var.value_hi)
-                eff[key] = float(eff[key]) * factor
+            for node in nodes:
+                params = node["params"]
+                if key in params:
+                    factor = rng.next_triangular(var.value_lo, var.value_hi)
+                    params[key] = float(params[key]) * factor
         if name_mod.prefix_chance > 0 and rng.next_float() < name_mod.prefix_chance:
-            eff["prefix"] = rng.pick_weighted((m, m.weight) for m in name_mod.prefixes).id
-            eff["prefix_scale"] = rng.next_triangular(name_mod.scale_lo, name_mod.scale_hi)
+            graph["prefix"] = rng.pick_weighted((m, m.weight) for m in name_mod.prefixes).id
+            graph["prefix_scale"] = rng.next_triangular(name_mod.scale_lo, name_mod.scale_hi)
         if name_mod.suffix_chance > 0 and rng.next_float() < name_mod.suffix_chance:
-            eff["suffix"] = rng.pick_weighted((m, m.weight) for m in name_mod.suffixes).id
-            eff["suffix_scale"] = rng.next_triangular(name_mod.scale_lo, name_mod.scale_hi)
-        for pool, mod_id, scale_key in ((name_mod.prefixes, eff.get("prefix"), "prefix_scale"),
-                                        (name_mod.suffixes, eff.get("suffix"), "suffix_scale")):
+            graph["suffix"] = rng.pick_weighted((m, m.weight) for m in name_mod.suffixes).id
+            graph["suffix_scale"] = rng.next_triangular(name_mod.scale_lo, name_mod.scale_hi)
+        for pool, mod_id, scale_key in ((name_mod.prefixes, graph.get("prefix"), "prefix_scale"),
+                                        (name_mod.suffixes, graph.get("suffix"), "suffix_scale")):
             if not mod_id:
                 continue
             mdef = next((m for m in pool if m.id == mod_id), None)
             if mdef is not None:
-                scaled = {k: v * float(eff.get(scale_key, 1.0)) for k, v in mdef.mod.items()}
-                _apply_modifier(eff, scaled)
-        eff_type = str(eff.get("type"))
-        fields = link_cfg.targets.get(eff_type, ())
-        links = []
-        if link_cfg.chance > 0 and fields:
-            for field in fields:
-                if field not in eff:
+                scaled = {k: v * float(graph.get(scale_key, 1.0)) for k, v in mdef.mod.items()}
+                _apply_modifier(nodes, scaled)
+        # 共鸣槽位：候选 = 各节点 link=True 的参数（节点数组顺序 × 声明顺序）
+        slots = 0
+        for node in nodes:
+            if slots >= link_cfg.max_slots:
+                break
+            specs = _node_specs(node, game)
+            candidates = [k for k, ps in specs.items() if ps.link]
+            if not candidates:
+                continue
+            links = []
+            for param in candidates:
+                if slots >= link_cfg.max_slots:
+                    break
+                if param not in node["params"]:
                     continue
                 if rng.next_float() >= link_cfg.chance:
                     continue
                 mode = rng.pick_weighted(link_cfg.mode_weights)
                 vdef = rng.pick_weighted((v, v.weight) for v in link_cfg.variables)
                 rate = rng.next_triangular(vdef.rate_lo, vdef.rate_hi)
-                links.append({"field": field, "variable": vdef.id,
+                links.append({"param": param, "variable": vdef.id,
                               "rate": rate, "mode": mode})
-        if links:
-            eff["links"] = links
-        out.append((sdef, eff))
+                slots += 1
+            if links:
+                node["links"] = links
+        out.append((sdef, graph))
     return out
-
-
-def resonance_fields(eff: dict, game: GameCfg):
-    """该技能的共鸣变数字段列表（按槽位顺序）；无共鸣返回空列表。"""
-    return [str(link["field"]) for link in eff.get("links", ())
-            if str(link.get("field")) in eff]
 
 
 def resonance_coeff(own_get, enemy_get, link: dict, game: GameCfg) -> float:
@@ -340,27 +340,24 @@ def resonance_coeff(own_get, enemy_get, link: dict, game: GameCfg) -> float:
     return rate * (raw / base)
 
 
-def _res_spec(eff: dict, field: str):
-    return RESONANCE_SPECS.get((str(eff.get("type")), field), ("pct", 0.02, 5.0))
-
-
-def apply_resonance(eff: dict, coeff: float, field: str) -> dict:
-    """按共鸣系数缩放目标参数，返回新的效果 dict（按字段规格截断/取整）。"""
-    scaled = dict(eff)
-    if field not in scaled:
+def apply_resonance(params: dict, coeff: float, param: str, spec) -> dict:
+    """按共鸣系数缩放目标参数，返回新的参数 dict（按规格截断/取整）。
+    spec = (fmt, lo, hi)，来自注册表 / 状态定义的参数规格。"""
+    scaled = dict(params)
+    if param not in scaled:
         return scaled
-    fmt, lo, hi = _res_spec(scaled, field)
-    value = float(scaled[field]) * (1.0 + coeff)
+    fmt, lo, hi = spec
+    value = float(scaled[param]) * (1.0 + coeff)
     if fmt == "turns":
-        scaled[field] = max(1, int(round(value)))
+        scaled[param] = max(1, int(round(value)))
         if hi is not None:
-            scaled[field] = min(int(hi), scaled[field])
+            scaled[param] = min(int(hi), scaled[param])
         return scaled
     if lo is not None and value < lo:
         value = lo
     if hi is not None and value > hi:
         value = hi
-    scaled[field] = value
+    scaled[param] = value
     return scaled
 
 
@@ -399,9 +396,8 @@ def _format_formula_number(display_value: float, bracket: bool) -> str:
     return "%.*f%%" % (_sig_decimals(display_value), display_value)
 
 
-def format_resonance_final(scaled_value, field: str, eff: dict, game=None) -> str:
+def format_resonance_final(scaled_value, fmt: str, game: GameCfg = None) -> str:
     """共鸣后目标参数的展示值（引擎真实值）；game 为 None 时不带单位词。"""
-    fmt = _res_spec(eff, field)[0]
     text = format_field(scaled_value, fmt)
     if game is None:
         return text
@@ -414,20 +410,28 @@ def format_resonance_final(scaled_value, field: str, eff: dict, game=None) -> st
     return text
 
 
-def estimated_resonanced_eff(fighter: Fighter, eff: dict, game: GameCfg):
+def estimated_resonanced_eff(fighter: Fighter, pgraph: dict, game: GameCfg):
     """卡牌展示用的共鸣估算：敌方取基础值（实际战斗中按当前值动态计算）。
-    返回 (估算后的效果dict, [(link, 系数), ...])；无共鸣时返回 (eff, [])。"""
-    display = dict(eff)
-    coeffs = []
+    返回 (各节点展示参数 [(node, params), ...] 按节点数组顺序, [(link, 系数), ...])。"""
     base_get = lambda vid: game.attr(vid).base  # noqa: E731
     own_get = lambda vid: fighter.attrs.get(vid, 0)  # noqa: E731
-    for link in eff.get("links", ()):
-        field = str(link.get("field"))
-        if field not in display:
+    display = []
+    coeffs = []
+    for node in pgraph.get("nodes", ()):
+        params = node.get("params", {})
+        links = node.get("links")
+        if not links:
+            display.append((node, params))
             continue
-        coeff = resonance_coeff(own_get, base_get, link, game)
-        display = apply_resonance(display, coeff, field)
-        coeffs.append((link, coeff))
+        disp = dict(params)
+        for link in links:
+            param = str(link.get("param"))
+            if param not in disp:
+                continue
+            coeff = resonance_coeff(own_get, base_get, link, game)
+            disp = apply_resonance(disp, coeff, param, _param_spec(node, param, game))
+            coeffs.append((link, coeff))
+        display.append((node, disp))
     return display, coeffs
 
 
@@ -445,161 +449,47 @@ def title_bonus_items(title_fields, structure, game: GameCfg):
     return items
 
 
-def _nat_params(display_eff: dict, game: GameCfg):
-    """效果类型 -> (模板键, 模板参数)。数值为共鸣估算后的引擎真实值：
-    百分数 2 位小数（format_pct），其余取整（format_num）。
-    模板参数名与效果字段名一致，便于共鸣公式内联注入。"""
-    ttype = display_eff.get("type")
-    chance = float(display_eff.get("chance", 1.0))
+# ---- 技能描述：沿链组合「触发词 + 条件从句 + 效果原语句」 ----
 
-    def num(field, default=0.0):
-        """绝对数值字段：引擎真实值取整展示。"""
-        return format_num(float(display_eff.get(field, default)))
-
-    if ttype == "charge":
-        return "nat_charge", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 1.0))),
-            "crit": format_pct(float(display_eff.get("crit", 0)))}
-    if ttype == "damage_multiplier":
-        return "nat_execution", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 1.0))),
-            "threshold": format_pct(float(display_eff.get("threshold", 0)))}
-    if ttype == "lifesteal":
-        return "nat_lifesteal", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "turns": int(display_eff.get("turns", 0))}
-    if ttype == "poison":
-        return "nat_poison", {
-            "chance": format_pct(chance),
-            "damage": num("damage"),
-            "ticks": int(display_eff.get("ticks", 0))}
-    if ttype == "concussive":
-        return "nat_concussive", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "ticks": int(display_eff.get("ticks", 0))}
-    if ttype == "thunder":
-        return "nat_thunder", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "decay": format_pct(float(display_eff.get("decay", 1.0))),
-            "max": int(display_eff.get("max_hits", 0))}
-    if ttype == "sever":
-        return "nat_sever", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "delay": num("delay")}
-    if ttype == "gauge_surge":
-        return "nat_gauge_surge", {
-            "chance": format_pct(chance),
-            "value": num("value"),
-            "crit_value": num("crit_value")}
-    if ttype == "damage_reduction":
-        return "nat_damage_reduction", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "ticks": int(display_eff.get("ticks", 0))}
-    if ttype == "reflect":
-        return "nat_reflect", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "ratio": format_pct(float(display_eff.get("ratio", 1.0)))}
-    if ttype == "bulwark":
-        return "nat_bulwark", {
-            "threshold": format_pct(float(display_eff.get("threshold", 0.0))),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "immune": format_pct(float(display_eff.get("immune", 0.0)))}
-    if ttype == "retribution":
-        return "nat_retribution", {
-            "chance": format_pct(chance),
-            "ratio": format_pct(float(display_eff.get("ratio", 1.0))),
-            "cap": int(display_eff.get("cap", 0))}
-    if ttype == "iron_will":
-        return "nat_iron_will", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "decay": format_pct(float(display_eff.get("decay", 0.0)))}
-    if ttype == "heal":
-        return "nat_heal", {
-            "chance": format_pct(chance),
-            "value": num("value"),
-            "regen": num("regen"),
-            "tick": int(display_eff.get("tick", 0)),
-            "duration": int(display_eff.get("duration", 0))}
-    if ttype == "cleanse":
-        return "nat_cleanse", {
-            "chance": format_pct(chance),
-            "value": num("value"),
-            "per": num("per")}
-    if ttype == "low_hp_atk_bonus":
-        return "nat_low_hp_atk_bonus", {
-            "threshold": format_pct(float(display_eff.get("threshold", 0.3))),
-            "value": format_pct(float(display_eff.get("value", 0.5))),
-            "spd": format_pct(float(display_eff.get("spd", 0.0)))}
-    if ttype == "streak_bonus":
-        return "nat_streak_bonus", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "cap": int(display_eff.get("cap", 0))}
-    if ttype == "overload":
-        return "nat_overload", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 1.0))),
-            "cost": format_pct(float(display_eff.get("cost", 0.0)))}
-    if ttype == "armor_shred":
-        return "nat_armor_shred", {
-            "chance": format_pct(chance),
-            "value": num("value"),
-            "ticks": int(display_eff.get("ticks", 0)),
-            "max_stacks": int(display_eff.get("max_stacks", 0))}
-    if ttype == "bleed":
-        return "nat_bleed", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "ticks": int(display_eff.get("ticks", 0))}
-    if ttype == "gamble":
-        return "nat_gamble", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 1.0))),
-            "penalty": format_pct(float(display_eff.get("penalty", 1.0)))}
-    if ttype == "tempo":
-        return "nat_tempo", {
-            "chance": format_pct(chance),
-            "value": num("value"),
-            "atk": num("atk")}
-    if ttype == "armor_pen":
-        return "nat_armor_pen", {
-            "chance": format_pct(chance),
-            "crit": format_pct(float(display_eff.get("crit", 0)))}
-    if ttype == "blood_pact":
-        return "nat_blood_pact", {
-            "chance": format_pct(chance),
-            "cost": format_pct(float(display_eff.get("cost", 0.0))),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "convert": format_pct(float(display_eff.get("convert", 0.0)))}
-    if ttype == "grudge":
-        return "nat_grudge", {
-            "chance": format_pct(chance),
-            "value": format_pct(float(display_eff.get("value", 0.0))),
-            "ticks": int(display_eff.get("ticks", 0))}
-    return "nat_" + str(ttype), {}
+def _display_param(node: dict, params: dict, key: str, game: GameCfg) -> str:
+    fmt = _param_spec(node, key, game)[0]
+    return format_field(params.get(key, 0.0), fmt)
 
 
-def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
+def _node_clause(node: dict, disp: dict, game: GameCfg):
+    """单个节点的描述（条件从句 / 效果原语句）模板参数。"""
+    if node["kind"] == "condition":
+        return "cond_" + node["type"]
+    if node["kind"] == "op" and node["type"] == "apply_status":
+        return "st_" + str(disp.get("status", ""))
+    return "op_" + node["type"]
+
+
+def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
+    """模板参数：数值按规格格式化（共鸣公式由调用方注入）。"""
+    out = {}
+    specs = _node_specs(node, game)
+    for key in disp:
+        ps = specs.get(key)
+        fmt = ps.fmt if ps is not None and ps.fmt else "num"
+        if isinstance(disp[key], bool):
+            out[key] = disp[key]
+        elif isinstance(disp[key], str):
+            out[key] = disp[key]
+        else:
+            out[key] = format_field(disp[key], fmt)
+    return out
+
+
+def _link_formula(node: dict, link: dict, param: str, game: GameCfg):
     """共鸣描述两部分（v0.10.0 起全部为引擎真实值）：
 
     1. 内联最简线性公式（紧跟对应数值）：最终值 = 基数 + 变量式 * 合并系数；
        变量式以属性 emoji 表示--own 省略范围词、enemy 前缀「对方」、
        difference「【己方-对方】」、sum「【己方+对方】」；
-       v1.1.0 起百分数字段括号内为纯数字、百分号移到括号外，
-       如（355.61+❤️*0.01）%；绝对数值字段仍以整数基数 + 百分数系数表示。
-       v1.2.0 起数值保留两位有效数字：低于 0.1 的数值改为百分数形式
-       （如 ❤️*0.21%），不再出现被两位小数吞没的 *0.00；
-    2. 尾句依赖描述（使用属性全名，如「己方攻击越高，效果值越高。」）。
-    """
+       百分数字段括号内为纯数字、百分号移到括号外；
+       v1.2.0 起数值保留两位有效数字：低于 0.1 的数值改为百分数形式；
+    2. 尾句依赖描述（使用属性全名，如「己方攻击越高，效果值越高。」）。"""
     tmpl = game.stats
     var_id = str(link.get("variable"))
     var_def = game.attr(var_id)
@@ -609,14 +499,11 @@ def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
     mode = str(link.get("mode", "own"))
     scope_own = str(tmpl.get("scope_own", ""))
     scope_enemy = str(tmpl.get("scope_enemy", ""))
-    field_word = str(tmpl.get("field_" + field, field))
-    fmt = _res_spec(eff, field)[0]
-    eff_raw = float(eff.get(field, 0.0))
+    field_word = str(tmpl.get("field_" + param, param))
+    fmt = _param_spec(node, param, game)[0]
+    eff_raw = float(node.get("params", {}).get(param, 0.0))
     merged_raw = eff_raw * float(link.get("rate", 0.0)) / base
     if fmt == "pct":
-        # v1.1.0：百分数字段括号内为纯数字、百分号移到括号外，
-        # 如「伤害提升至 375.52%（355.61+❤️*0.01）%」；
-        # v1.2.0：低于 0.1 的数值改百分数形式保留有效位（如 ❤️*0.21%）
         base_display = _format_formula_number(eff_raw * 100.0, bracket=True)
         merged = _format_formula_number(merged_raw * 100.0, bracket=True)
     else:
@@ -654,34 +541,93 @@ def _link_formula(eff: dict, link: dict, field: str, game: GameCfg):
     return formula, tail
 
 
-def _natural_text(eff: dict, fighter: Fighter, game: GameCfg,
-                  simple: bool = False, live: bool = False) -> str:
-    """标准化自然语言描述。参数为共鸣估算后的最终值（敌方按基础值估算）：
+def _children_map(pgraph: dict):
+    children = {n["id"]: [] for n in pgraph.get("nodes", ())}
+    for e in pgraph.get("edges", ()):
+        children.setdefault(e["from"], []).append(e["to"])
+    return children
 
-    - 每个共鸣字段的公式括号紧跟该数值（simple 模式隐藏公式）；
-    - live=True 时共鸣数值位替换为「LIVE_MARKER + 槽位序号」（序号对应
-      link_calc 下标），供前端按快照实时填充，与模板中的出现位置无关。
-    """
-    display_eff, _ = estimated_resonanced_eff(fighter, eff, game)
-    key, params = _nat_params(display_eff, game)
-    params = dict(params)
+
+def _natural_text(pgraph: dict, fighter: Fighter, game: GameCfg,
+                  simple: bool = False, live: bool = False) -> str:
+    """标准化自然语言描述（v2.0.0 组合式）：
+
+    - 按触发节点在 nodes 数组中的顺序逐链生成句子，句间以「；」相连；
+    - 每链 = 非概率条件从句 + 触发词 + 概率从句 + 首个效果句（顺拼）+ 其余
+      条件/效果句（逗号相连）；参数为共鸣估算后的最终值（敌方按基础值估算）；
+    - 每个共鸣参数的公式括号紧跟该数值（simple 模式隐藏公式）；
+      live=True 时共鸣数值位替换为「LIVE_MARKER + 槽位序号」（序号对应
+      link_calc 下标），供前端按快照实时填充。"""
+    stats = game.stats
+    display, _coeffs = estimated_resonanced_eff(fighter, pgraph, game)
+    disp_by_id = {node["id"]: disp for node, disp in display}
+    slot_of = {}
+    for idx, (node, link) in enumerate(_walk_links(pgraph)):
+        slot_of[(node["id"], str(link.get("param")))] = idx
+    children = _children_map(pgraph)
     tails = []
-    for slot, link in enumerate(eff.get("links", ())):
-        field = str(link.get("field"))
-        if field not in params:
+    chain_texts = []
+
+    def render(node):
+        """渲染单个节点的从句文本（共鸣公式 / live 占位符注入参数位）。"""
+        disp = disp_by_id.get(node["id"], node.get("params", {}))
+        params = _clause_params(node, disp, game)
+        for link in node.get("links") or ():
+            param = str(link.get("param"))
+            if param not in params:
+                continue
+            formula, tail = _link_formula(node, link, param, game)
+            final = str(params[param])
+            slot = slot_of.get((node["id"], param))
+            if live:
+                params[param] = "%s%d%s" % (LIVE_MARKER, slot,
+                                            "" if simple else formula)
+            elif simple:
+                params[param] = final
+            else:
+                params[param] = final + formula
+            if tail:
+                tails.append(tail)
+        key = _node_clause(node, disp, game)
+        template = stats.get(key)
+        if template is None:
+            if node["kind"] == "op" and node["type"] == "apply_status":
+                sid = str(disp.get("status", ""))
+                sname = game.statuses.get(sid, {}).get("name", sid)
+                return sname
+            return ""
+        return render_template(template, params, game)
+
+    def visit(nid, pre, gate, first, rest):
+        """沿链收集：pre=非概率条件从句，gate=概率从句，first=首效果句，
+        rest=其余从句。返回是否已拼出首效果句。"""
+        node = next(n for n in pgraph["nodes"] if n["id"] == nid)
+        text = render(node)
+        if node["kind"] == "condition":
+            if node["type"] == "chance":
+                gate.append(text)
+            else:
+                (rest if first[0] else pre).append(text)
+        elif node["kind"] == "op" and text:
+            if not first[0]:
+                first[0] = text
+            else:
+                rest.append(text)
+        for cid in children.get(nid, ()):
+            visit(cid, pre, gate, first, rest)
+
+    for node in pgraph.get("nodes", ()):
+        if node["kind"] != "trigger":
             continue
-        formula, tail = _link_formula(eff, link, field, game)
-        final = str(params[field])
-        if live:
-            params[field] = "%s%d%s" % (LIVE_MARKER, slot,
-                                        "" if simple else formula)
-        elif simple:
-            params[field] = final
-        else:
-            params[field] = final + formula
-        if tail:
-            tails.append(tail)
-    text = render_template(game.stats.get(key, key), params, game)
+        pre, gate, first, rest = [], [], [""], []
+        for cid in children.get(node["id"], ()):
+            visit(cid, pre, gate, first, rest)
+        hook_word = str(stats.get("hook_" + node["type"], ""))
+        head = hook_word + "".join(gate) + first[0]
+        parts = [p for p in pre if p] + ([head] if head else []) + [p for p in rest if p]
+        chain_texts.append("，".join(parts))
+
+    text = "；".join(t for t in chain_texts if t)
     for tail in tails:
         text += tail
     if not text.endswith("。") and text:
@@ -689,15 +635,15 @@ def _natural_text(eff: dict, fighter: Fighter, game: GameCfg,
     return text
 
 
-def _link_calc(eff: dict, game: GameCfg) -> list:
+def _link_calc(pgraph: dict, game: GameCfg) -> list:
     """对战实时技能数据（每个共鸣变数一条）：前端按公式
     最终值 = base + 变量式 × coeff（含上下限）用双方快照逐刻重算，
     与引擎 resonance_coeff + apply_resonance 完全一致，按槽位顺序排列。
-    v0.10.0 起 base/coeff/clamp 均为引擎真实值，与快照属性口径一致。"""
+    base/coeff/clamp 均为引擎真实值，与快照属性口径一致。"""
     out = []
-    for link in eff.get("links", ()):
-        field = str(link.get("field"))
-        if field not in eff:
+    for node, link in _walk_links(pgraph):
+        param = str(link.get("param"))
+        if param not in node.get("params", {}):
             continue
         var_id = str(link.get("variable"))
         base = max(1.0, float(game.attr(var_id).base))
@@ -707,10 +653,10 @@ def _link_calc(eff: dict, game: GameCfg) -> list:
             vdef = next((v for v in game.skill_variable_link.variables
                          if v.id == var_id), None)
             against = vdef.diff_against if vdef else var_id
-        fmt, lo, hi = _res_spec(eff, field)
-        value = float(eff.get(field, 0.0))
+        fmt, lo, hi = _param_spec(node, param, game)
+        value = float(node["params"][param])
         out.append({
-            "field": field,
+            "field": param,
             "fmt": fmt,
             "base": value,
             "coeff": value * float(link.get("rate", 0.0)) / base,
@@ -726,19 +672,19 @@ _MOD_TEMPLATES = {"chance": "mod_chance", "value": "mod_value",
                   "damage": "mod_damage", "turns": "mod_turns", "ticks": "mod_ticks"}
 
 
-def _mod_texts(eff: dict, game: GameCfg) -> list:
+def _mod_texts(pgraph: dict, game: GameCfg) -> list:
     """词缀修正的可读文案（显示个性化缩放后的实际值），如「疾风：触发率 +3%」。
     绝对数值字段以整数展示，纯倍率字段以百分数展示。"""
     texts = []
     for kind, key, scale_key in (("prefix", "prefix", "prefix_scale"),
                                  ("suffix", "suffix", "suffix_scale")):
-        mod_id = eff.get(key)
+        mod_id = pgraph.get(key)
         if not mod_id:
             continue
         mdef = game.name_modifier(kind, mod_id)
         if mdef is None:
             continue
-        scale = float(eff.get(scale_key, 1.0))
+        scale = float(pgraph.get(scale_key, 1.0))
         parts = []
         for param, delta in mdef.mod.items():
             template_key = _MOD_TEMPLATES.get(param)
@@ -747,7 +693,7 @@ def _mod_texts(eff: dict, game: GameCfg) -> list:
             scaled = float(delta) * scale
             if param == "chance":
                 magnitude = format_pct(abs(scaled))
-            elif param == "value" and not field_unit(eff, "value"):
+            elif param == "value" and not graph_param_unit(pgraph, "value", game):
                 magnitude = format_pct(abs(scaled))  # 纯倍率字段：增量以百分数展示
             else:
                 magnitude = format_num(abs(scaled))  # 绝对数值字段：真实值整数展示
@@ -759,26 +705,26 @@ def _mod_texts(eff: dict, game: GameCfg) -> list:
     return texts
 
 
-def _mastery_text(eff: dict, sdef, game: GameCfg) -> str:
+def _mastery_text(pgraph: dict, sdef, game: GameCfg) -> str:
     """熟练度文案（v0.9.1）：直接给出该技能实例的最终触发率，
     如「熟练度 63：触发率 36.52%」--永远不超过 100%；
     条件型技能给出效果倍率（×1.21），壁垒类给出免疫触发率。"""
-    mastery = eff.get("mastery")
+    mastery = pgraph.get("mastery")
     if mastery is None:
         return ""
-    if sdef.mastery_on == "immune":
-        rate = min(0.5, max(0.01, float(eff.get("immune", 0.0))))
+    if "immune" in sdef.mastery_on:
+        rate = min(0.5, max(0.01, float(graph_param_value(pgraph, "immune", 0.0))))
         return render_template(game.stats.get("mastery_text_immune", ""),
                                {"v": int(mastery), "rate": format_pct(rate)},
                                game)
-    if sdef.mastery_on == "chance":
-        rate = min(0.95, max(0.02, float(eff.get("chance", 0.0))))
+    if "chance" in sdef.mastery_on:
+        rate = min(0.95, max(0.02, float(graph_param_value(pgraph, "chance", 0.0))))
         return render_template(game.stats.get("mastery_text", ""),
                                {"v": int(mastery), "rate": format_pct(rate)},
                                game)
     return render_template(game.stats.get("mastery_text_value", ""),
                            {"v": int(mastery),
-                            "mult": "%.2f" % float(eff.get("mastery_mult", 1.0))},
+                            "mult": "%.2f" % float(pgraph.get("mastery_mult", 1.0))},
                            game)
 
 
@@ -851,7 +797,7 @@ def compose_title_desc(fighter: Fighter, game: GameCfg) -> str:
 
 
 def fighter_to_api(fighter: Fighter, game: GameCfg) -> dict:
-    """斗士数据的对外表示：数值来自 Fighter/个性化效果，显示名来自同一配置。
+    """斗士数据的对外表示：数值来自 Fighter/个性化技能图，显示名来自同一配置。
     v0.10.0 起属性 value/min/max 均为引擎真实值（不再换算白板单位）。"""
     attrs_api = []
     for a in game.attributes:
@@ -866,18 +812,18 @@ def fighter_to_api(fighter: Fighter, game: GameCfg) -> dict:
             "format": a.format,
         })
     skills_api = []
-    for sdef, eff in personalized_effects(fighter, game):
+    for sdef, pgraph in personalized_effects(fighter, game):
         sep = str(game.stats.get("link_sep", "·"))
         name = sdef.name
-        if eff.get("prefix"):
-            pdef = game.name_modifier("prefix", eff["prefix"])
+        if pgraph.get("prefix"):
+            pdef = game.name_modifier("prefix", pgraph["prefix"])
             if pdef is not None:
                 name = pdef.name + sep + name
-        if eff.get("suffix"):
-            smod = game.name_modifier("suffix", eff["suffix"])
+        if pgraph.get("suffix"):
+            smod = game.name_modifier("suffix", pgraph["suffix"])
             if smod is not None:
                 name = name + sep + smod.name
-        links = eff.get("links", ())
+        links = [link for _node, link in _walk_links(pgraph)]
         for link in links:
             marker = game.stats.get("link_" + str(link.get("variable")))
             if marker:
@@ -886,7 +832,7 @@ def fighter_to_api(fighter: Fighter, game: GameCfg) -> dict:
         for link in links:
             vdef = next((a for a in game.attributes if a.id == link.get("variable")), None)
             link_api.append({
-                "field": str(link.get("field")),
+                "field": str(link.get("param")),
                 "variable": link.get("variable"),
                 "name": vdef.name if vdef else str(link.get("variable")),
                 "mode": link.get("mode", "own"),
@@ -896,18 +842,18 @@ def fighter_to_api(fighter: Fighter, game: GameCfg) -> dict:
             "id": sdef.id,
             "name": name,
             "flavor": sdef.description,
-            "text": _natural_text(eff, fighter, game),
-            "text_simple": _natural_text(eff, fighter, game, simple=True),
-            "modifiers": _mod_texts(eff, game),
-            "mastery": int(eff.get("mastery", 0)),
-            "mastery_text": _mastery_text(eff, sdef, game),
+            "text": _natural_text(pgraph, fighter, game),
+            "text_simple": _natural_text(pgraph, fighter, game, simple=True),
+            "modifiers": _mod_texts(pgraph, game),
+            "mastery": int(pgraph.get("mastery", 0)),
+            "mastery_text": _mastery_text(pgraph, sdef, game),
             "link": link_api if link_api else None,
         }
         if links:
-            skill_entry["live_text"] = _natural_text(eff, fighter, game, live=True)
+            skill_entry["live_text"] = _natural_text(pgraph, fighter, game, live=True)
             skill_entry["live_text_simple"] = _natural_text(
-                eff, fighter, game, simple=True, live=True)
-            skill_entry["link_calc"] = _link_calc(eff, game)
+                pgraph, fighter, game, simple=True, live=True)
+            skill_entry["link_calc"] = _link_calc(pgraph, game)
         skills_api.append(skill_entry)
     title_bonus = _title_bonus_api(fighter, game)
     return {

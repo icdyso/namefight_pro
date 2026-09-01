@@ -17,8 +17,10 @@ python server.py --port 8000 --host 0.0.0.0
 
 浏览器打开后：输入红蓝双方名字 → 「生成属性」查看斗士卡牌 → 「开始对战」观看逐条回放的战斗实录。
 
-另有**创意工坊**（`/workshop.html`，独立管理页）：可视化编辑全部配置 JSON，
-草稿可「试运行」打一场（不落盘），「保存并生效」经校验后写盘并热重载，无需重启。
+另有**可视化编辑器**（`/editor.html`，v2.0.0，独立管理页）：**技能以节点画布
+编辑**（触发→条件→效果连线，参数表单由引擎 schema 自描述驱动），其余配置分页签
+结构化编辑；草稿可「试运行」打一场（不落盘），「保存并生效」经校验后写盘并
+热重载，无需重启。
 
 还有**真战力试炼**页（`/power.html`，v1.3.0）：输入名字后与一万个固定编号敌人
 （名字 "1"~"10000"，数量见 `battle.json` 的 `power_check.enemies`）各打一场
@@ -66,17 +68,23 @@ python server.py --port 8000 --host 0.0.0.0
 | 想改什么 | 改哪里 |
 | --- | --- |
 | 属性区间、战力权重、显示名/emoji | `config/game/attributes.json` |
-| 技能效果、名称、风味描述 | `config/game/skills.json` → `skills`（效果类型须为引擎已支持的 25 种） |
-| 技能参数标签模板 / 共鸣句式 | `config/game/skills.json` → `stats` |
+| 技能逻辑（节点图）、名称、风味描述 | `config/game/skills.json` → `skills`（触发/条件/效果原语类型须在 `namefight/effects.py` 注册表中） |
+| 技能描述词表（hook/cond/op/lbl）/ 共鸣句式 | `config/game/skills.json` → `stats` |
 | 技能个性化扰动区间 | `config/game/skills.json` → `md5_variance` |
-| 变量共鸣（概率/变量池/倍率/可共鸣类型） | `config/game/skills.json` → `variable_link` |
+| 变量共鸣（概率/变量池/倍率/槽位上限） | `config/game/skills.json` → `variable_link` |
 | 称号结构、字段池（名称/描述/加成） | `config/game/titles.json` |
 | 战斗常数（暴击倍率、浮动、免伤常数、行动槽阈值、tick 上限…） | `config/game/battle.json` |
-| 战报模板 / buff 文案 / 回放停顿时长 | `config/game/battle.json` → `battle_log` / `buffs` / `playback` |
+| 状态定义（行为种类/参数/文案） | `config/game/battle.json` → `statuses` |
+| 战报模板 / 回放停顿时长 | `config/game/battle.json` → `battle_log` / `playback` |
 | 界面文案 | `config/game/ui.json` |
 | 名字归一化规则、版本号 | `config/game/system.json` |
 
-- **新增技能**：在 `game/skills.json` 的 `skills` 加条目（含 `name`/`description` 与效果参数）+ `stats` 补 `nat_<type>` 模板；
+- **新增技能**（v2.0.0 起无需改引擎）：在 `game/skills.json` 的 `skills` 加条目，
+  `effect` 为节点图（触发钩子 → 条件 → 效果原语，类型与参数规格见
+  `GET /api/schema` 或 `namefight/effects.py`）+ `stats` 补 `op_<原语>` 等
+  词表模板；推荐直接在可视化编辑器的节点画布上搭；
+- **新增状态**：`game/battle.json` 的 `statuses` 加条目（kind 须为已注册的
+  行为种类之一，如再添一种毒或叠层无需改引擎）；
 - **新增称号字段**：`game/titles.json` 对应池加条目（含 `name`/`desc`/`bonus`）；
 - 修改配置后重启进程生效。**注意：修改数值配置会改变同名对战结果**，请按 `AGENTS.md` 的更新流程记录。
 
@@ -105,7 +113,11 @@ python tools/balance_check.py [名字数] [对局数]
 | `GET /api/health` | 健康检查与版本 |
 | `GET /api/text` | 前端 UI 全部文案 + 回放配置 |
 | `GET /api/fighter?name=X` | 斗士完整数据（含 MD5 摘要） |
+| `GET /api/schema` | 引擎自描述（v2.0.0）：钩子/条件/效果原语参数规格/状态种类注册表，编辑器表单驱动源 |
 | `POST /api/battle` | `{"a":"...","b":"..."}` → 双方数据 + 逐条战报（含富文本段与快照）+ 胜负 |
+| `POST /api/battle/fast` | `{a,b,runs}` → 极速批量结果（无战报渲染） |
+| `POST /api/power` | 真战力测量（v1.3.0，与一万个固定编号敌人各打一场） |
+| `GET /api/config` / `POST /api/config/preview` / `POST /api/config/save` | 可视化编辑器：读配置 / 草稿试运行 / 校验保存热重载 |
 
 ## 致敬
 
@@ -117,7 +129,7 @@ python tools/balance_check.py [名字数] [对局数]
   并在帮助页自述是十年前 Flash 游戏《MD5大作战》的续作；
 - 本项目在相同理念之上用纯 Python + 原生 JS 重新实现，并在规则体系上做了大量
   扩展：技能共鸣变数、技能个性化（熟练度/词缀/扰动）、组合式称号与加成、
-  逐刻战斗模型与富文本战报回放、创意工坊可视化调参等。
+  逐刻战斗模型与富文本战报回放、组件化技能引擎与节点画布可视化编辑器等。
 
 感谢原作者带来的灵感，也感谢《MD5大作战》开创的最早的「名字决定战斗」体验。
 
