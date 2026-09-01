@@ -668,6 +668,14 @@
 
     // 2) loop 容器（按已渲染后代节点的真实包围盒自适应）
     computeStructBoxes(g);
+    if (!g.nodes.length) {
+      // 空图提示：纯被动修饰 / 持有器类状态本就没有效果图，说明去处
+      world.appendChild(h("div", { class: "ed-canvas-empty" }, [
+        h("p", null, "该状态暂无效果图——纯被动修饰（mods）与持有器类状态本就不需要图。"),
+        h("p", { class: "sub" }, "点击左侧调色板组件即可开始搭建（如 每 interval 刻 → 体力变动）；" +
+          "被动数值修饰在右侧 mods 表编辑。"),
+      ]));
+    }
     g.nodes.forEach(function (node) {
       if (node.kind !== "struct") return;
       var box = structBox[node.id];
@@ -1057,11 +1065,12 @@
   /* ---------- 属性面板（技能 / 状态 / 节点） ---------- */
 
   function renderInspectorOnly() {
-    /* 仅重绘属性面板（选择变化时，避免整页重绘打断画布交互）。 */
+    /* 仅重绘属性面板（选择变化时，避免整页重绘打断画布交互；
+     * 过滤空槽位，防止单个 null 中断整块表单渲染）。 */
     var host = NF.qs("#ed-inspector");
     if (!host) return;
     clear(host);
-    renderInspector().forEach(function (el) { host.appendChild(el); });
+    renderInspector().forEach(function (el) { if (el) host.appendChild(el); });
   }
 
   function renderInspector() {
@@ -1268,7 +1277,7 @@
       h("h3", null, nodeLabel(node) + "（" + (KIND_CN[node.kind] || node.kind) + " / " + node.type + "）"),
       h("p", { class: "ed-hint" }, "节点 id: " + node.id + " · 入边 " + inbound.length +
         " · 出边 " + outbound.length + (psHint(node))),
-      statusJump,
+      statusJump || "",
       h("div", { class: "ed-form" }, forms),
       h("div", { style: { marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" } }, [
         h("button", { class: "ed-btn warn", onclick: function () { deleteNode(node.id); } }, "删除节点"),
@@ -1721,7 +1730,7 @@
           function () { return String(def.lethal.value); }, function (v) { def.lethal.value = v.trim(); })),
         field("逐次衰减 decay" + ref(), textInput(
           function () { return String(def.lethal.decay); }, function (v) { def.lethal.decay = v.trim(); })),
-      ]) : null,
+      ]) : "",
       h("h4", { style: { margin: "12px 0 4px" } }, "数值参数规格（params）"),
       h("p", { class: "ed-hint" },
         "JSON：fmt = num 数值 / pct 百分数 / turns 刻数；default 施加未覆盖时的默认值；" +
