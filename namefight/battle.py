@@ -95,6 +95,7 @@ class _Combatant:
     live_prev: set = field(default_factory=set)  # 上一刻在场状态 id 集合（gain/lose 检测）
     damage_dealt: float = 0.0
     steal_rec: float = 0.0   # 本次行动的吸血累计（血契转化基准，行动末清零）
+    opponent_ref: object = None   # 对手反向引用（_hurt 的 on_lethal 钩子上下文用）
 
 
 @dataclass
@@ -151,9 +152,9 @@ def _live_value(c: _Combatant, vid: str, game: GameCfg, tick: int = 0) -> float:
 
 
 def _hurt(c: _Combatant, amount: float, ev, rng, game: GameCfg, tick: int = 0) -> None:
-    """扣除生命（先按施加顺序消耗护盾类修饰的余量池）；若致命且任一含
-    lethal 块的状态（不屈类）仍可触发，按施加顺序取第一个判定：成功则
-    回复一定百分比最大生命，且概率指数衰减。"""
+    """扣除生命（先按施加顺序消耗护盾类修饰的余量池）。若生命将降至
+    0 以下，触发受击者的 on_lethal 技能钩子（不屈等的原生实现位：钩子内
+    可治疗救援）；钩子结束后生命仍 <= 0 才真正死亡（由调用方判定）。"""
     if amount > 0:
         absorbed = 0.0
         for sid, st, sdef in statuses.each_live(c, game, tick):
@@ -174,22 +175,15 @@ def _hurt(c: _Combatant, amount: float, ev, rng, game: GameCfg, tick: int = 0) -
         if amount <= 0:
             return
     c.hp -= amount
-    for sid, st, sdef in statuses.each_live(c, game, tick):
-        lethal = sdef.get("lethal")
-        if not lethal or c.hp > 0:
-            continue
-        chance = float(statuses.resolve(lethal.get("chance", 0.0), st["params"]))
-        if chance <= 0:
-            continue
-        if rng.next_float() < chance:
-            heal_pct = float(statuses.resolve(lethal.get("value", 0.0),
-                                              st["params"]))
-            decay = float(statuses.resolve(lethal.get("decay", 1.0), st["params"]))
-            c.hp = _r(c.max_hp * heal_pct)
-            st["params"]["chance"] = chance * decay   # 概率乘算衰减
-            c.markers.add("will_used:" + sid)
-            ev("will_trigger", {"a": c.name, "heal": format_num(c.hp)})
-        return
+    if c.hp <= 0:
+        # 致命伤害拦截钩子：技能图可在此救援（治疗 / 置护盾）；
+        # 结束后 hp 仍 <= 0 则维持濒死（胜负判定随后进行）
+        opponent = getattr(c, "opponent_ref", None)
+        if opponent is None:
+            return
+        ctx = _Ctx(game, rng, ev, tick, c, opponent, [c, opponent])
+        ctx.hook_name = "on_lethal"
+        _run_hook(c.skills, "on_lethal", ctx)
 
 
 def _make_combatant(f: Fighter, pos: int, game: GameCfg) -> _Combatant:
@@ -1204,10 +1198,11 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
     if out_pct > 0:
         ac["mult"] *= 1.0 + out_pct
 
-    # ---- 闪避判定（落空时乘胜类清零；必中跳过） ----
+    # ---- 闪避判定（落空时触发 on_attack_miss 钩子——乘胜清零等的原生实现位） ----
     if not ac["must_hit"] and rng.next_float() < enemy.dodge / 100.0:
         ev("attack_miss", {"a": actor.name, "b": enemy.name})
-        statuses.clear_stacks(actor, game, tick)
+        mctx = _Ctx(game, rng, ev, tick, actor, enemy, [actor, enemy])
+        _run_hook(actor.skills, "on_attack_miss", mctx)
         return
 
     crit = rng.next_float() < min(bc.crit_cap / 100.0,
@@ -1272,6 +1267,8 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
         events.append(entry)
 
     first, second = internal[0], internal[1]
+    first.opponent_ref = second          # 反向引用（_hurt 的 on_lethal 钩子用）
+    second.opponent_ref = first
     ev("battle_start", {"a": first.name, "b": second.name})
 
     # ---- 战斗开始钩子（不屈意志注册） ----

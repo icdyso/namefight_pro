@@ -1708,29 +1708,10 @@
           checkInput(function () { return !!def.dispellable; }, function (v) { def.dispellable = v; }),
           "可被净化驱散",
         ]),
-        h("label", { class: "ed-check" }, [
-          checkInput(function () { return !!def.reset_on_miss; }, function (v) {
-            if (v) def.reset_on_miss = true; else delete def.reset_on_miss;
-          }),
-          "攻击落空时清零（乘胜类）",
-        ]),
-        h("label", { class: "ed-check" }, [
-          checkInput(function () { return !!def.lethal; }, function (v) {
-            if (v) def.lethal = { chance: "$chance", value: "$value", decay: "$decay" };
-            else delete def.lethal;
-            renderInspectorOnly();
-          }),
-          "不屈类（致命伤害拦截重生）",
-        ]),
       ]),
-      def.lethal ? h("div", { class: "ed-form" }, [
-        field("触发概率 chance" + ref(), textInput(
-          function () { return String(def.lethal.chance); }, function (v) { def.lethal.chance = v.trim(); })),
-        field("回复比例 value" + ref(), textInput(
-          function () { return String(def.lethal.value); }, function (v) { def.lethal.value = v.trim(); })),
-        field("逐次衰减 decay" + ref(), textInput(
-          function () { return String(def.lethal.decay); }, function (v) { def.lethal.decay = v.trim(); })),
-      ]) : "",
+      h("p", { class: "ed-hint" },
+        "落空清零与不屈拦截已原生化：分别在技能图挂 on_attack_miss / on_lethal 钩子链" +
+        "（不屈衰减用表达式 pow(底数, $self.mark:键) + marker 计数）。"),
       h("h4", { style: { margin: "12px 0 4px" } }, "数值参数规格（params）"),
       h("p", { class: "ed-hint" },
         "JSON：fmt = num 数值 / pct 百分数 / turns 刻数；default 施加未覆盖时的默认值；" +

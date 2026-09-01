@@ -210,8 +210,8 @@ def _apply_modifier(nodes: list, mod: dict) -> None:
     for node in nodes:
         params = node.get("params", {})
         for key, delta in mod.items():
-            if key not in params:
-                continue
+            if key not in params or isinstance(params[key], str):
+                continue          # 表达式参数不被词缀改写
             if key == "chance":
                 params["chance"] = min(0.95, max(0.02, float(params["chance"]) + float(delta)))
             elif key in ("turns", "ticks", "cap"):
@@ -259,8 +259,8 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
         for param in sdef.mastery_on:
             for node in nodes:
                 params = node["params"]
-                if param not in params:
-                    continue
+                if param not in params or isinstance(params[param], str):
+                    continue          # 表达式参数不参与数值缩放（精确控制）
                 scaled = float(params[param]) * mult
                 if param == "chance":
                     params["chance"] = min(0.95, max(0.02, scaled))
@@ -271,7 +271,7 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
         for key in ("value", "damage"):
             for node in nodes:
                 params = node["params"]
-                if key in params:
+                if key in params and not isinstance(params[key], str):
                     factor = rng.next_triangular(var.value_lo, var.value_hi)
                     params[key] = float(params[key]) * factor
         if name_mod.prefix_chance > 0 and rng.next_float() < name_mod.prefix_chance:
@@ -307,6 +307,8 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                     break
                 if param not in node["params"]:
                     continue
+                if isinstance(node["params"][param], str):
+                    continue          # 表达式参数不参与共鸣（作者精确控制）
                 if rng.next_float() >= link_cfg.chance:
                     continue
                 mode = rng.pick_weighted(link_cfg.mode_weights)
@@ -820,7 +822,14 @@ def _mastery_text(pgraph: dict, sdef, game: GameCfg) -> str:
                                {"v": int(mastery), "rate": format_pct(rate)},
                                game)
     if "chance" in sdef.mastery_on:
-        rate = min(0.95, max(0.02, float(graph_param_value(pgraph, "chance", 0.0))))
+        raw = graph_param_value(pgraph, "chance", 0.0)
+        if isinstance(raw, str):
+            # chance 为表达式（如不屈的衰减概率）：不走触发率口径，按倍率展示
+            return render_template(game.stats.get("mastery_text_value", ""),
+                                   {"v": int(mastery),
+                                    "mult": "%.2f" % float(pgraph.get("mastery_mult", 1.0))},
+                                   game)
+        rate = min(0.95, max(0.02, float(raw)))
         return render_template(game.stats.get("mastery_text", ""),
                                {"v": int(mastery), "rate": format_pct(rate)},
                                game)

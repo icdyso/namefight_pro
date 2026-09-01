@@ -330,11 +330,12 @@ class FighterDeterminism(unittest.TestCase):
                 self.assertTrue(entry["mastery_text"])
                 if "chance" in sdef.mastery_on:
                     chance = _graph_param(pg, "chance")
-                    if chance is not None:
+                    if chance is not None and not isinstance(chance, str):
                         self.assertGreaterEqual(chance, 0.02)
                         self.assertLessEqual(chance, 0.95)
-                if "value" not in sdef.mastery_on:
-                    # 触发率类文案为最终概率（含百分号），不再是 >100% 的倍率
+                raw_chance = _graph_param(pg, "chance")
+                if "chance" in sdef.mastery_on and not isinstance(raw_chance, str):
+                    # 触发率类文案为最终概率（含百分号）；表达式 chance 走倍率口径
                     self.assertIn("%", entry["mastery_text"])
                     self.assertNotIn("×", entry["mastery_text"])
                 seen += 1
@@ -367,7 +368,8 @@ class FighterDeterminism(unittest.TestCase):
         for s in GAME.skills:
             for node in s.effect.get("nodes", ()):
                 params = node.get("params", {})
-                if "chance" in params:
+                if "chance" in params and not isinstance(params["chance"], str):
+                    # 表达式 chance（如不屈衰减概率）不参与该数值契约
                     self.assertGreater(params["chance"], 0)
                     self.assertLessEqual(params["chance"], 0.95)
                     if s.id in chances:
@@ -382,7 +384,7 @@ class FighterDeterminism(unittest.TestCase):
             f = derive_fighter("cap%02d" % i, GAME)
             for sdef, pg in personalized_effects(f, GAME):
                 chance = _graph_param(pg, "chance")
-                if chance is not None:
+                if chance is not None and not isinstance(chance, str):
                     self.assertLessEqual(chance, 0.95)
 
     def test_effect_link_appears_in_battles(self):

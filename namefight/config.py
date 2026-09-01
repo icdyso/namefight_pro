@@ -366,12 +366,6 @@ def build_game_config(data: dict) -> GameCfg:
                 and interval[1:] not in declared:
             raise ConfigError("状态 %s 的 interval 引用了未声明参数: %s"
                               % (sid, interval))
-        lethal = entry.get("lethal") or {}
-        for key in ("chance", "value", "decay"):
-            v = lethal.get(key)
-            if isinstance(v, str) and v.startswith("$") and v[1:] not in declared:
-                raise ConfigError("状态 %s 的 lethal.%s 引用了未声明参数: %s"
-                                  % (sid, key, v))
         # 状态效果图编译（钩子为 STATUS_HOOKS）
         if entry.get("effects"):
             for node in (entry["effects"].get("nodes") or []):

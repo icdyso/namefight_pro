@@ -382,7 +382,6 @@
       "dispellable": true,
       "stack": "count",
       "expire": "none",
-      "reset_on_miss": true,
       "event": "streak_up",
       "params": {
         "value": {
@@ -647,44 +646,12 @@
     },
     "will": {
       "name": "不屈意志",
-      "detail": "致命伤 {chance} 概率触发：回复 {value} 最大生命（逐次衰减 {decay}）",
-      "desc": "死亡拦截为引擎级原语，不可驱散。",
+      "detail": "不屈意志：致命伤害时有概率重生（逐次减半）",
+      "desc": "纯展示状态；判定与衰减由技能图（on_lethal + 表达式 + 标记计数）实现。",
       "dispellable": false,
       "stack": "refresh",
       "expire": "none",
-      "params": {
-        "chance": {
-          "fmt": "pct",
-          "clamp": [
-            0.01,
-            0.95
-          ],
-          "default": 0.52
-        },
-        "value": {
-          "fmt": "pct",
-          "clamp": [
-            0.05,
-            0.9
-          ],
-          "link": true,
-          "default": 0.28
-        },
-        "decay": {
-          "fmt": "pct",
-          "clamp": [
-            0.05,
-            0.9
-          ],
-          "link": true,
-          "default": 0.5
-        }
-      },
-      "lethal": {
-        "chance": "$chance",
-        "value": "$value",
-        "decay": "$decay"
-      },
+      "params": {},
       "mods": [],
       "effects": {
         "nodes": [],

@@ -69,6 +69,7 @@ FUNCTIONS = {
     "max": "max(a, b) 较大值",
     "abs": "abs(x) 绝对值",
     "floor": "floor(x) 向下取整",
+    "pow": "pow(x, y) 幂（不屈概率衰减 0.5^次数 等）",
 }
 
 
@@ -231,7 +232,9 @@ def _var(path):
 
 
 _FUNCS = {
-    "min": min, "max": max, "abs": abs, "floor": lambda x: float(int(x // 1)),
+    "min": min, "max": max, "abs": abs,
+    "floor": lambda x: float(int(x // 1)),
+    "pow": lambda x, y: float(x) ** float(y),
 }
 
 

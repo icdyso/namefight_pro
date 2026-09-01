@@ -286,7 +286,7 @@
     "field_gain": "属性增量",
     "field_cut": "减伤比例",
     "st_charge": "改为蓄力：下次攻击必定命中、暴击率 +{crit}，伤害提升至 {value}",
-    "st_will": "受到致命伤害时有 {chance} 概率重生并回复 {value} 最大生命；每次触发后概率衰减为前次的 {decay}",
+    "st_will": "注册不屈：致命伤害时按衰减概率重生",
     "st_tempo": "速度 +{value}、攻击 +{atk}（永久叠加）",
     "st_last_stand": "攻击 +{value} 且速度 +{spd}，持续到战斗结束",
     "st_pact_steal": "本次攻击附带 {value} 吸血，行动结束后按吸血量转化为攻击",
@@ -389,7 +389,14 @@
     "dsc_marker": "图内标记：置位/清除/翻转/叠层/减层，可带存在刻数",
     "dsc_status_ctl": "操控状态：延长/缩短/叠层/强制清除",
     "dsc_loop": "循环：chain 衰减续链 / count 固定次数",
-    "field_count": "标记层数门槛"
+    "field_count": "标记层数门槛",
+    "hook_on_attack_miss": "攻击落空时",
+    "hook_on_lethal": "受到致命伤害时",
+    "lbl_on_attack_miss": "攻击落空",
+    "lbl_on_lethal": "致命伤害",
+    "dsc_on_attack_miss": "自己攻击落空时（乘胜清零等的原生实现位）",
+    "dsc_on_lethal": "生命将降至 0 以下时（钩子内可救援；不屈的原生实现位）",
+    "st_will_used": "不屈意志已触发"
   },
   "skills": [
     {
@@ -1325,12 +1332,7 @@
           {
             "id": "n0",
             "kind": "trigger",
-            "type": "battle_start",
-            "params": {},
-            "pos": [
-              40,
-              50
-            ]
+            "type": "battle_start"
           },
           {
             "id": "n1",
@@ -1338,14 +1340,71 @@
             "type": "apply_status",
             "params": {
               "status": "will",
-              "target": "self",
-              "chance": 0.52,
-              "value": 0.28,
-              "decay": 0.5
+              "target": "self"
             },
             "pos": [
               300,
-              50
+              40
+            ]
+          },
+          {
+            "id": "l0",
+            "kind": "trigger",
+            "type": "on_lethal"
+          },
+          {
+            "id": "l1",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": "0.52 * pow(0.5, $self.mark:不屈)"
+            },
+            "pos": [
+              300,
+              160
+            ]
+          },
+          {
+            "id": "l2",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "heal",
+              "basis": "maxhp",
+              "ratio": 0.28,
+              "event": "will_trigger"
+            },
+            "pos": [
+              560,
+              160
+            ]
+          },
+          {
+            "id": "l3",
+            "kind": "op",
+            "type": "marker",
+            "params": {
+              "key": "不屈",
+              "action": "add",
+              "value": 1
+            },
+            "pos": [
+              820,
+              160
+            ]
+          },
+          {
+            "id": "l4",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "will_used",
+              "target": "self"
+            },
+            "pos": [
+              1080,
+              160
             ]
           }
         ],
@@ -1353,6 +1412,22 @@
           {
             "from": "n0",
             "to": "n1"
+          },
+          {
+            "from": "l0",
+            "to": "l1"
+          },
+          {
+            "from": "l1",
+            "to": "l2"
+          },
+          {
+            "from": "l2",
+            "to": "l3"
+          },
+          {
+            "from": "l3",
+            "to": "l4"
           }
         ]
       }
@@ -1630,6 +1705,30 @@
               560,
               50
             ]
+          },
+          {
+            "id": "m1",
+            "kind": "trigger",
+            "type": "on_attack_miss",
+            "pos": [
+              40,
+              220
+            ]
+          },
+          {
+            "id": "m2",
+            "kind": "op",
+            "type": "status_ctl",
+            "params": {
+              "status": "momentum",
+              "target": "self",
+              "op": "stacks",
+              "value": -99
+            },
+            "pos": [
+              300,
+              220
+            ]
           }
         ],
         "edges": [
@@ -1640,6 +1739,10 @@
           {
             "from": "n1",
             "to": "n2"
+          },
+          {
+            "from": "m1",
+            "to": "m2"
           }
         ]
       }

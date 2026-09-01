@@ -232,10 +232,12 @@ flowchart LR
 共 **25** 个技能。**v3.0.0 起技能逻辑为节点图**（`effect = {nodes, edges}`），
 节点四类，构成「判断 / 分支 / 循环」完备的规则集：
 
-- **trigger 触发**（11 种钩子）：battle_start / action_interrupt / action_start /
+- **trigger 触发**（13 种钩子）：battle_start / action_interrupt / action_start /
   before_attack / on_attack / on_defend / on_hit_landed / on_hit_taken /
   after_action / **on_status_gain（获得状态时——等待状态的事件驱动形态）** /
-  **on_status_lose（失去状态时——施加点即时 + 到期每刻检测）**；
+  **on_status_lose（失去状态时——施加点即时 + 到期每刻检测）** /
+  **on_attack_miss（攻击落空时——落空清零的原生实现位）** /
+  **on_lethal（生命将降至 0 以下时——钩子内可救援，不屈的原生实现位）**；
 - **condition 条件**（9 种，出边带 gate: pass/fail 构成**分支**）：chance /
   **compare（比较值与值**：左右各取 14 种值源——自身/敌方 × 生命比例、攻、
   防、速、暴击、闪避、行动槽比例，右值可 const 固定值；运算 < ≤ > ≥）/
@@ -496,8 +498,9 @@ dmg    = 取整一次( max( 100, raw × (1 − 免伤率) ) )
   不屈已触发标记）；状态定义于 `battle.json` 的 `statuses` 节，每个自带：
   - 策略字段：`stack`（refresh 刷新 / layers 逐层独立到期 / count 计数至上限）、
     `expire`（ticks 按刻 / actions 按行动数 / none 无期限）、`interval`
-    （on_status_tick 间隔，可 `$参数`）、`reset_on_miss`（落空清零——乘胜）、
-    `lethal`（致命伤害按衰减概率重生——不屈，引擎级死亡拦截）；
+    （on_status_tick 间隔，可 `$参数`）——v3.3.0 起不再有任何行为性特例字段
+    （落空清零 = on_attack_miss 钩子链；不屈 = on_lethal 钩子 +
+    pow 表达式概率衰减 + marker 计数，均为技能图原子组合）；
   - `params`：数值参数规格（施加时以 apply_status 参数覆盖默认值，
     个性化 / 共鸣即作用于此；持续参数统一命名 `turns`）；
   - `mods`：被动修饰表（10 种 kind：dmg_out_pct 增伤 / dmg_in_cut_pct 减伤

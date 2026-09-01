@@ -184,11 +184,7 @@ def status_display(c, tick: int, guard_cap: float, game) -> list:
                 params["value"] = format_pct(min(guard_cap, v * per))
             else:
                 params["mult"] = format_pct(1.0 + v * per)
-        # 不屈类已触发过展示为 <id>_used（与 v1.x 口径一致；引擎置 marker）
-        display_id = sid
-        if sdef.get("lethal") and ("will_used:" + sid) in c.markers:
-            display_id = sid + "_used"
-        out.append({"id": display_id, "params": params})
+        out.append({"id": sid, "params": params})
     return out
 
 
@@ -215,16 +211,6 @@ def dispel_all(combatants, tick: int, game, on_lose=None) -> int:
             if on_lose is not None:
                 on_lose(c, sid)
     return count
-
-
-def clear_stacks(c, game, tick: int):
-    """清零全部带 reset_on_miss 标记的状态（攻击落空：乘胜清零）。"""
-    for sid, st, sdef in each_live(c, game, tick):
-        if not sdef.get("reset_on_miss"):
-            continue
-        st["stacks"] = 0
-        st["expires"] = 0
-        st["layers"] = []
 
 
 def status_param_specs(status_entry: dict):

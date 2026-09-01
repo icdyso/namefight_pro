@@ -46,6 +46,8 @@ HOOKS = (
     "after_action",       # 行动结束后（大器晚成成长）
     "on_status_gain",     # 自己获得某在场状态时（等待状态/标记——事件驱动）
     "on_status_lose",     # 自己失去某在场状态时（到期 / 驱散 / 清除）
+    "on_attack_miss",     # 自己攻击落空时（乘胜清零等的原生实现位）
+    "on_lethal",          # 自己生命将降至 0 以下时（钩子内可救援；结束仍 <=0 才死亡）
 )
 
 # ---- 状态钩子（状态定义 effects 图的触发时机；文案键 hook_<name>） ----
@@ -219,7 +221,8 @@ OPS = dict([
     _op("hp_mod",
         ("on_attack", "action_start", "action_interrupt",
          "on_status_apply", "on_status_tick", "on_owner_action",
-         "on_owner_attack_hit", "on_status_gain", "on_status_lose"),
+         "on_owner_attack_hit", "on_status_gain", "on_status_lose",
+         "on_lethal"),
         [P("target", "enum", options=("self", "enemy")),
          P("type", "enum", options=("heal", "loss")),
          P("basis", "enum", options=("flat", "maxhp", "curhp", "applier_atk", "dealt")),
@@ -265,7 +268,7 @@ OPS = dict([
     _op("marker", ALL_HOOKS,
         [P("key", "text"),
          P("action", "enum", options=("set", "clear", "toggle", "add", "sub")),
-         _num("value", (1.0, 20.0), link=True, required=False),
+         _num("value", (-20.0, 20.0), required=False),
          _turns("turns", (1, 40), link=True, required=False)],
         logged=False),
     # status_ctl：状态操控原子（对己方/敌方某状态运行时做延长 / 缩短 /
