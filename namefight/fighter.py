@@ -485,7 +485,7 @@ def _display_param(node: dict, params: dict, key: str, game: GameCfg) -> str:
 
 def _node_clause(node: dict, disp: dict, game: GameCfg):
     """单个节点的描述（条件从句 / 原子句 / 结构句）模板键。
-    hp_mod 按 type 参数取治疗 / 流失两个模板。"""
+    hp_mod 按 type（治疗 / 流失）与基准（固定量 / 最大生命比例）取模板。"""
     if node["kind"] == "condition":
         return "cond_" + node["type"]
     if node["kind"] == "op" and node["type"] == "apply_status":
@@ -493,9 +493,11 @@ def _node_clause(node: dict, disp: dict, game: GameCfg):
     if node["kind"] == "condition" and node["type"] == "has_marker" \
             and ("op" in disp or "count" in disp):
         return "cond_has_marker_count"           # 标记层数比较形态
-    if node["kind"] == "op" and node["type"] == "hp_mod" \
-            and str(disp.get("type")) == "loss":
-        return "op_hp_mod_loss"
+    if node["kind"] == "op" and node["type"] == "hp_mod":
+        if str(disp.get("type")) == "loss":
+            return "op_hp_mod_loss"
+        if "ratio" in disp and str(disp.get("basis")) == "maxhp":
+            return "op_hp_mod_pct"             # 比例治疗（不屈重生）
     if node["kind"] == "op" and node["type"] == "strike" \
             and str(disp.get("basis", "none")) != "none":
         return "op_strike_basis"               # 附加伤害型打击（记仇释放 / 反弹）
@@ -539,12 +541,13 @@ def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
         out["basis_word"] = str(game.stats.get(
             "lbl_basis_" + str(disp.get("basis")), disp.get("basis")))
     if node.get("kind") == "condition" and node.get("type") == "compare":
-        # compare 条件：值源与运算替换为显示词（「自身生命比例 ≤ 33%」）
+        # compare 条件：值源与运算替换为显示词（「自身生命比例 ≤ 33%」；
+        # 右值取常数时直接展示数值本身，不加「常数」前缀）
         stats_words = game.stats
         for key in ("left", "right"):
             src = str(disp.get(key, ""))
             word = stats_words.get("cmp_" + src, src)
-            out[key] = (word + " " + out.get("value", "")) \
+            out[key] = out.get("value", "") \
                 if src == "const" and key == "right" else word
         out["op"] = str(stats_words.get("cmp_" + str(disp.get("op", "ge")),
                                         disp.get("op", "ge")))
@@ -563,6 +566,13 @@ def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
         out["action_word"] = str(game.stats.get(
             "lbl_marker_" + str(disp.get("action", "set")),
             disp.get("action", "set")))
+    if node.get("kind") == "op" and node.get("type") == "status_ctl":
+        # 状态操控：目标词 + 操作词（延长 / 缩短 / 叠层 / 强制清除）
+        out["target_word"] = str(game.stats.get(
+            "cmp_target_" + str(disp.get("target", "self")),
+            disp.get("target", "self")))
+        out["op_word"] = str(game.stats.get(
+            "ctl_" + str(disp.get("op", "stacks")), disp.get("op", "stacks")))
     return out
 
 

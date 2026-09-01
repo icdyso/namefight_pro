@@ -109,6 +109,10 @@
   background: rgba(127, 150, 255, .06); border: 1px solid var(--line, #2a2f3a);
   color: inherit; border-radius: 6px; padding: 6px 8px; font-size: 13px;
   font-family: inherit; width: 100%; box-sizing: border-box; }
+/* 下拉框：Windows 原生弹层为系统白底且继承 select 文字色（浅色）——
+   必须给 select / option 显式实底 + 浅色文字，否则白底白字不可读 */
+.ed-field select, .ed-table select { background: var(--bg-1, #131832); color: var(--text, #e8ecff); }
+.ed-field select option, .ed-table select option { background: var(--bg-1, #131832); color: var(--text, #e8ecff); }
 .ed-field textarea, .ed-table textarea { resize: vertical; }
 .ed-check { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 0; }
 .ed-btn { background: rgba(79, 124, 255, .14); color: var(--blue, #8fa8ff);

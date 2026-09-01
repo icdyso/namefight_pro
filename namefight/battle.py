@@ -731,9 +731,10 @@ def _op_hit_mod(ctx, proc):
 
 def _op_taken_mod(ctx, proc):
     """taken_mod：减免本次所受伤害的一部分（被减免量计入 absorbed，
-    供反甲的 taken_absorbed 基准反弹）。"""
+    供反甲的 taken_absorbed 基准反弹）；减免比例受 reflect_split_cap
+    上限钳制（battle.json 常数，v1 契约）。"""
     bc = ctx.game.battle
-    ratio = float(proc.get("cut", 0.0))
+    ratio = min(float(proc.get("cut", 0.0)), float(bc.reflect_split_cap))
     if ctx.dc["dmg"] > 0 and ratio > 0:
         avoided = ctx.dc["dmg"] * ratio
         ctx.dc["absorbed"] += avoided
@@ -860,6 +861,18 @@ def _op_apply_status(ctx, proc):
     return None
 
 
+def _stack_cap(st: dict, sdef: dict) -> int:
+    """count 模式层数上限：施加参数 > 定义顶层 max_stacks；
+    -1 / 缺省 = 不限，0 = 禁用（状态无法施加），1 = 单层不叠，>1 = 封顶。"""
+    v = st["params"].get("max_stacks", sdef.get("max_stacks"))
+    if v is None:
+        return -1
+    try:
+        return max(-1, int(v))
+    except (TypeError, ValueError):
+        return -1
+
+
 def _apply_status_now(ctx: _Ctx, sid: str, proc: dict, target):
     """立即施加状态：合并参数（定义默认 <- 施加覆盖 <- 旧值保持）、按
     stack 策略叠层、按 expire 策略持续，随后输出定义声明的施加事件。"""
@@ -879,9 +892,12 @@ def _apply_status_now(ctx: _Ctx, sid: str, proc: dict, target):
     if stack == "layers":
         st["layers"].append(ctx.tick + turns)
     elif stack == "count":
-        cap = int(st["params"].get("max_stacks", sdef.get("max_stacks", 0)) or 0)
-        if st["stacks"] >= cap > 0:
-            return                      # 已满层：不再叠加也不刷新（乘胜到顶）
+        cap = _stack_cap(st, sdef)
+        if cap == 0:
+            target.st.pop(sid, None)     # 禁用：状态无法施加（不留运行时容器）
+            return
+        if cap > 0 and st["stacks"] >= cap:
+            return                  # 已满层：不再叠加也不刷新（乘胜到顶）
         st["stacks"] += 1
         st["expires"] = ctx.tick + turns
     else:                               # refresh：刷新持续与数值
@@ -1038,9 +1054,9 @@ def _op_status_ctl(ctx, proc):
         else:
             st["expires"] -= max(0, int(value))
     elif op == "stacks":
-        cap = int(st["params"].get("max_stacks", sdef.get("max_stacks", 0)) or 0)
+        cap = _stack_cap(st, sdef)
         st["stacks"] = max(0, st["stacks"] + int(value))
-        if cap > 0:
+        if cap >= 0:
             st["stacks"] = min(cap, st["stacks"])
     elif op == "clear":
         st["expires"] = 0

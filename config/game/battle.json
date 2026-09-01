@@ -54,7 +54,7 @@
     "charge_release": "{a} 蓄力释放！×{mult} 巨击（暴击 +{crit}，必定命中）",
     "thunder_hit": "{a} 的雷罚第 {hit} 道劈落：{b} 受到 {damage} 点真实伤害",
     "sever_proc": "{a} 斩断 {b} 的行动并反击！",
-    "will_trigger": "　　💛 {a} 不屈意志触发：生命回复至 {heal}！下次触发概率衰减。",
+    "will_trigger": "　　💛 {a} 不屈意志触发：生命回复 {heal} 点！下次触发概率减半。",
     "purify_cleanse": "✧ {a} 净化全场：驱散 {count} 种效果，回复 {heal} 点生命。",
     "pact_proc": "{a} 献祭 {cost} 点生命：本次攻击附带吸血 {value}",
     "pact_gain": "{a} 血契转化：攻击 +{value}",
@@ -646,7 +646,7 @@
     },
     "will": {
       "name": "不屈意志",
-      "detail": "不屈意志：致命伤害时有概率重生（逐次减半）",
+      "detail": "不屈意志：致命伤害时有概率重生（逐次减半，永不归零）",
       "desc": "纯展示状态；判定与衰减由技能图（on_lethal + 表达式 + 标记计数）实现。",
       "dispellable": false,
       "stack": "refresh",
@@ -661,7 +661,7 @@
     "will_used": {
       "name": "不屈意志（已触发）",
       "detail": "已触发过重生",
-      "desc": "不屈意志的已耗尽展示。",
+      "desc": "不屈意志的已触发展示（重生概率逐次减半，永不归零）。",
       "dispellable": false,
       "stack": "refresh",
       "expire": "none",

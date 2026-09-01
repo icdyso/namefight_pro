@@ -8,10 +8,8 @@
     expire    "ticks"（默认，按 turns 参数持续若干刻）/ "actions"（按拥有者
               行动数衰减：嗜血）/ "none"（无期限：成长 / 姿态 / 不屈 / 蓄力）；
     interval  on_status_tick 的触发间隔（刻；数字或 "$参数名"；缺省无 tick）；
-    max_stacks  count 模式的层数上限（可被施加参数覆盖；0 = 不限）；
-    reset_on_miss  拥有者攻击落空时清零（乘胜）；
-    lethal    {chance, value, decay}（值可 "$参数名"）：致命伤害按衰减概率
-              重生——不屈（死亡拦截是引擎级原语，不可图化为原子）；
+    max_stacks  count 模式的层数上限（可被施加参数覆盖；-1 / 缺省 = 不限，
+              0 = 禁用（状态无法施加），1 = 单层不叠）；
     event / death_event  施加时 / 状态结算致死时的战报模板 id；
 - params   数值参数规格（fmt / clamp / link / unit / default）——施加时可被
            覆盖，个性化（熟练度 / 扰动 / 共鸣）即作用于施加节点的参数；
@@ -147,7 +145,7 @@ def sum_mod(c, game, tick: int, kind: str) -> float:
 
 def status_display(c, tick: int, guard_cap: float, game) -> list:
     """把在场状态渲染为快照 buff 条目 [{id, params}, ...]。
-    展示 id = 状态定义 id（含 lethal 块的状态已触发过时展示为 <id>_used）。
+    展示 id = 状态定义 id（不屈已触发等衍生展示由技能图施加独立状态）。
     params 供 detail 模板渲染：turns 剩余 / stacks 层数 / value 等施加参数
     （按 fmt 格式化）/ mult 乘区类修饰的最终倍率。"""
     from .text import format_num, format_pct

@@ -1702,13 +1702,21 @@
             else if (v.charAt(0) === "$") def.interval = v;
             else if (!isNaN(parseInt(v, 10))) def.interval = parseInt(v, 10);
           })),
-        field("层数上限 max_stacks", numInput(function () { return def.max_stacks || 0; },
-                                               function (v) { def.max_stacks = v; }, "1")),
+        field("层数上限 max_stacks（仅 count）", textInput(
+          function () { return def.max_stacks === undefined ? "" : String(def.max_stacks); },
+          function (v) {
+            v = v.trim();
+            if (!v) delete def.max_stacks;
+            else if (!isNaN(parseInt(v, 10))) def.max_stacks = parseInt(v, 10);
+          })),
         h("label", { class: "ed-check" }, [
           checkInput(function () { return !!def.dispellable; }, function (v) { def.dispellable = v; }),
           "可被净化驱散",
         ]),
       ]),
+      h("p", { class: "ed-hint" },
+        "max_stacks：-1 / 留空 = 不限，0 = 禁用（状态无法施加），1 = 可施加但不叠层，>1 = 封顶层数；仅 count 叠层策略生效。" +
+        "若 params 里也声明了 max_stacks（如 破甲 / 乘胜），运行时以施加参数（含默认值）为准，此处顶层值不生效。"),
       h("p", { class: "ed-hint" },
         "落空清零与不屈拦截已原生化：分别在技能图挂 on_attack_miss / on_lethal 钩子链" +
         "（不屈衰减用表达式 pow(底数, $self.mark:键) + marker 计数）。"),

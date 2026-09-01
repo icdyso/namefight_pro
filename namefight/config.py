@@ -349,7 +349,7 @@ def build_game_config(data: dict) -> GameCfg:
             raise ValueError("apply_status 引用了未定义的状态: %s" % sid)
         return status_specs[sid]
 
-    # mods 被动修饰与 lethal 块的 "$参数" 引用必须指向已声明的参数
+    # mods 被动修饰与 interval 的 "$参数" 引用必须指向已声明的参数
     for sid, entry in statuses_data.items():
         declared = set(status_specs[sid])
         for m in entry.get("mods") or ():

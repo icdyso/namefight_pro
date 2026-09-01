@@ -2,7 +2,7 @@
 
 > 本文档是游戏的**完整规则说明书**：流程图、全部细则与数值、每个 JSON 配置文件的
 > 意义与调整指南。按 AGENTS.md 第 3.6 条，**每次更新涉及规则/数值/配置结构时必须
-> 同步更新本文档**。当前版本：**v3.0.0**（与 `config/game/system.json` 的 `version` 一致）。
+> 同步更新本文档**。当前版本：**v3.3.1**（与 `config/game/system.json` 的 `version` 一致）。
 
 ---
 
@@ -523,9 +523,11 @@ dmg    = 取整一次( max( 100, raw × (1 − 免伤率) ) )
   不屈意志、血契已转化攻击；每驱散一种为净化者回复 `per` 点
   （**v2.0.0 修复：以牙还牙记录恢复可驱散**，各状态可驱散性由 kind 的
   `dispellable` 声明）；
-- 不屈意志：每次致命伤独立掷骰（当前概率），成功则生命回到 `value × 最大生命`
-  （取整），概率**乘算衰减 ×decay（0.5，v1.1.0）**--50% -> 25% -> 12.5% …，
-  可多次触发直至概率衰减殆尽；
+- 不屈意志：每次致命伤独立掷骰（当前概率），成功则**回复** `value × 最大生命`
+  点生命（不溢出），概率**乘算衰减 ×decay（0.5，v1.1.0）**--52% -> 26% -> 13% …，
+  **逐次减半、永不归零**（`0.52 × 0.5^N` 浮点恒正；v3.3.0 起为 on_lethal
+  钩子 + 表达式 `pow(0.5, $self.mark:不屈)` + marker 计数的图实现），
+  可多次触发；
 - **大器晚成**：每次行动后掷骰，触发则速度 +`value` 且**攻击 +`atk`
   （v1.1.0 新增）**，无上限持续叠加；渐入佳境标记显示累计速度与攻击增量；
 - 蓄力属于标记（可被净化驱散）；以牙还牙记录在**命中落地**时释放清空；
@@ -545,7 +547,7 @@ dmg    = 取整一次( max( 100, raw × (1 − 免伤率) ) )
 | min_damage | 100 |
 | crit_cap / dodge_cap | 100 / 80（闪避上限 v1.1.0 用户调参 60 -> 80） |
 | guard_reduction_cap | 0.75（锻痕叠层总减伤上限，v2.0.0 提为配置） |
-| reflect_split_cap | 0.9（反甲反弹比例上限，v2.0.0 提为配置） |
+| reflect_split_cap | 0.9（反甲减免/分流比例上限，v2.0.0 提为配置；v3.3.1 起引擎实际生效） |
 | seed_separator | `-`（v1.1.0 用户调参，原 `\u001f`） |
 | playback.message_delay_ms | 320（前端每条战报的停顿时长，可配置） |
 | playback.action_pause_every | 5（普通模式每 N 次角色行动插入一次较长停顿） |
@@ -667,11 +669,13 @@ v1.2.1 起仅 `prefix_core`，结构固定为前缀+主体）
 
 ### battle.json -- 战斗常数 + 状态定义 + 战报文案 + 回放配置
 战斗常数见第 6 节表；`statuses`（**v3.0.0**：状态定义 = 策略字段（stack /
-expire / interval / max_stacks / reset_on_miss / lethal）+ `params` 数值参数
+expire / interval / max_stacks——**-1/缺省 = 不限，0 = 禁用（无法施加），
+1 = 单层不叠，>1 = 封顶**；施加参数优先于定义顶层值）+ `params` 数值参数
 规格（fmt/clamp/link/unit/default）+ `mods` 被动修饰表（kind 须为
-`namefight/statuses.py` 注册的 8 种之一，value 可 `$参数` 引用）+
+`namefight/statuses.py` 注册的 10 种之一，value 可 `$参数` 引用）+
 `effects` 效果图（钩子为 5 个状态钩子，图中 `$参数` 引用施加参数）+
-`event`/`death_event` 战报模板 id + name/detail/desc 文案）；`battle_log`
+`event`/`death_event` 战报模板 id + name/detail/desc 文案；v3.3.0 起
+无任何行为性特例字段）；`battle_log`
 （全部战报模板，含普通攻击宣告 `attack_start`，覆盖引擎全部模板 id 与
 原子 event 参数引用，有测试）、`playback`（`message_delay_ms` 每条停顿 >=16；
 `action_pause_every` >=1 与 `action_pause_ms` >=0 控制普通模式的行动间
