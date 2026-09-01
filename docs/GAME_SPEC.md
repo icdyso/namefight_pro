@@ -232,12 +232,15 @@ flowchart LR
 共 **25** 个技能。**v3.0.0 起技能逻辑为节点图**（`effect = {nodes, edges}`），
 节点四类，构成「判断 / 分支 / 循环」完备的规则集：
 
-- **trigger 触发**（9 种钩子）：battle_start / action_interrupt / action_start /
-  before_attack / on_attack / on_defend / on_hit_landed / on_hit_taken / after_action；
+- **trigger 触发**（11 种钩子）：battle_start / action_interrupt / action_start /
+  before_attack / on_attack / on_defend / on_hit_landed / on_hit_taken /
+  after_action / **on_status_gain（获得状态时——等待状态的事件驱动形态）** /
+  **on_status_lose（失去状态时——施加点即时 + 到期每刻检测）**；
 - **condition 条件**（9 种，出边带 gate: pass/fail 构成**分支**）：chance /
   **compare（比较值与值**：左右各取 14 种值源——自身/敌方 × 生命比例、攻、
   防、速、暴击、闪避、行动槽比例，右值可 const 固定值；运算 < ≤ > ≥）/
-  stacks_cmp（层数比较）/ has_status / no_status / has_marker / no_marker /
+  stacks_cmp（层数比较）/ has_status / no_status /
+  has_marker（可 op+count 层数比较）/ no_marker /
   once_per_battle / last_crit；
 - **op 原子**（13 个最小原子）：strike（攻击：目标/倍率/真伤/穿透/暴击加成/
   必中/追加·替换·附加/基准/lifesteal 吸血）、hit_mod（修饰本次攻击）、
@@ -245,9 +248,18 @@ flowchart LR
   hp_mod（体力治疗/流失，基准含 curhp 当前生命）、gauge_mod（行动槽）、
   apply_status（施加状态，唯一状态入口）、cleanse（驱散）、
   record（记录所受伤害/吸血量）、skip_action（吞行动）、
-  marker（标记设置/清除）、status_ctl（状态操控：延长/缩短/叠层/清除）；
+  marker（标记：置位/清除/翻转/叠层/减层 + 可选存在刻数）、
+  status_ctl（状态操控：延长/缩短/叠层/清除）；
 - **struct 结构**（loop **循环**：mode=chain 第 1 轮必定执行、第 i 轮按
-  decay^(i-1) 续链；mode=count 固定 max 轮不掷骰）。
+  decay^(i-1) 续链；mode=count 固定 max 轮不掷骰）；
+- **变量表与表达式**（v3.2.0）：全部数值参数可写表达式（数字、$变量、
+  + - * / ( )、min/max/abs/floor）；变量 = 自身/敌方（生命、攻防速、暴击、
+  闪避、行动槽、累计伤害、标记层数 `$self.mark:<键>`、状态层数 / 累计 /
+  记录）+ 上下文（本次伤害 / 被减免量 / 循环轮次 / 当前刻）+ 状态图施加
+  参数（$value 等）；解析器为手写递归下降（无 eval），配置加载时做语法
+  校验；**共鸣槽位在派生期直接生成为表达式**（基数×(1+率×变量式/基准)），
+  运行期与手写表达式同一条求值路径，links 仅作显示元数据（公式 / live
+  占位 / link_calc 协议不变）。
 
 执行顺序 = 技能派生顺序 × 触发节点数组顺序 × 边数组顺序（pass 组先于
 fail 组）× loop 轮次（改变即 breaking）。

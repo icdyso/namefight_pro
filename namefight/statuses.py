@@ -192,9 +192,10 @@ def status_display(c, tick: int, guard_cap: float, game) -> list:
     return out
 
 
-def dispel_all(combatants, tick: int, game) -> int:
+def dispel_all(combatants, tick: int, game, on_lose=None) -> int:
     """驱散双方所有可驱散状态（按定义的 dispellable 标记；成长 / 已转化 /
-    姿态 / 不屈类不可驱散）。返回驱散的状态种数（供净化回复计算）。"""
+    姿态 / 不屈类不可驱散）。返回驱散的状态种数（供净化回复计算）。
+    on_lose(c, sid)：每驱散一条时的回调（battle 用于触发 on_status_lose）。"""
     count = 0
     for c in combatants:
         if c.hp <= 0:
@@ -211,6 +212,8 @@ def dispel_all(combatants, tick: int, game) -> int:
             st["actions"] = 0
             st["records"] = []
             count += 1
+            if on_lose is not None:
+                on_lose(c, sid)
     return count
 
 

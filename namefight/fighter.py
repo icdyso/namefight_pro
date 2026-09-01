@@ -63,6 +63,8 @@ STATS_KEYS_USED = frozenset(
     | {"cmp_" + op for op in effects.CMP_OPS}
     | {"cmp_" + src for src in effects.CMP_SOURCES}
     | {"cmp_const"}
+    # marker 原子的操作词（数据驱动于 stats）
+    | {"lbl_marker_" + a for a in ("set", "clear", "toggle", "add", "sub")}
 )
 
 # 对战实时技能数据的占位符：live 文本中每个共鸣数值位 = 该标记 + 槽位序号，
@@ -286,7 +288,11 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
             if mdef is not None:
                 scaled = {k: v * float(graph.get(scale_key, 1.0)) for k, v in mdef.mod.items()}
                 _apply_modifier(nodes, scaled)
-        # 共鸣槽位：候选 = 各节点 link=True 的参数（节点数组顺序 × 声明顺序）
+        # 共鸣槽位：候选 = 各节点 link=True 的参数（节点数组顺序 × 声明顺序）。
+        # v3.2.0 起共鸣与表达式统一：槽位直接生成表达式字符串写入参数
+        # （基数 × (1 + 率 × 变量式 / 基准)），运行期与手写表达式走同一条
+        # 求值路径；links 保留为显示元数据（公式括号 / 尾句 / live 占位 /
+        # link_calc 前端实时重算），base 记录共鸣前的个性化基数。
         slots = 0
         for node in nodes:
             if slots >= link_cfg.max_slots:
@@ -306,8 +312,19 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                 mode = rng.pick_weighted(link_cfg.mode_weights)
                 vdef = rng.pick_weighted((v, v.weight) for v in link_cfg.variables)
                 rate = rng.next_triangular(vdef.rate_lo, vdef.rate_hi)
+                base_value = max(1.0, float(game.attr(vdef.id).base))
+                var_expr = {"own": "$self." + vdef.id,
+                            "enemy": "$enemy." + vdef.id}.get(mode)
+                if var_expr is None:          # difference / sum：与参照属性运算
+                    against = vdef.diff_against
+                    var_expr = "($self.%s %s $enemy.%s)" % (
+                        vdef.id, "-" if mode == "difference" else "+", against)
+                base = float(node["params"][param])
+                node["params"][param] = \
+                    "(%.17g) * (1 + (%.17g) * ((%s) / %.17g))" % (
+                        base, rate, var_expr, base_value)
                 links.append({"param": param, "variable": vdef.id,
-                              "rate": rate, "mode": mode})
+                              "rate": rate, "mode": mode, "base": base})
                 slots += 1
             if links:
                 node["links"] = links
@@ -433,6 +450,9 @@ def estimated_resonanced_eff(fighter: Fighter, pgraph: dict, game: GameCfg):
             param = str(link.get("param"))
             if param not in disp:
                 continue
+            # v3.2.0：共鸣参数在派生期已写为表达式，此处按显示口径还原
+            # 基数（link.base）再做共鸣估算
+            disp[param] = float(link.get("base", disp[param]))
             coeff = resonance_coeff(own_get, base_get, link, game)
             disp = apply_resonance(disp, coeff, param, _param_spec(node, param, game))
             coeffs.append((link, coeff))
@@ -468,6 +488,9 @@ def _node_clause(node: dict, disp: dict, game: GameCfg):
         return "cond_" + node["type"]
     if node["kind"] == "op" and node["type"] == "apply_status":
         return "st_" + str(disp.get("status", ""))
+    if node["kind"] == "condition" and node["type"] == "has_marker" \
+            and ("op" in disp or "count" in disp):
+        return "cond_has_marker_count"           # 标记层数比较形态
     if node["kind"] == "op" and node["type"] == "hp_mod" \
             and str(disp.get("type")) == "loss":
         return "op_hp_mod_loss"
@@ -534,6 +557,10 @@ def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
         tmpl = str(game.stats.get("cmp_mode_" + mode, ""))
         decay = out.get("decay", format_field(disp.get("decay", 0.9), "pct"))
         out["mode_word"] = tmpl.replace("{decay}", str(decay))
+    if node.get("kind") == "op" and node.get("type") == "marker":
+        out["action_word"] = str(game.stats.get(
+            "lbl_marker_" + str(disp.get("action", "set")),
+            disp.get("action", "set")))
     return out
 
 
@@ -557,7 +584,7 @@ def _link_formula(node: dict, link: dict, param: str, game: GameCfg):
     scope_enemy = str(tmpl.get("scope_enemy", ""))
     field_word = str(tmpl.get("field_" + param, param))
     fmt = _param_spec(node, param, game)[0]
-    eff_raw = float(node.get("params", {}).get(param, 0.0))
+    eff_raw = float(link.get("base", node.get("params", {}).get(param, 0.0)))
     merged_raw = eff_raw * float(link.get("rate", 0.0)) / base
     if fmt == "pct":
         base_display = _format_formula_number(eff_raw * 100.0, bracket=True)
@@ -729,7 +756,7 @@ def _link_calc(pgraph: dict, game: GameCfg) -> list:
                          if v.id == var_id), None)
             against = vdef.diff_against if vdef else var_id
         fmt, lo, hi = _param_spec(node, param, game)
-        value = float(node["params"][param])
+        value = float(link.get("base", node.get("params", {}).get(param, 0.0)))
         out.append({
             "field": param,
             "fmt": fmt,

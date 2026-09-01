@@ -154,9 +154,14 @@ class FighterDeterminism(unittest.TestCase):
             for sdef, pg in personalized_effects(f, GAME):
                 snapshot = []
                 for node in pg["nodes"]:
+                    base_of = {str(l.get("param")): l.get("base")
+                               for l in node.get("links") or ()}
                     for key in ("chance", "value", "damage"):
                         if key in node["params"]:
-                            snapshot.append(round(float(node["params"][key]), 6))
+                            v = node["params"][key]
+                            if isinstance(v, str):          # 共鸣生成的表达式
+                                v = base_of.get(key, 0.0)
+                            snapshot.append(round(float(v), 6))
                 values[sdef.id].add(tuple(snapshot))
         varied = [sid for sid, vs in values.items() if len(vs) > 1]
         self.assertTrue(varied, "技能个性化参数应随名字（MD5）变化")
@@ -447,11 +452,17 @@ class FighterDeterminism(unittest.TestCase):
                 param = lc["field"]
                 self.assertEqual(param, link["param"])
                 spec = _param_spec(node, param, GAME)
-                # 引擎路径：按当前值计算系数并修正参数
-                coeff = resonance_coeff(lambda vid: _live_value(actor, vid, GAME),
-                                        lambda vid: _live_value(enemy, vid, GAME),
-                                        link, GAME)
-                proc = apply_resonance(node["params"], coeff, param, spec)
+                # 引擎路径（v3.2.0 共鸣=表达式）：求值生成的表达式并按规格钳制
+                from namefight import expr as _expr
+                from namefight.battle import _clamp_res
+                value0 = _expr.eval_expr(node["params"][param], {
+                    "self." + vid: _live_value(actor, vid, GAME) for vid in
+                    ("hp", "atk", "def", "spd", "crit", "dodge")
+                } | {
+                    "enemy." + vid: _live_value(enemy, vid, GAME) for vid in
+                    ("hp", "atk", "def", "spd", "crit", "dodge")
+                })
+                proc = {param: _clamp_res(value0, spec)}
                 # 前端路径（同一真实值口径）：base + 变量式 × coeff（+ 上下限）
                 if lc["mode"] in ("difference", "sum"):
                     own = _live_value(actor, lc["variable"], GAME)

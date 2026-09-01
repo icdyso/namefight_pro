@@ -101,13 +101,17 @@ namefight_pro/
 
 ## 6. 设计备忘（现行规则速查）
 
-- **技能图模型（v3.1.0 最小原子）**：技能逻辑 = 节点图 `{nodes, edges}`，四类
-  节点——trigger（9 钩子）、condition（9 种，出边 gate: pass/fail 构成**分支**；
-  compare 为通用「比较值与值」，14 种值源 × 4 种运算）、
-  op（**13 个最小原子**：strike / hit_mod / taken_mod / grant_immune / stat_mod /
-  hp_mod / gauge_mod / apply_status / cleanse / record / skip_action /
-  marker / status_ctl）、struct（**loop 循环**：chain 衰减续链 / count 固定
-  次数）；注册表与参数规格在 `namefight/effects.py`，执行顺序 = 技能派生顺序 ×
+- **技能图模型（v3.2.0 最小原子 + 表达式）**：技能逻辑 = 节点图
+  `{nodes, edges}`，四类节点——trigger（11 钩子，含 on_status_gain/lose
+  等待事件）、condition（9 种，出边 gate: pass/fail 构成**分支**；compare
+  为通用「比较值与值」，14 种值源 × 4 种运算）、op（**13 个最小原子**：
+  strike / hit_mod / taken_mod / grant_immune / stat_mod / hp_mod /
+  gauge_mod / apply_status / cleanse / record / skip_action / marker /
+  status_ctl）、struct（**loop 循环**：chain 衰减续链 / count 固定次数）；
+  **全部数值参数可写 $ 表达式**（变量表见 `namefight/expr.py`：自身/敌方
+  属性与标记层数/状态派生量 + 上下文，手写递归下降求值器）；**共鸣槽位在
+  派生期生成为表达式**（运行期统一求值，links 为显示元数据）。注册表与
+  参数规格在 `namefight/effects.py`，执行顺序 = 技能派生顺序 ×
   触发节点数组顺序 × 边数组顺序（pass 组先于 fail 组）× loop 轮次
   （**改变即 breaking**）。
 - **状态系统（v3.0.0）**：运行时容器 `_Combatant.st`（通用字段 params/stacks/

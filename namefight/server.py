@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import effects, statuses
+from . import effects, expr, statuses
 from .battle import battle_to_api, run_battle
 from .config import (CONFIG_FILES, ConfigError, load_game_config,
                      load_game_config_from_data, save_game_config)
@@ -242,6 +242,9 @@ def make_handler(state: AppState):
                 "structs": structs,
                 "mod_kinds": dict(statuses.MOD_KINDS),
                 "statuses": status_defs,
+                "variables": [{"group": g, "items": list(items)}
+                              for g, items in expr.VARIABLE_GROUPS],
+                "functions": dict(expr.FUNCTIONS),
             }
 
         def _api_battle(self, payload):

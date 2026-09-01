@@ -41,9 +41,11 @@ HOOKS = (
     "before_attack",      # 攻击前判定（背水一战）
     "on_attack",          # 攻击链（倍率修饰 / 蓄力 / 雷罚 / 施加状态）
     "on_defend",          # 受击防御链（壁垒减伤 / 反甲反弹 / 锻痕叠层）
-    "on_hit_landed",      # 自己命中对方后（乘胜叠层 / 疾影推进 / 记仇释放）
+    "on_hit_landed",      # 自己命中对方后（乘胜叠层）
     "on_hit_taken",       # 自己被命中后（怨念积攒 / 记仇记录）
-    "after_action",       # 行动结束后（血契转化 / 成长）
+    "after_action",       # 行动结束后（大器晚成成长）
+    "on_status_gain",     # 自己获得某在场状态时（等待状态/标记——事件驱动）
+    "on_status_lose",     # 自己失去某在场状态时（到期 / 驱散 / 清除）
 )
 
 # ---- 状态钩子（状态定义 effects 图的触发时机；文案键 hook_<name>） ----
@@ -136,8 +138,10 @@ CONDITIONS = dict([
                          _num("value", (0.0, None), link=True, required=False)]),
     _cond("has_status", [_st()]),                          # 自身在场某状态
     _cond("no_status", [_st()]),                           # 自身不在场某状态
-    _cond("has_marker", [P("key", "text")]),               # 自身带有某标记
-    _cond("no_marker", [P("key", "text")]),                # 自身没有某标记
+    _cond("has_marker", [P("key", "text"),                 # 自身带有某标记
+                         P("op", "enum", options=CMP_OPS, required=False),
+                         _num("count", (0.0, None), link=True, required=False)]),  # 层数比较
+    _cond("no_marker", [P("key", "text")]),                # 自身没有某标记（层数 0）
     _cond("once_per_battle", [P("key", "text")]),          # 每场一次（真执行才占位）
     _cond("last_crit", []),                                # 本次命中为暴击
 ])
@@ -162,7 +166,8 @@ OPS = dict([
     # lifesteal 本次攻击按造成伤害的比例吸血。
     _op("strike",
         ("on_attack", "action_interrupt", "on_defend", "on_hit_landed",
-         "on_owner_action_consume", "on_status_apply"),
+         "on_owner_action_consume", "on_status_apply",
+         "on_status_gain", "on_status_lose"),
         [P("target", "enum", options=("enemy", "self")),
          _pct("mult", (0.05, 8.0), link=True, required=False),
          P("basis", "enum", options=("none", "recorded_sum", "taken_absorbed"),
@@ -196,7 +201,8 @@ OPS = dict([
     # 时增量 = value × 本次记录的吸血总量——血契转化）。
     _op("stat_mod",
         ("after_action", "on_status_apply", "on_status_tick",
-         "on_owner_action", "on_owner_attack_hit"),
+         "on_owner_action", "on_owner_attack_hit",
+         "on_status_gain", "on_status_lose"),
         [P("target", "enum", options=("self", "enemy")),
          P("stat", "enum", options=("hp", "atk", "def", "spd", "crit", "dodge")),
          _num("gain", (0.0, None), link=True, required=False),
@@ -213,7 +219,7 @@ OPS = dict([
     _op("hp_mod",
         ("on_attack", "action_start", "action_interrupt",
          "on_status_apply", "on_status_tick", "on_owner_action",
-         "on_owner_attack_hit"),
+         "on_owner_attack_hit", "on_status_gain", "on_status_lose"),
         [P("target", "enum", options=("self", "enemy")),
          P("type", "enum", options=("heal", "loss")),
          P("basis", "enum", options=("flat", "maxhp", "curhp", "applier_atk", "dealt")),
@@ -225,7 +231,8 @@ OPS = dict([
         logged=True),
     # gauge_mod：行动槽推进 / 倒退（×100 量纲，速度 ~1000）。
     _op("gauge_mod",
-        ("on_attack", "action_interrupt", "on_hit_landed", "on_owner_attack_hit"),
+        ("on_attack", "action_interrupt", "on_hit_landed", "on_owner_attack_hit",
+         "on_status_gain", "on_status_lose"),
         [P("target", "enum", options=("self", "enemy")),
          _num("gain", (-20000.0, 20000.0), link=True, unit="gauge")],
         logged=True),
@@ -252,10 +259,14 @@ OPS = dict([
          P("what", "enum", options=("damage_taken", "lifesteal")),
          _turns("cap", (1, 20), link=True, required=False)],
         logged=False),
-    # marker：标记设置 / 清除（图内自由可用的布尔状态；配合 has_marker /
-    # no_marker 条件可搭一次性、开关、锁定类逻辑）。
+    # marker：标记操作（图内自由可用的私有计数开关，免预定义）。
+    # action=set/clear 置位/清除；toggle 翻转；add/sub 层数 ±value（减到 0
+    # 自动清除）；turns 可选——标记存在刻数，到期整条消失（timer）。
     _op("marker", ALL_HOOKS,
-        [P("key", "text"), P("action", "enum", options=("set", "clear"))],
+        [P("key", "text"),
+         P("action", "enum", options=("set", "clear", "toggle", "add", "sub")),
+         _num("value", (1.0, 20.0), link=True, required=False),
+         _turns("turns", (1, 40), link=True, required=False)],
         logged=False),
     # status_ctl：状态操控原子（对己方/敌方某状态运行时做延长 / 缩短 /
     # 叠层增减 / 强制清除；value 为刻数或层数增量）。
@@ -327,12 +338,20 @@ def linkable_params(kind: str, type_: str, status_params=None):
 
 def validate_param_value(node, ps, value):
     """按参数规格校验基配置数值；非法抛 ValueError（node 仅用于报错上下文）。
-    数值参数允许 "$参数名" 字符串（状态效果图引用施加参数，运行时解析；
-    引用合法性由 config.py 按状态定义的声明参数校验）。"""
+    数值参数允许表达式字符串（含 $，如 "$enemy.mark:连击 * 2"）——这里只做
+    语法校验（expr.expr_check），运行期由 battle._proc_params 统一求值；
+    状态效果图的 "$参数名" 引用同属表达式语法（变量平表含施加参数）。"""
+    from . import expr as _expr
     key = ps.key
     if ps.kind in ("float", "pct", "int", "turns"):
-        if isinstance(value, str) and value.startswith("$"):
-            return value
+        if isinstance(value, str):
+            if "$" in value:
+                try:
+                    _expr.expr_check(value)
+                except _expr.ExprError as e:
+                    raise ValueError("参数 %s 的表达式非法: %s" % (key, e)) from e
+                return value
+            raise ValueError("参数 %s 必须是数字或 $ 表达式" % key)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError("参数 %s 必须是数字" % key)
         if ps.kind in ("int", "turns") and float(value) != int(value):

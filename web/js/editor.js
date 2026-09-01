@@ -36,7 +36,42 @@
     busy: false,                 // 请求进行中（按钮防抖）
     status: null,                // 底部状态栏文案 {text, err}
     preview: null,               // 最近一次试运行的战报（渲染在底部预览区）
+    undoStack: [],               // 撤消快照栈（结构操作前入栈，至多 50 步）
+    redoStack: [],               // 重做快照栈
+    palQ: "",                    // 调色板搜索词
+    listQ: "",                   // 列表搜索词（技能 / 状态）
+    textQ: "",                   // 文案页搜索词
+    quickQ: "",                  // 顶栏快速搜索词
   };
+
+  /* ---------- 撤消 / 重做（快照式：结构操作前入栈） ---------- */
+
+  function pushHistory() {
+    /* 变更前快照工作副本（深拷贝入撤消栈；重做栈清空）。 */
+    state.undoStack.push(JSON.stringify(state.files));
+    if (state.undoStack.length > 50) state.undoStack.shift();
+    state.redoStack = [];
+  }
+
+  function undo() {
+    if (!state.undoStack.length) { setStatus("没有可撤消的操作", true); return; }
+    state.redoStack.push(JSON.stringify(state.files));
+    state.files = JSON.parse(state.undoStack.pop());
+    state.selNode = null;
+    state.selEdge = null;
+    setStatus("已撤消");
+    renderAll();
+  }
+
+  function redo() {
+    if (!state.redoStack.length) { setStatus("没有可重做的操作", true); return; }
+    state.undoStack.push(JSON.stringify(state.files));
+    state.files = JSON.parse(state.redoStack.pop());
+    state.selNode = null;
+    state.selEdge = null;
+    setStatus("已重做");
+    renderAll();
+  }
 
   /* ---------- 基础工具 ---------- */
 
@@ -189,18 +224,79 @@
   }
 
   function renderHeader() {
-    /* 顶栏：返回主页 / 真战力入口 + 标题与版本 + JSON 模式切换。 */
+    /* 顶栏：返回主页 / 真战力入口 + 标题与版本 + 快速搜索 + 撤消重做 +
+     * JSON 模式切换。 */
+    var search = h("input", { type: "text", id: "ed-quick", placeholder: "搜索技能 / 状态 / 文案键（Ctrl+K）" });
+    search.value = state.quickQ;
+    search.addEventListener("input", function () {
+      state.quickQ = search.value;
+      var drop = NF.qs("#ed-quick-drop");
+      if (drop) renderQuickResults(drop);
+    });
+    search.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { state.quickQ = ""; renderAll(); }
+      ev.stopPropagation();           // 不触发全局 Delete 等快捷键
+    });
     return h("header", { class: "ed-header" }, [
       h("a", { class: "ed-btn", href: "/" }, "返回对战"),
       h("a", { class: "ed-btn", href: "/power.html" }, "真战力"),
       h("span", { class: "ed-title" }, "可视化编辑器"),
       h("span", { class: "ed-version" }, "v" + state.version),
+      h("div", { class: "ed-quickwrap" }, [
+        search,
+        h("div", { class: "ed-quick-drop", id: "ed-quick-drop" }),
+      ]),
       h("span", { class: "ed-spacer" }),
+      h("button", { class: "ed-btn", onclick: undo, title: "Ctrl+Z" }, "↶ 撤消"),
+      h("button", { class: "ed-btn", onclick: redo, title: "Ctrl+Y" }, "↷ 重做"),
       h("button", { class: "ed-btn", onclick: function () {
         state.jsonMode = !state.jsonMode;
         renderAll();
       } }, state.jsonMode ? "返回表单模式" : "JSON 源码模式"),
     ]);
+  }
+
+  function renderQuickResults(drop) {
+    /* 快速搜索结果：技能 / 状态 / 文案键（点击跳转并选中）。 */
+    clear(drop);
+    var q = state.quickQ.trim().toLowerCase();
+    if (!q) { drop.style.display = "none"; return; }
+    var items = [];
+    state.files.skills.skills.forEach(function (sk) {
+      if ((sk.name + sk.id).toLowerCase().indexOf(q) >= 0)
+        items.push(["技能", sk.name + "（" + sk.id + "）", function () {
+          state.tab = "skills"; state.selSkill = sk.id; state.quickQ = "";
+          renderAll();
+        }]);
+    });
+    Object.keys(state.files.battle.statuses).forEach(function (sid) {
+      var def = state.files.battle.statuses[sid];
+      if ((def.name + sid).toLowerCase().indexOf(q) >= 0)
+        items.push(["状态", def.name + "（" + sid + "）", function () {
+          state.tab = "battle"; state.selStatus = sid;
+          state.graphOwner = { kind: "status", id: sid };
+          state.quickQ = "";
+          renderAll();
+        }]);
+    });
+    ["battle_log", "stats"].forEach(function (sec) {
+      var dict = sec === "battle_log" ? state.files.battle.battle_log
+                                      : state.files.skills.stats;
+      Object.keys(dict).forEach(function (k) {
+        if (k.toLowerCase().indexOf(q) >= 0 || String(dict[k]).toLowerCase().indexOf(q) >= 0)
+          items.push(["文案", k + " = " + String(dict[k]).slice(0, 30), function () {
+            state.tab = "texts"; state.textQ = k; state.quickQ = "";
+            renderAll();
+          }]);
+      });
+    });
+    drop.style.display = items.length ? "block" : "none";
+    items.slice(0, 12).forEach(function (it) {
+      drop.appendChild(h("div", { class: "ed-quick-item", onclick: it[2] }, [
+        h("span", { class: "sub" }, it[0]), it[1],
+      ]));
+    });
+    if (!items.length) drop.appendChild(h("div", { class: "ed-quick-item" }, "无匹配"));
   }
 
   var TAB_DEFS = [
@@ -277,45 +373,41 @@
         h("span", { class: "ed-spacer" }),
         h("button", { class: "ed-btn", onclick: addSkill }, "＋ 新建"),
       ]),
-      h("div", { class: "ed-list" }, list.map(function (sk) {
-        return h("div", {
-          class: "ed-item" + (sk.id === state.selSkill ? " on" : ""),
-          onclick: function () { state.selSkill = sk.id; state.selNode = null; renderAll(); },
-        }, [
-          h("span", { class: "grow" }, sk.name),
-          h("span", { class: "sub" }, sk.id),
-          h("button", { class: "ed-btn warn", onclick: function (ev) {
-            ev.stopPropagation();
-            if (!window.confirm("删除技能 " + sk.name + "？")) return;
-            var i = list.indexOf(sk);
-            if (i >= 0) list.splice(i, 1);
-            if (state.selSkill === sk.id) state.selSkill = list[0] && list[0].id;
-            renderAll();
-          } }, "✕"),
-        ]);
-      })),
-    ]);
-
-    var palette = h("div", { class: "ed-palette" }, [
-      h("h4", null, "点击添加节点"),
-      h("h4", null, "触发（时机）"),
-      paletteItems("trigger", graphHooks()),
-      h("h4", null, "条件（判断）"),
-      paletteItems("condition", state.schema ? Object.keys(state.schema.conditions) : []),
-      h("h4", null, "结构（循环）"),
-      paletteItems("struct", state.schema ? Object.keys(state.schema.structs) : []),
-      h("h4", null, "效果（原子）"),
-      paletteItems("op", state.schema ? Object.keys(state.schema.ops) : []),
+      listSearchBox(),
+      h("div", { class: "ed-list" }, (function () {
+        var q = state.listQ.trim().toLowerCase();
+        return list.filter(function (sk) {
+          return !q || (sk.name + sk.id).toLowerCase().indexOf(q) >= 0;
+        }).map(function (sk) {
+          return h("div", {
+            class: "ed-item" + (sk.id === state.selSkill ? " on" : ""),
+            onclick: function () { state.selSkill = sk.id; state.selNode = null; renderAll(); },
+          }, [
+            h("span", { class: "grow" }, sk.name),
+            h("span", { class: "sub" }, sk.id),
+            h("button", { class: "ed-btn warn", onclick: function (ev) {
+              ev.stopPropagation();
+              if (!window.confirm("删除技能 " + sk.name + "？")) return;
+              pushHistory();
+              var i = list.indexOf(sk);
+              if (i >= 0) list.splice(i, 1);
+              if (state.selSkill === sk.id) state.selSkill = list[0] && list[0].id;
+              renderAll();
+            } }, "✕"),
+          ]);
+        });
+      })()),
     ]);
 
     var zone = h("div", { class: "ed-canvas-zone" }, [
-      palette,
+      makePalette(),
       h("div", { class: "ed-canvas", id: "ed-canvas" }, [
         h("div", { class: "ed-world", id: "ed-world" }, [
           h("svg", { class: "ed-edges", id: "ed-edges",
                      width: "12000", height: "8000", viewBox: "0 0 12000 8000" }),
         ]),
       ]),
+      canvasToolbar(),
     ]);
 
     var inspector = h("div", { class: "ed-inspector", id: "ed-inspector" },
@@ -325,15 +417,87 @@
   }
 
   function paletteItems(kind, types) {
-    /* 调色板条目列表（点击在画布可视区中心添加节点）。 */
-    return types.map(function (type) {
-      return h("div", { class: "ed-pal-item", onclick: function () { addNode(kind, type); } },
-        state.files.skills.stats["lbl_" + type] || type);
+    /* 调色板条目列表（带说明悬浮；搜索词过滤；点击在画布可视区中心添加节点）。 */
+    var q = state.palQ.trim().toLowerCase();
+    var stats = state.files.skills.stats;
+    return types.filter(function (type) {
+      if (!q) return true;
+      var name = stats["lbl_" + type] || type;
+      var dsc = stats["dsc_" + type] || "";
+      return (name + type + dsc).toLowerCase().indexOf(q) >= 0;
+    }).map(function (type) {
+      var name = stats["lbl_" + type] || type;
+      var dsc = stats["dsc_" + type] || "";
+      return h("div", { class: "ed-pal-item", title: dsc,
+                        onclick: function () { addNode(kind, type); } },
+        name + (dsc ? " ·" : ""));
     });
+  }
+
+  function makePalette(extraTitle) {
+    /* 画布左侧调色板：搜索框 + 触发/条件/结构/原子四区 + 变量与表达式面板
+     * （技能页与状态页共用；钩子列表按画布归属自动切换）。 */
+    var search = h("input", { type: "text", placeholder: "搜索组件…" });
+    search.value = state.palQ;
+    search.addEventListener("input", function () {
+      state.palQ = search.value;
+      var host = NF.qs("#ed-pal-list");
+      if (host) { clear(host); buildSections(host); }
+    });
+    search.addEventListener("keydown", function (ev) { ev.stopPropagation(); });
+
+    function buildSections(host) {
+      host.appendChild(h("h4", null, "触发（时机）" + (extraTitle || "")));
+      paletteItems("trigger", graphHooks()).forEach(function (x) { host.appendChild(x); });
+      host.appendChild(h("h4", null, "条件（判断）"));
+      paletteItems("condition", state.schema ? Object.keys(state.schema.conditions) : [])
+        .forEach(function (x) { host.appendChild(x); });
+      host.appendChild(h("h4", null, "结构（循环）"));
+      paletteItems("struct", state.schema ? Object.keys(state.schema.structs) : [])
+        .forEach(function (x) { host.appendChild(x); });
+      host.appendChild(h("h4", null, "效果（原子）"));
+      paletteItems("op", state.schema ? Object.keys(state.schema.ops) : [])
+        .forEach(function (x) { host.appendChild(x); });
+    }
+
+    var list = h("div", { id: "ed-pal-list" });
+    buildSections(list);
+
+    var varPanel = h("details", { class: "ed-varpanel" }, [
+      h("summary", null, "ƒ 变量与表达式"),
+      h("p", { class: "ed-hint" },
+        "数值参数可填表达式：数字、$变量、+ - * / ( ) 与 min/max/abs/floor。" +
+        "如 $enemy.mark:连击 * 2（对方标记翻倍）、$self.hp_pct * 100。"),
+    ]);
+    (state.schema && state.schema.variables || []).forEach(function (group) {
+      var box = h("details", null, [h("summary", null, group.group)]);
+      group.items.forEach(function (it) {
+        box.appendChild(h("div", { class: "ed-var-row" }, [
+          h("code", null, it[0]), h("span", { class: "sub" }, it[1]),
+        ]));
+      });
+      varPanel.appendChild(box);
+    });
+    var fbox = h("details", null, [h("summary", null, "函数")]);
+    Object.keys((state.schema && state.schema.functions) || {}).forEach(function (f) {
+      fbox.appendChild(h("div", { class: "ed-var-row" }, [
+        h("code", null, (state.schema.functions[f]).split(" ")[0]),
+        h("span", { class: "sub" }, state.schema.functions[f]),
+      ]));
+    });
+    varPanel.appendChild(fbox);
+
+    return h("div", { class: "ed-palette" }, [
+      h("h4", null, "点击添加节点"),
+      search,
+      list,
+      varPanel,
+    ]);
   }
 
   function addSkill() {
     /* 新建技能：空图 + 默认个性化配置，命名取未占用 id。 */
+    pushHistory();
     var list = skillList();
     var n = 1;
     while (list.some(function (s) { return s.id === "skill_" + n; })) n++;
@@ -359,6 +523,7 @@
      * 添加 loop 时若已选中条件/效果节点，则直接把它（连同子树）包裹进循环。 */
     var g = graph();
     if (!g) { setStatus("先选择或新建一个" + (state.graphOwner.kind === "status" ? "状态" : "技能"), true); return; }
+    pushHistory();
     if (kind === "struct" && type === "loop" && state.selNode) {
       var target = nodeById(g, state.selNode);
       if (target && (target.kind === "op" || target.kind === "condition")) {
@@ -549,6 +714,7 @@
       hit.addEventListener("contextmenu", function (ev) {   // 右键直接删除
         ev.preventDefault();
         ev.stopPropagation();
+        pushHistory();
         g.edges.splice(idx, 1);
         state.selEdge = null;
         state.selNode = null;
@@ -752,7 +918,7 @@
       window.removeEventListener("mouseup", up);
       temp.remove();
       // 落点解析：优先端口圆点；其次节点主体（含 loop 容器）——拖到节点上
-      // 即连接到该节点，与主流节点编辑器一致
+      // 即连接到该节点；落到画布空白 = 弹出快速建点菜单（在落点创建并连线）
       var toId = null;
       var portEl = e.target.closest && e.target.closest(".ed-port");
       if (portEl) {
@@ -760,6 +926,14 @@
       } else {
         var nodeEl = e.target.closest && e.target.closest(".ed-node");
         if (nodeEl) toId = nodeIdOfElement(nodeEl);
+        else if (e.target.closest && e.target.closest("#ed-canvas")) {
+          var rect2 = NF.qs("#ed-world").getBoundingClientRect();
+          openNodePicker(
+            Math.round((e.clientX - rect2.left) / state.view.s),
+            Math.round((e.clientY - rect2.top) / state.view.s),
+            isOut ? { from: fromId } : { to: fromId }, gate);
+          return;
+        }
       }
       if (!toId || toId === fromId) return;
       var edge = isOut ? { from: fromId, to: toId } : { from: toId, to: fromId };
@@ -771,6 +945,7 @@
         setStatus("每个节点只能有一条入边（树结构）", true); return;
       }
       if (g.edges.some(function (x) { return x.from === edge.from && x.to === edge.to; })) return;
+      pushHistory();
       g.edges.push(edge);
       setStatus("已连接 " + edge.from + " → " + edge.to +
                 (gate === "fail" ? "（失败分支）" : ""));
@@ -778,6 +953,105 @@
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+  }
+
+  /* ---------- 快速建点菜单（拖到画布空白处触发） ---------- */
+
+  function openNodePicker(worldX, worldY, edgeHalf, gate) {
+    /* 在指定世界坐标创建节点并自动连线的快速菜单：条件 / 原子 / 结构
+     * 三类（触发节点是链头，不参与续接），带搜索与说明。 */
+    closeNodePicker();
+    var g = graph();
+    if (!g) return;
+    var menu = h("div", { class: "ed-nodepicker", id: "ed-nodepicker" });
+    var search = h("input", { type: "text", placeholder: "搜索并回车创建…" });
+    menu.appendChild(search);
+    var list = h("div", { class: "ed-picker-list" });
+    menu.appendChild(list);
+    var stats = state.files.skills.stats;
+    var entries = [];           // [kind, type, 名称, 说明]
+
+    function fill(q) {
+      clear(list);
+      q = (q || "").trim().toLowerCase();
+      entries = [];
+      [["condition", state.schema.conditions], ["struct", state.schema.structs],
+       ["op", state.schema.ops]].forEach(function (reg) {
+        Object.keys(reg[1]).forEach(function (type) {
+          var name = stats["lbl_" + type] || type;
+          var dsc = stats["dsc_" + type] || "";
+          if (q && (name + type + dsc).toLowerCase().indexOf(q) < 0) return;
+          entries.push([reg[0], type, name, dsc]);
+        });
+      });
+      entries.slice(0, 30).forEach(function (ent, idx) {
+        list.appendChild(h("div", {
+          class: "ed-pal-item" + (idx === 0 ? " on" : ""),
+          onclick: function () { createAt(ent); },
+        }, [
+          h("span", { class: "grow" }, ent[2]),
+          h("span", { class: "sub" }, (ent[0] === "op" ? "原子" :
+                                       ent[0] === "struct" ? "结构" : "条件")),
+        ]));
+        list.lastChild.title = ent[3];
+      });
+      if (!entries.length) list.appendChild(h("div", { class: "ed-pal-item" }, "无匹配"));
+    }
+
+    function createAt(ent) {
+      pushHistory();
+      var node = { id: nextNodeId(g), kind: ent[0], type: ent[1],
+                   params: {}, pos: [Math.max(20, worldX - 40), Math.max(20, worldY - 30)] };
+      specList(node).forEach(function (ps) {
+        if (ps.required || node.kind === "condition") node.params[ps.key] = defaultParamValue(ps);
+      });
+      if (node.kind === "condition" && node.type === "last_crit") node.params = {};
+      g.nodes.push(node);
+      if (edgeHalf.from !== undefined) {          // 从出端口拖出：新节点为子
+        var edge = { from: edgeHalf.from, to: node.id };
+        if (gate === "fail") edge.gate = "fail";
+        g.edges.push(edge);
+      } else {                                    // 拖到入端口：新节点为父
+        g.edges.push({ from: node.id, to: edgeHalf.to });
+      }
+      state.selNode = node.id;
+      state.selEdge = null;
+      closeNodePicker();
+      setStatus("已创建并连接 " + node.id + "（" + (stats["lbl_" + node.type] || node.type) + "）");
+      renderAll();
+    }
+
+    search.addEventListener("input", function () { fill(search.value); });
+    search.addEventListener("keydown", function (ev) {
+      ev.stopPropagation();
+      if (ev.key === "Escape") closeNodePicker();
+      if (ev.key === "Enter" && entries.length) createAt(entries[0]);
+    });
+    // 菜单定位：画布内浮层，靠近落点（限制在画布范围内）
+    var canvas = NF.qs("#ed-canvas");
+    var cr = canvas.getBoundingClientRect();
+    menu.style.left = Math.min(Math.max(8, worldX * state.view.s + state.view.x),
+                               cr.width - 260) + "px";
+    menu.style.top = Math.min(Math.max(8, worldY * state.view.s + state.view.y),
+                              cr.height - 280) + "px";
+    canvas.appendChild(menu);
+    fill("");
+    search.focus();
+    setTimeout(function () {                      // 点击菜单外关闭
+      document.addEventListener("mousedown", pickerAway);
+    }, 0);
+    function pickerAway(ev) {
+      if (!ev.target.closest || !ev.target.closest("#ed-nodepicker")) closeNodePicker();
+    }
+    menu.__away = pickerAway;
+  }
+
+  function closeNodePicker() {
+    var menu = NF.qs("#ed-nodepicker");
+    if (menu) {
+      if (menu.__away) document.removeEventListener("mousedown", menu.__away);
+      menu.remove();
+    }
   }
 
   /* ---------- 属性面板（技能 / 状态 / 节点） ---------- */
@@ -967,10 +1241,34 @@
     var inbound = g.edges.filter(function (e) { return e.to === node.id; });    // 入边
     var outbound = g.edges.filter(function (e) { return e.from === node.id; }); // 出边
 
+    var statusJump = null;
+    if (node.type === "apply_status" && node.params && node.params.status) {
+      // 施加状态节点：给出状态摘要 + 跨页跳转编辑
+      var sid2 = node.params.status;
+      var def2 = state.files.battle.statuses[sid2];
+      if (def2) {
+        var modCount = (def2.mods || []).length;
+        var hookCount = ((def2.effects || {}).nodes || [])
+          .filter(function (n) { return n.kind === "trigger"; }).length;
+        statusJump = h("div", { class: "ed-status-jump" }, [
+          h("span", null, def2.name + "（" + sid2 + "）· " +
+            (def2.stack || "refresh") + " / " + (def2.expire || "ticks") +
+            " · 修饰 " + modCount + " · 效果图触发 " + hookCount),
+          h("button", { class: "ed-btn", onclick: function () {
+            state.tab = "battle";
+            state.selStatus = sid2;
+            state.graphOwner = { kind: "status", id: sid2 };
+            renderAll();
+          } }, "在战斗页编辑此状态 →"),
+        ]);
+      }
+    }
+
     return [
       h("h3", null, nodeLabel(node) + "（" + (KIND_CN[node.kind] || node.kind) + " / " + node.type + "）"),
       h("p", { class: "ed-hint" }, "节点 id: " + node.id + " · 入边 " + inbound.length +
         " · 出边 " + outbound.length + (psHint(node))),
+      statusJump,
       h("div", { class: "ed-form" }, forms),
       h("div", { style: { marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" } }, [
         h("button", { class: "ed-btn warn", onclick: function () { deleteNode(node.id); } }, "删除节点"),
@@ -998,6 +1296,7 @@
 
   function deleteNode(node_id) {
     /* 删除节点及其关联边；loop 容器删除时连带整个循环体子树。 */
+    pushHistory();
     var g = graph();
     var node = nodeById(g, node_id);
     var ids = node && node.kind === "struct" ? descendants(g, node_id) : [node_id];
@@ -1014,6 +1313,7 @@
     /* 一键包裹为循环：新建 loop 容器接在选中节点的上游，选中节点连同其
      * 子树移入容器（拖到容器内偏右下方），原名入边改接容器。 */
     var g = graph();
+    pushHistory();
     var node = nodeById(g, node_id);
     if (!node || node.kind === "trigger" || node.kind === "struct") {
       setStatus("请先选中一个条件或效果节点再包裹为循环", true);
@@ -1043,6 +1343,7 @@
   function unwrapLoop(node_id) {
     /* 一键解除循环：删除 loop 容器但保留循环体子树，原入边改接容器的
      * 首个子节点。 */
+    pushHistory();
     var g = graph();
     var loop = nodeById(g, node_id);
     if (!loop || loop.kind !== "struct") return;
@@ -1061,6 +1362,21 @@
     state.selEdge = null;
     setStatus("已解除循环（循环体保留）");
     renderAll();
+  }
+
+  function listSearchBox() {
+    /* 左栏列表搜索框（技能 / 状态共用 state.listQ）。 */
+    var box = h("input", { type: "text", class: "ed-list-search",
+                           placeholder: "搜索列表…" });
+    box.value = state.listQ;
+    box.addEventListener("input", function () {
+      state.listQ = box.value;
+      renderAll();
+      var again = NF.qs(".ed-list-search");
+      if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); }
+    });
+    box.addEventListener("keydown", function (ev) { ev.stopPropagation(); });
+    return box;
   }
 
   /* ---------- 属性页签 ---------- */
@@ -1239,7 +1555,13 @@
         h("summary", null, "战斗常数"),
         h("div", { class: "ed-form" }, constFields),
       ]),
-      h("div", { class: "ed-list" }, ids.map(function (sid) {
+      listSearchBox(),
+      h("div", { class: "ed-list" }, (function () {
+        var q = state.listQ.trim().toLowerCase();
+        return ids.filter(function (sid) {
+          return !q || ((b.statuses[sid].name || "") + sid).toLowerCase().indexOf(q) >= 0;
+        });
+      })().map(function (sid) {
         return h("div", {
           class: "ed-item" + (sid === state.selStatus ? " on" : ""),
           onclick: function () {
@@ -1253,6 +1575,7 @@
           h("button", { class: "ed-btn warn", onclick: function (ev) {
             ev.stopPropagation();
             if (!window.confirm("删除状态 " + sid + "？（引用它的技能图会校验失败）")) return;
+            pushHistory();
             delete b.statuses[sid];
             if (state.selStatus === sid) state.selStatus = Object.keys(b.statuses)[0] || null;
             renderAll();
@@ -1261,26 +1584,15 @@
       })),
     ]);
 
-    var palette = h("div", { class: "ed-palette" }, [
-      h("h4", null, "状态效果图"),
-      h("h4", null, "触发（时机）"),
-      paletteItems("trigger", graphHooks()),
-      h("h4", null, "条件（判断）"),
-      paletteItems("condition", state.schema ? Object.keys(state.schema.conditions) : []),
-      h("h4", null, "结构（循环）"),
-      paletteItems("struct", state.schema ? Object.keys(state.schema.structs) : []),
-      h("h4", null, "效果（原子）"),
-      paletteItems("op", state.schema ? Object.keys(state.schema.ops) : []),
-    ]);
-
     var zone = h("div", { class: "ed-canvas-zone" }, [
-      palette,
+      makePalette("（状态钩子）"),
       h("div", { class: "ed-canvas", id: "ed-canvas" }, [
         h("div", { class: "ed-world", id: "ed-world" }, [
           h("svg", { class: "ed-edges", id: "ed-edges",
                      width: "12000", height: "8000", viewBox: "0 0 12000 8000" }),
         ]),
       ]),
+      canvasToolbar(),
     ]);
 
     var inspector = h("div", { class: "ed-inspector", id: "ed-inspector" },
@@ -1288,8 +1600,43 @@
     return [side, zone, inspector];
   }
 
+  function canvasToolbar() {
+    /* 画布左下角浮动工具条：适应内容 / 重置视图 / 缩放比例显示。 */
+    return h("div", { class: "ed-canvas-toolbar" }, [
+      h("button", { class: "ed-btn", onclick: fitView, title: "缩放至全部节点" }, "⛶ 适应"),
+      h("button", { class: "ed-btn", onclick: function () {
+        state.view = { x: 40, y: 30, s: 0.85 };
+        rebuildCanvas();
+      } }, "⟲ 重置"),
+      h("span", { class: "ed-zoom", id: "ed-zoom" },
+        Math.round(state.view.s * 100) + "%"),
+    ]);
+  }
+
+  function fitView() {
+    /* 计算全部节点包围盒并缩放平移至画布可视区内（留边距）。 */
+    var g = graph();
+    var canvas = NF.qs("#ed-canvas");
+    if (!g || !g.nodes.length || !canvas) return;
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    g.nodes.forEach(function (n) {
+      var pos = Array.isArray(n.pos) ? n.pos : [0, 0];
+      var w = n.kind === "struct" ? (structBox[n.id] || { w: NODE_W }).w : NODE_W;
+      x0 = Math.min(x0, pos[0]); y0 = Math.min(y0, pos[1]);
+      x1 = Math.max(x1, pos[0] + w); y1 = Math.max(y1, pos[1] + 110);
+    });
+    var rect = canvas.getBoundingClientRect();
+    var s = Math.min(1.5, Math.max(0.25,
+      Math.min((rect.width - 60) / (x1 - x0), (rect.height - 60) / (y1 - y0))));
+    state.view.s = s;
+    state.view.x = (rect.width - (x1 - x0) * s) / 2 - x0 * s;
+    state.view.y = (rect.height - (y1 - y0) * s) / 2 - y0 * s;
+    rebuildCanvas();
+  }
+
   function addStatus() {
     /* 新建状态定义：v3 骨架（策略字段 + 空参数 / mods / 效果图）。 */
+    pushHistory();
     var statuses = state.files.battle.statuses;
     var n = 1;
     while (statuses["status_" + n]) n++;
@@ -1425,8 +1772,13 @@
 
   function renderTextsTab() {
     /* 文案页签：战报模板 / 技能描述模板 / 界面文案 三张键值表。 */
+    var filter = h("input", { type: "text", placeholder: "过滤键或内容…" });
+    filter.value = state.textQ;
+    filter.addEventListener("input", function () { state.textQ = filter.value; renderAll(); });
+    filter.addEventListener("keydown", function (ev) { ev.stopPropagation(); });
     return h("div", { class: "ed-panel" }, [
       h("h3", null, "战报文案（battle.json battle_log）"),
+      filter,
       kvTable(state.files.battle.battle_log),
       h("h3", null, "技能描述模板（skills.json stats）"),
       h("p", { class: "ed-hint" }, "hook_/cond_/op_ 为技能描述组合模板；st_ 为施加状态句；lbl_ 为编辑器调色板短标签；link_/field_/mod_/mastery_/final_ 为共鸣与词缀文案。"),
@@ -1437,8 +1789,12 @@
   }
 
   function kvTable(dict) {
-    /* 键值对表：键只读展示，值为可编辑文本域。 */
-    var keys = Object.keys(dict).sort();
+    /* 键值对表：键只读展示，值为可编辑文本域；按文案页搜索词过滤。 */
+    var q = state.textQ.trim().toLowerCase();
+    var keys = Object.keys(dict).filter(function (k) {
+      return !q || k.toLowerCase().indexOf(q) >= 0 ||
+             String(dict[k]).toLowerCase().indexOf(q) >= 0;
+    }).sort();
     return h("table", { class: "ed-table" }, keys.map(function (k) {
       var box = h("textarea", { rows: "1", spellcheck: "false" });
       box.value = dict[k];
@@ -1573,6 +1929,20 @@
   /* ---------- 键盘：删除选中节点 / 连线 ---------- */
 
   window.addEventListener("keydown", function (ev) {
+    /* 全局快捷键：Ctrl+Z 撤消 / Ctrl+Y（或 Ctrl+Shift+Z）重做 / Ctrl+K 搜索 */
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && !ev.shiftKey) {
+      ev.preventDefault(); undo(); return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && (ev.key.toLowerCase() === "y" ||
+        (ev.key.toLowerCase() === "z" && ev.shiftKey))) {
+      ev.preventDefault(); redo(); return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
+      ev.preventDefault();
+      var q = NF.qs("#ed-quick");
+      if (q) q.focus();
+      return;
+    }
     /* Delete/Backspace 删除画布选中项（输入控件聚焦时不拦截）。 */
     if (state.tab !== "skills" && state.tab !== "battle") return;
     if (state.jsonMode) return;
@@ -1582,6 +1952,7 @@
     var g = graph();
     if (!g) return;
     if (typeof state.selEdge === "number" && g.edges[state.selEdge]) {
+      pushHistory();
       g.edges.splice(state.selEdge, 1);
       state.selEdge = null;
       renderAll();

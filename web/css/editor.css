@@ -8,6 +8,63 @@
 /* ---- 顶部 ---- */
 .ed-header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
   border-bottom: 1px solid var(--line, #2a2f3a); flex-wrap: wrap; }
+
+/* 顶栏快速搜索（技能 / 状态 / 文案键，点击跳转） */
+.ed-quickwrap { position: relative; }
+.ed-quickwrap input { background: rgba(127, 150, 255, .06);
+  border: 1px solid var(--line, #2a2f3a); color: inherit; border-radius: 8px;
+  padding: 5px 10px; font-size: 12px; width: 230px; box-sizing: border-box; }
+.ed-quick-drop { display: none; position: absolute; top: 110%; left: 0; z-index: 60;
+  min-width: 300px; max-height: 320px; overflow-y: auto;
+  background: var(--panel, #171b24); border: 1px solid var(--line, #2a2f3a);
+  border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); padding: 4px; }
+.ed-quick-item { padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.ed-quick-item:hover { background: rgba(79, 124, 255, .15); }
+.ed-quick-item .sub { opacity: .55; font-size: 11px; min-width: 30px; }
+
+/* 左栏列表搜索框 */
+.ed-list-search { margin: 6px 8px 2px; width: calc(100% - 16px);
+  background: rgba(127, 150, 255, .06); border: 1px solid var(--line, #2a2f3a);
+  color: inherit; border-radius: 6px; padding: 5px 8px; font-size: 12px;
+  box-sizing: border-box; }
+
+/* 调色板搜索 / 变量表面板 */
+.ed-palette input[type="text"] { width: 100%; box-sizing: border-box;
+  background: rgba(127, 150, 255, .06); border: 1px solid var(--line, #2a2f3a);
+  color: inherit; border-radius: 6px; padding: 4px 8px; font-size: 12px;
+  margin-bottom: 6px; }
+.ed-varpanel { border-top: 1px solid var(--line, #2a2f3a); margin-top: 10px;
+  padding-top: 4px; font-size: 12px; }
+.ed-varpanel summary, .ed-varpanel details summary { cursor: pointer;
+  opacity: .8; padding: 3px 0; }
+.ed-var-row { display: flex; gap: 8px; align-items: baseline; padding: 2px 4px; }
+.ed-var-row code { background: rgba(200, 130, 255, .12); color: #cf9dff;
+  border-radius: 4px; padding: 0 5px; font-size: 11px; }
+.ed-var-row .sub { opacity: .55; font-size: 11px; }
+
+/* 画布左下角视图工具条 */
+.ed-canvas-toolbar { position: absolute; left: 12px; bottom: 12px; z-index: 30;
+  display: flex; gap: 6px; align-items: center;
+  background: rgba(23, 27, 36, .85); border: 1px solid var(--line, #2a2f3a);
+  border-radius: 10px; padding: 4px 8px; }
+.ed-zoom { font-size: 11px; opacity: .7; min-width: 36px; text-align: center; }
+
+/* 快速建点菜单（拖到画布空白处） */
+.ed-nodepicker { position: absolute; z-index: 70; width: 250px;
+  background: var(--panel, #171b24); border: 1px solid rgba(200, 130, 255, .5);
+  border-radius: 10px; box-shadow: 0 12px 30px rgba(0, 0, 0, .55); padding: 6px; }
+.ed-nodepicker input { width: 100%; box-sizing: border-box;
+  background: rgba(127, 150, 255, .06); border: 1px solid var(--line, #2a2f3a);
+  color: inherit; border-radius: 6px; padding: 5px 8px; font-size: 12px; }
+.ed-picker-list { max-height: 240px; overflow-y: auto; margin-top: 4px; }
+.ed-picker-list .ed-pal-item { display: flex; gap: 6px; align-items: center; }
+.ed-picker-list .ed-pal-item.on { border-color: var(--blue, #4f7cff); }
+
+/* 施加状态节点的跨页跳转卡 */
+.ed-status-jump { display: flex; flex-direction: column; gap: 6px;
+  border: 1px dashed rgba(200, 130, 255, .45); border-radius: 8px;
+  padding: 8px 10px; margin-bottom: 8px; font-size: 12px; opacity: .9; }
 .ed-title { font-size: 18px; font-weight: 700; }
 .ed-version { opacity: .6; font-size: 12px; }
 .ed-spacer { flex: 1; }

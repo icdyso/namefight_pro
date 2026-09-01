@@ -37,12 +37,11 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 
-from . import effects, statuses
+from . import effects, expr, statuses
 from .config import GameCfg
 from .effects import OPS  # noqa: F401  （测试/Schema 引用）
-from .fighter import (Fighter, apply_resonance, compose_title_name,
-                      format_resonance_final, personalized_effects,
-                      resonance_coeff)
+from .fighter import (Fighter, compose_title_name,
+                      format_resonance_final, personalized_effects)
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
@@ -91,7 +90,9 @@ class _Combatant:
     gauge: float = 0.0       # 行动槽
     seq: int = 0             # 内部序（速度降序、名字升序）
     st: dict = field(default_factory=dict)      # 状态容器：状态id -> 运行时dict
-    markers: set = field(default_factory=set)   # 标记集合（一次性 / 不屈已触发）
+    markers: set = field(default_factory=set)   # 内部标记集合（一次性 / 不屈已触发）
+    marks: dict = field(default_factory=dict)   # 图内标记：key -> {n 层数, expires 到期刻}
+    live_prev: set = field(default_factory=set)  # 上一刻在场状态 id 集合（gain/lose 检测）
     damage_dealt: float = 0.0
     steal_rec: float = 0.0   # 本次行动的吸血累计（血契转化基准，行动末清零）
 
@@ -308,29 +309,79 @@ def _res_spec(ctx: _Ctx, node: dict, param: str):
     return effects.DEFAULT_RESONANCE_SPEC
 
 
-def _proc_params(node: dict, ctx: _Ctx) -> dict:
-    """按双方当前值应用该节点的全部共鸣变数，再把 "$参数名" 引用解析为
-    状态运行时参数（状态图执行时），返回本次实际参数。"""
-    params = node.get("params", {})
-    links = node.get("links")
-    proc = dict(params)
-    if links:
-        owner, opp = ctx.owner, ctx.opponent
-        for link in links:
-            param = str(link.get("param"))
-            if param not in proc:
-                continue
-            coeff = resonance_coeff(
-                lambda vid: _live_value(owner, vid, ctx.game, ctx.tick),
-                lambda vid: _live_value(opp, vid, ctx.game, ctx.tick),
-                link, ctx.game)
-            proc = apply_resonance(proc, coeff, param,
-                                   _res_spec(ctx, node, param))
-    if ctx.status is not None:
+def _expr_env(ctx: _Ctx) -> dict:
+    """构建表达式变量环境（平表）：自身 / 敌方 / 上下文三组变量
+    （清单见 namefight/expr.py 的 VARIABLE_GROUPS），叠加状态图上下文的
+    施加参数（$value 等）。每次求值现算，数值均为引擎真实值。"""
+    game, tick = ctx.game, ctx.tick
+    env = {}
+
+    def put(prefix: str, c: _Combatant):
+        env[prefix + "hp"] = float(max(0.0, c.hp))
+        env[prefix + "max_hp"] = float(c.max_hp)
+        env[prefix + "hp_pct"] = max(0.0, c.hp) / c.max_hp
+        env[prefix + "atk"] = _eff_atk(c, game, tick)
+        env[prefix + "def"] = _eff_def(c, game, tick)
+        env[prefix + "spd"] = _eff_spd(c, game, tick)
+        env[prefix + "crit"] = c.crit / 100.0
+        env[prefix + "dodge"] = c.dodge / 100.0
+        env[prefix + "gauge"] = float(c.gauge)
+        env[prefix + "gauge_pct"] = c.gauge / game.battle.gauge_threshold
+        env[prefix + "damage_dealt"] = float(c.damage_dealt)
+        for key, m in c.marks.items():                      # 标记层数
+            env[prefix + "mark:" + key] = float(m.get("n", 0))
+        for sid, st in c.st.items():                        # 状态派生量
+            sdef = game.statuses.get(sid, {})
+            env[prefix + "stacks:" + sid] = float(
+                statuses.live_stacks(c, sid, tick, sdef))
+            env[prefix + "total:" + sid] = float(st.get("total", 0.0))
+            env[prefix + "records:" + sid] = float(sum(st.get("records") or ()))
+
+    put("self.", ctx.owner)
+    put("enemy.", ctx.opponent)
+    env["ctx.dmg"] = float(ctx.dmg)
+    env["ctx.absorbed"] = float(ctx.dc["absorbed"]) if ctx.dc else 0.0
+    env["ctx.loop"] = float(ctx.loop_i)
+    env["ctx.tick"] = float(tick)
+    if ctx.status is not None:                              # 状态图施加参数
         _sid, st = ctx.status
+        for key, value in st["params"].items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                env[key] = float(value)
+    return env
+
+
+def _clamp_res(value: float, spec) -> float:
+    """共鸣参数的规格钳制（与 fighter.apply_resonance 的钳制语义一致：
+    turns 取整且至少 1、上限截断；数值按 (lo, hi) 截断）。"""
+    fmt, lo, hi = spec
+    if fmt == "turns":
+        v = max(1, int(round(value)))
+        return min(int(hi), v) if hi is not None else v
+    if lo is not None and value < lo:
+        value = lo
+    if hi is not None and value > hi:
+        value = hi
+    return value
+
+
+def _proc_params(node: dict, ctx: _Ctx) -> dict:
+    """把节点参数解析为本次实际参数：含 $ 的字符串按**表达式**求值
+    （变量表见 expr.py；状态图里 $value 等施加参数同表可用）。
+    v3.2.0 起共鸣与表达式统一——共鸣槽位在派生期已生成为
+    「基数 × (1 + 率 × 变量式/基准)」形式的表达式写进参数，links 仅保留
+    为显示元数据；此处对带共鸣声明的参数按规格钳制求值结果。"""
+    params = node.get("params", {})
+    proc = dict(params)
+    if any(expr.is_expr(v) for v in proc.values()):
+        link_params = {str(l.get("param")) for l in node.get("links") or ()}
+        env = _expr_env(ctx)
         for key, value in list(proc.items()):
-            if isinstance(value, str) and value.startswith("$"):
-                proc[key] = st["params"].get(value[1:], 0.0)
+            if expr.is_expr(value):
+                result = expr.eval_expr(value, env)
+                if key in link_params:                     # 共鸣参数：按规格钳制
+                    result = _clamp_res(result, _res_spec(ctx, node, key))
+                proc[key] = result
     return proc
 
 
@@ -400,16 +451,27 @@ def _cond_pass(node: dict, ctx: _Ctx, proc: dict) -> bool:
                     float(proc.get("value", 0.0)))
     if t == "has_status":
         sid = str(proc.get("status"))
+        if ctx.status is not None and ctx.hook_name in ("on_status_gain",
+                                                        "on_status_lose"):
+            return sid == ctx.status[0]   # 事件上下文：比对刚变化的状态
         sdef = game.statuses.get(sid, {})
         return statuses.live(owner, sid, tick, sdef)
     if t == "no_status":
         sid = str(proc.get("status"))
+        if ctx.status is not None and ctx.hook_name in ("on_status_gain",
+                                                        "on_status_lose"):
+            return sid != ctx.status[0]
         sdef = game.statuses.get(sid, {})
         return not statuses.live(owner, sid, tick, sdef)
     if t == "has_marker":
-        return ("mk:" + str(proc.get("key"))) in owner.markers
+        # 标记判定：缺省 = 布尔（层数 >= 1）；带 op/count = 层数比较
+        key = str(proc.get("key"))
+        if "op" in proc or "count" in proc:
+            n = float(owner.marks.get(key, {}).get("n", 0))
+            return _cmp(str(proc.get("op", "ge")), n, float(proc.get("count", 1)))
+        return owner.marks.get(key, {}).get("n", 0) > 0
     if t == "no_marker":
-        return ("mk:" + str(proc.get("key"))) not in owner.markers
+        return owner.marks.get(str(proc.get("key")), {}).get("n", 0) <= 0
     if t == "once_per_battle":
         marker = "once:" + str(proc.get("key"))
         if marker in owner.markers:
@@ -517,6 +579,23 @@ def _run_hook(skills, hook: str, ctx: _Ctx):
             if sig:
                 return sig
     return None
+
+
+def _fire_status_event(c, opponent, combatants, sid: str, gained: bool,
+                       game, rng, ev, tick: int):
+    """on_status_gain / on_status_lose 事件钩子（等待状态的事件驱动形态）：
+    拥有者的技能图中挂该钩子的链在此触发；ctx.status 携带刚变化的状态，
+    has_status / no_status 条件在事件上下文下直接比对之。
+    同时维护 live_prev（每刻检测的对照集合）避免重复触发。"""
+    hook = "on_status_gain" if gained else "on_status_lose"
+    ctx = _Ctx(game, rng, ev, tick, c, opponent, combatants)
+    ctx.hook_name = hook
+    ctx.status = (sid, c.st.get(sid) or statuses.new_runtime())
+    _run_hook(c.skills, hook, ctx)
+    if gained:
+        c.live_prev.add(sid)
+    else:
+        c.live_prev.discard(sid)
 
 
 def _run_status_hooks(c, opponent, combatants, hook: str, game, rng, ev,
@@ -846,6 +925,11 @@ def _apply_status_now(ctx: _Ctx, sid: str, proc: dict, target):
         sctx.status = (sid, st)
         for tree in plan:
             _run_tree(tree, sctx)
+    # 事件钩子：获得状态（on_status_gain，等待状态的事件驱动形态）
+    _fire_status_event(target,
+                       ctx.opponent if target is ctx.owner else ctx.owner,
+                       ctx.combatants, sid, True,
+                       ctx.game, ctx.rng, ctx.ev, ctx.tick)
 
 
 def _op_cleanse(ctx, proc):
@@ -857,7 +941,12 @@ def _op_cleanse(ctx, proc):
         targets = [ctx.owner]
     elif scope == "enemy":
         targets = [ctx.opponent]
-    count = statuses.dispel_all(targets, ctx.tick, ctx.game)
+    count = statuses.dispel_all(
+        targets, ctx.tick, ctx.game,
+        on_lose=lambda c, sid: _fire_status_event(   # 失去状态事件钩子
+            c, ctx.opponent if c is ctx.owner else ctx.owner,
+            ctx.combatants, sid, False,
+            ctx.game, ctx.rng, ctx.ev, ctx.tick))
     healed = _r(min(float(proc.get("value", 0.0))
                     + float(proc.get("per", 0.0)) * count,
                     ctx.owner.max_hp - ctx.owner.hp))
@@ -895,13 +984,38 @@ def _op_record(ctx, proc):
 
 
 def _op_marker(ctx, proc):
-    """marker：标记设置 / 清除（has_marker / no_marker 条件的判据；
-    前缀 mk: 与一次性 / 不屈的内部标记隔离）。"""
-    key = "mk:" + str(proc.get("key"))
-    if str(proc.get("action", "set")) == "clear":
-        ctx.owner.markers.discard(key)
-    else:
-        ctx.owner.markers.add(key)
+    """marker：图内私有标记操作。set/clear 置位/清除；toggle 翻转；
+    add/sub 层数 ±value（减到 0 自动清除）；turns 存在刻数（到期整条消失，
+    每刻开始结算）。运行时容器 _Combatant.marks：{key: {n, expires}}。"""
+    owner = ctx.owner
+    key = str(proc.get("key"))
+    action = str(proc.get("action", "set"))
+    mark = owner.marks.get(key)
+    turns = proc.get("turns")
+    if action == "clear":
+        owner.marks.pop(key, None)
+        return None
+    if action == "toggle":
+        if mark and mark["n"] > 0:
+            owner.marks.pop(key, None)
+            return None
+        owner.marks[key] = {"n": 1,
+                            "expires": ctx.tick + int(turns) if turns else 0}
+        return None
+    if action in ("add", "sub"):
+        delta = int(float(proc.get("value", 1))) * (1 if action == "add" else -1)
+        n = (mark or {}).get("n", 0) + delta
+        if n <= 0:
+            owner.marks.pop(key, None)     # 减到 0 自动清除
+            return None
+        mark = owner.marks.setdefault(key, {"n": n, "expires": 0})
+        mark["n"] = n
+        if turns:
+            mark["expires"] = ctx.tick + int(turns)   # 后到操作刷新存续
+        return None
+    # set：置位（已存在则刷新存续）
+    owner.marks[key] = {"n": 1,
+                        "expires": ctx.tick + int(turns) if turns else 0}
     return None
 
 
@@ -940,6 +1054,10 @@ def _op_status_ctl(ctx, proc):
         st["stacks"] = 0
         st["actions"] = 0
         st["records"] = []
+        _fire_status_event(target,                      # 失去状态事件钩子
+                           ctx.opponent if target is ctx.owner else ctx.owner,
+                           ctx.combatants, sid, False,
+                           game, ctx.rng, ctx.ev, ctx.tick)
     event = proc.get("event")
     if event:
         ctx.ev(str(event), {"a": ctx.owner.name, "b": target.name,
@@ -1194,6 +1312,22 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
 
     while tick < bc.max_ticks and winner is None and not draw:
         tick += 1
+        # ---- 每刻开始：标记到期清理 / 状态失去检测（on_status_lose） ----
+        for c in internal:
+            if c.hp <= 0:
+                continue
+            for key in list(c.marks):                    # 到期标记整条消失
+                m = c.marks[key]
+                if m["expires"] and m["expires"] <= tick:
+                    del c.marks[key]
+            enemy = internal[1] if c is internal[0] else internal[0]
+            now_live = {sid for sid, _st, _sdef
+                        in statuses.each_live(c, game, tick)}
+            if c.live_prev:
+                for sid in sorted(c.live_prev - now_live):
+                    _fire_status_event(c, enemy, combatants, sid, False,
+                                       game, rng, ev, tick)
+            c.live_prev = now_live
         # ---- 每刻开始：状态 tick 图（毒发 / 回春回复，按施加顺序） ----
         for c in internal:
             if c.hp <= 0:
