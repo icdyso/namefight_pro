@@ -716,11 +716,10 @@ def _natural_text(pgraph: dict, fighter: Fighter, game: GameCfg,
             # hp_mod 的比例基准参数在模板中以 {value} 位展示（见 _clause_params）
             if node.get("type") == "hp_mod" and param == "ratio":
                 params["value"] = params[param]
-            # compare 条件的固定值并入 {right} 显示位（「常数 33%」）
+            # compare 条件的固定值并入 {right} 显示位（直显数值，无「常数」前缀）
             if node.get("kind") == "condition" and node.get("type") == "compare" \
                     and param == "value":
-                params["right"] = str(game.stats.get("cmp_const", "常数")) \
-                    + " " + str(params[param])
+                params["right"] = str(params[param])
             # loop 的衰减参数并入 {mode_word} 显示位
             if node.get("kind") == "struct" and node.get("type") == "loop" \
                     and param == "decay":

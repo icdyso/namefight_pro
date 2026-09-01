@@ -396,11 +396,16 @@
 
   /* ---------- 技能页（三栏：列表 + 画布 + 属性面板） ---------- */
 
+  var GLOBAL_KEY = "__global__";   // 技能页「全局设定」固定入口（非技能 id）
+
   function renderSkillsTab() {
-    /* 技能页：左栏技能列表，中间节点画布（调色板 + 画布），右栏属性面板。 */
+    /* 技能页：左栏技能列表（顶部固定「全局设定」入口），中间节点画布
+     * （调色板 + 画布），右栏属性面板。 */
     var list = skillList();
-    if (!state.selSkill && list.length) state.selSkill = list[0].id;
-    if (!curSkill() && list.length) state.selSkill = list[0].id;
+    if (state.selSkill !== GLOBAL_KEY) {
+      if (!state.selSkill && list.length) state.selSkill = list[0].id;
+      if (!curSkill() && list.length) state.selSkill = list[0].id;
+    }
     state.graphOwner = { kind: "skill" };
 
     var side = h("div", { class: "ed-side" }, [
@@ -410,7 +415,15 @@
         h("button", { class: "ed-btn", onclick: addSkill }, "＋ 新建"),
       ]),
       listSearchBox(),
-      h("div", { class: "ed-list" }, (function () {
+      h("div", { class: "ed-list" }, [h("div", {
+        class: "ed-item" + (state.selSkill === GLOBAL_KEY ? " on" : ""),
+        onclick: function () {
+          state.selSkill = GLOBAL_KEY; state.selNode = null; renderAll();
+        },
+      }, [
+        h("span", { class: "grow" }, "⚙ 技能全局设定"),
+        h("span", { class: "sub" }, "共鸣 / 扰动 / 词缀"),
+      ])].concat((function () {
         var q = state.listQ.trim().toLowerCase();
         return list.filter(function (sk) {
           return !q || (sk.name + sk.id).toLowerCase().indexOf(q) >= 0;
@@ -432,7 +445,7 @@
             } }, "✕"),
           ]);
         });
-      })()),
+      })())),
     ]);
 
     var zone = h("div", { class: "ed-canvas-zone" }, [
@@ -1128,10 +1141,120 @@
       return inspectStatus(def);
     }
     var sk = curSkill();
+    if (state.selSkill === GLOBAL_KEY) return inspectSkillGlobals();
     if (!sk) return [h("p", { class: "ed-hint" }, "左侧选择或新建一个技能。")];
     var node2 = state.selNode ? nodeById(graph(), state.selNode) : null;
     if (node2) return inspectNode(sk, node2);
     return inspectSkill(sk);
+  }
+
+  function inspectSkillGlobals() {
+    /* 技能全局设定（skills.json 顶层）：抽取数量 / 数值扰动 / 变量共鸣
+     * （概率、槽位上限、模式权重、变量池）/ 名称词缀——做新技能的全部
+     * 全局旋钮都在线可调，无需 JSON 源码模式。 */
+    var s = state.files.skills;
+    var vl = s.variable_link;
+    var nm = s.name_modifiers;
+    var attrOptions = (state.files.attributes.attributes || []).map(function (a) {
+      return [a.id, a.name || a.id];
+    });
+    var varRows = Object.keys(vl.variables || {}).map(function (vid) {
+      var spec = vl.variables[vid];
+      var rate = spec.rate || [0.25, 0.65];
+      return h("tr", null, [
+        h("td", null, textInput(function () { return vid; }, function (v) {
+          v = v.trim();
+          if (!v || v === vid || vl.variables[v]) return;
+          vl.variables[v] = spec; delete vl.variables[vid]; renderAll();
+        })),
+        h("td", null, numInput(function () { return spec.weight; },
+                               function (v) { spec.weight = v; })),
+        h("td", null, numInput(function () { return rate[0]; },
+                               function (v) { rate[0] = v; spec.rate = rate.slice(); })),
+        h("td", null, numInput(function () { return rate[1]; },
+                               function (v) { rate[1] = v; spec.rate = rate.slice(); })),
+        h("td", null, selectInput(attrOptions,
+          function () { return spec.diff_against || vid; },
+          function (v) { spec.diff_against = v; })),
+        h("td", { class: "ed-rowbtns" }, h("button", { class: "ed-btn warn",
+          onclick: function () { pushHistory(); delete vl.variables[vid]; renderAll(); } }, "✕")),
+      ]);
+    });
+    return [
+      h("h3", null, "技能全局设定"),
+      h("p", { class: "ed-hint" },
+        "skills.json 的顶层旋钮：技能抽取数量、数值随机扰动区间、变量共鸣的抽取规则" +
+        "与变量池、名称词缀池。改动影响全部技能的派生（同名结果改变属正常）。"),
+      h("h4", { style: { margin: "12px 0 4px" } }, "技能抽取（skill_count）"),
+      h("div", { class: "ed-form" }, [
+        field("每斗士技能数下限", numInput(function () { return s.skill_count.min; },
+          function (v) { s.skill_count.min = v; })),
+        field("每斗士技能数上限", numInput(function () { return s.skill_count.max; },
+          function (v) { s.skill_count.max = v; })),
+      ]),
+      h("h4", { style: { margin: "12px 0 4px" } }, "数值扰动（md5_variance）"),
+      h("p", { class: "ed-hint" },
+        "同名技能在不同斗士身上的数值倍率抽取区间（三角形分布，两端少见）。"),
+      h("div", { class: "ed-form" }, [
+        field("value 扰动下限", numInput(function () { return s.md5_variance.value[0]; },
+          function (v) { s.md5_variance.value[0] = v; })),
+        field("value 扰动上限", numInput(function () { return s.md5_variance.value[1]; },
+          function (v) { s.md5_variance.value[1] = v; })),
+      ]),
+      h("h4", { style: { margin: "12px 0 4px" } }, "变量共鸣（variable_link）"),
+      h("p", { class: "ed-hint" },
+        "未固定绑定的可共鸣参数按 chance 概率随机抽取属性（模式按权重、倍率在区间内" +
+        "三角形抽取），每技能至多 max_slots 个槽位；「差值 / 之和」与参照属性运算。"),
+      h("div", { class: "ed-form" }, [
+        field("共鸣出现概率 chance", numInput(function () { return vl.chance; },
+          function (v) { vl.chance = v; })),
+        field("每技能槽位上限 max_slots", numInput(function () { return vl.max_slots; },
+          function (v) { vl.max_slots = v; })),
+        field("模式权重 own（己方）", numInput(function () { return vl.mode_weights.own; },
+          function (v) { vl.mode_weights.own = v; })),
+        field("模式权重 enemy（敌方）", numInput(function () { return vl.mode_weights.enemy; },
+          function (v) { vl.mode_weights.enemy = v; })),
+        field("模式权重 difference（差）", numInput(function () { return vl.mode_weights.difference; },
+          function (v) { vl.mode_weights.difference = v; })),
+        field("模式权重 sum（和）", numInput(function () { return vl.mode_weights.sum; },
+          function (v) { vl.mode_weights.sum = v; })),
+      ]),
+      h("table", { class: "ed-table" }, [
+        h("thead", null, h("tr", null, [
+          h("th", null, "变量（属性 id）"), h("th", null, "抽取权重"),
+          h("th", null, "倍率下限"), h("th", null, "倍率上限"),
+          h("th", null, "差/和参照"), h("th", null, "操作"),
+        ])),
+        h("tbody", null, varRows.concat(h("tr", null, [
+          h("td", { colspan: "6" }, h("button", { class: "ed-btn",
+            onclick: function () {
+              pushHistory();
+              var i = 1;
+              while (vl.variables["new_var" + i]) i++;
+              vl.variables["new_var" + i] = { weight: 1, rate: [0.25, 0.65] };
+              renderAll();
+            } }, "＋ 新增变量")),
+        ]))),
+      ]),
+      h("h4", { style: { margin: "12px 0 4px" } }, "名称词缀（name_modifiers）"),
+      h("p", { class: "ed-hint" },
+        "技能名前缀 / 后缀按概率抽取（如「猛烈」），附带 mod 里的参数微调；" +
+        "缩放区间再乘一个随机倍率。词缀池为 JSON（id/name/weight/mod）。"),
+      h("div", { class: "ed-form" }, [
+        field("前缀概率", numInput(function () { return nm.prefix_chance; },
+          function (v) { nm.prefix_chance = v; })),
+        field("后缀概率", numInput(function () { return nm.suffix_chance; },
+          function (v) { nm.suffix_chance = v; })),
+        field("词缀缩放下限", numInput(function () { return nm.mod_variance[0]; },
+          function (v) { nm.mod_variance[0] = v; })),
+        field("词缀缩放上限", numInput(function () { return nm.mod_variance[1]; },
+          function (v) { nm.mod_variance[1] = v; })),
+      ]),
+      h("p", { class: "ed-hint" }, "前缀池（prefixes）："),
+      jsonArea(nm.prefixes, function (v) { nm.prefixes = v; }),
+      h("p", { class: "ed-hint" }, "后缀池（suffixes）："),
+      jsonArea(nm.suffixes, function (v) { nm.suffixes = v; }),
+    ];
   }
 
   function field(label, input) {
@@ -1191,18 +1314,18 @@
   }
 
   function resonanceCandidates(sk) {
-    /* 图内实际存在的可共鸣数值参数：[{node, param, first}]，按节点数组顺序；
-     * first 标记该参数名首次出现（无 node 锚定的配置条目匹配首个）；
-     * 仅统计当前取值下适用的参数（show_if 联动）。 */
+    /* 图内全部可共鸣参数（按节点数组顺序）：已填数值的直接列出，
+     * 未填的也列出（绑定时自动写入默认值）——新技能立即可配共鸣；
+     * first 标记该参数名首次出现（无 node 锚定的配置条目匹配首个）。 */
     var out = [];
     (sk.effect.nodes || []).forEach(function (n) {
       if (n.kind !== "op" && n.kind !== "condition" && n.kind !== "struct") return;
       visibleSpecs(n).forEach(function (ps) {
         if (!ps.link) return;
-        var v = n.params && n.params[ps.key];
-        if (typeof v !== "number") return;
-        out.push({ node: n.id, param: ps.key, first: !out.some(function (c) {
-          return c.param === ps.key; }) });
+        out.push({ node: n.id, param: ps.key, spec: ps,
+                   has: typeof (n.params || {})[ps.key] === "number",
+                   first: !out.some(function (c) {
+                     return c.param === ps.key; }) });
       });
     });
     return out;
@@ -1220,7 +1343,8 @@
   }
 
   function setResVariable(sk, cand, variable) {
-    /* 选「随机」删除绑定；选属性则固定绑定（新建默认 own / 0.45）。 */
+    /* 选「随机」删除绑定；选属性则固定绑定（新建默认 own / 0.45）。
+     * 参数尚未填数值时自动写入安全默认值，保证绑定立即生效。 */
     if (!sk.resonance) sk.resonance = [];
     var list = sk.resonance;
     for (var i = list.length - 1; i >= 0; i--) {
@@ -1231,9 +1355,18 @@
     if (variable) {
       list.push({ node: cand.node, param: cand.param, variable: variable,
                   mode: "own", rate: 0.45 });
+      if (!cand.has) {
+        var node = (sk.effect.nodes || []).filter(function (n) {
+          return n.id === cand.node;
+        })[0];
+        if (node) {
+          node.params = node.params || {};
+          node.params[cand.param] = defaultParamValue(cand.spec);
+        }
+      }
     }
     if (!list.length) delete sk.resonance;
-    renderInspectorOnly();
+    renderAll();
   }
 
   function resonanceSection(sk) {
@@ -1246,10 +1379,11 @@
     var forms = [];
     cands.forEach(function (cand) {
       var r = findRes(sk, cand);
-      forms.push(field("共鸣绑定 " + cand.node + " · " + cand.param, selectInput(
-        varOptions,
-        function () { return r ? r.variable : ""; },
-        function (v) { setResVariable(sk, cand, v); })));
+      var suffix = cand.has ? "" : "（未设值，绑定时自动填默认）";
+      forms.push(field("共鸣绑定 " + cand.node + " · " + cand.param + suffix,
+        selectInput(varOptions,
+          function () { return r ? r.variable : ""; },
+          function (v) { setResVariable(sk, cand, v); })));
       if (r) {
         forms.push(field(cand.node + " · " + cand.param + " 模式", selectInput(
           ["own", "enemy", "difference", "sum"].map(function (m) {

@@ -148,7 +148,8 @@ CMP_OPS = ("lt", "le", "gt", "ge")
 
 # ---- 条件注册表（判断；出边 gate=pass/fail 构成分支；文案键 cond_<type>） ----
 CONDITIONS = dict([
-    _cond("chance", [_pct("chance")]),                     # 概率判定
+    _cond("chance", [_pct("chance", (0.02, 0.95), link=True)]),  # 概率判定
+    # （v3.7.0 起触发率恢复可共鸣——v1 的「触发门槛」共鸣；钳制 [0.02, 0.95]）
     # compare：比较值与值（通用判断）——自身/敌方的 生命比例、攻防速、暴击、
     # 闪避、行动槽比例 两两比较，或与固定值比较（right=const 时用 value）
     _cond("compare", [P("left", "enum", options=CMP_SOURCES),

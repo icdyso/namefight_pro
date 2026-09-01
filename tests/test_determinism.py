@@ -233,8 +233,10 @@ class FighterDeterminism(unittest.TestCase):
             self.assertIn("*", entry["text"])
             self.assertTrue(entry["text"].endswith("。"))
             self.assertLess(entry["text"].index("（"), entry["text"].index("。"))
-            # 变数出现概率契约：整体约 25%/槽位（含双变数时两个括号）
-            self.assertLessEqual(entry["text"].count("（"), 2)
+            # 变数出现概率契约：整体约 25%/槽位（含双变数时两个公式括号；
+            # 只数公式括号——以数字/小数点开头的全角括号，「（每场战斗一次）」
+            # 等固定文案括号不计）
+            self.assertLessEqual(len(re.findall("（[\\d.]", entry["text"])), 2)
 
     @staticmethod
     def _fill_live(tmpl, calcs, own, enemy):

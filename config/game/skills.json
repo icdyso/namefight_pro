@@ -477,7 +477,8 @@
     "fld_count": "层数阈值",
     "fld_max": "轮数上限",
     "fld_decay": "续链概率",
-    "fld_chance": "触发率"
+    "fld_chance": "触发率",
+    "field_chance": "触发率"
   },
   "skills": [
     {
