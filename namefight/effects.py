@@ -54,6 +54,8 @@ HOOKS = (
 STATUS_HOOKS = (
     "on_status_apply",         # 状态被施加时
     "on_status_tick",          # 每 interval 刻（毒发 / 回春回复）
+    "on_status_expire",        # layers 模式逐层到期：每层触发一次（审判；
+                               #   先于 on_status_lose，在拥有者身上执行）
     "on_owner_action",         # 拥有者行动开始（流血损失 / 眩晕吞行动）
     "on_owner_action_consume", # 替换拥有者的本次行动（蓄力释放）
     "on_owner_attack_hit",     # 拥有者命中对方后（吸血）
@@ -203,7 +205,7 @@ OPS = dict([
     # 时增量 = value × 本次记录的吸血总量——血契转化）。
     _op("stat_mod",
         ("after_action", "on_status_apply", "on_status_tick",
-         "on_owner_action", "on_owner_attack_hit",
+         "on_status_expire", "on_owner_action", "on_owner_attack_hit",
          "on_status_gain", "on_status_lose"),
         [P("target", "enum", options=("self", "enemy")),
          P("stat", "enum", options=("hp", "atk", "def", "spd", "crit", "dodge")),
@@ -220,9 +222,9 @@ OPS = dict([
     # dealt 本次造成伤害）用 ratio。
     _op("hp_mod",
         ("on_attack", "action_start", "action_interrupt",
-         "on_status_apply", "on_status_tick", "on_owner_action",
-         "on_owner_attack_hit", "on_status_gain", "on_status_lose",
-         "on_lethal"),
+         "on_status_apply", "on_status_tick", "on_status_expire",
+         "on_owner_action", "on_owner_attack_hit", "on_status_gain",
+         "on_status_lose", "on_lethal"),
         [P("target", "enum", options=("self", "enemy")),
          P("type", "enum", options=("heal", "loss")),
          P("basis", "enum", options=("flat", "maxhp", "curhp", "applier_atk", "dealt")),
@@ -235,7 +237,7 @@ OPS = dict([
     # gauge_mod：行动槽推进 / 倒退（×100 量纲，速度 ~1000）。
     _op("gauge_mod",
         ("on_attack", "action_interrupt", "on_hit_landed", "on_owner_attack_hit",
-         "on_status_gain", "on_status_lose"),
+         "on_status_expire", "on_status_gain", "on_status_lose"),
         [P("target", "enum", options=("self", "enemy")),
          _num("gain", (-20000.0, 20000.0), link=True, unit="gauge")],
         logged=True),

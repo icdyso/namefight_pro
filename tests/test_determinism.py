@@ -785,6 +785,62 @@ class BattleDeterminism(unittest.TestCase):
         ]
         self.assertEqual(runs[0], runs[1])
 
+    def test_judgment_layers_expire_independently(self):
+        """审判标记（洗礼）：layers 逐层独立到期——on_status_expire 每层
+        触发一次、伤害各自结算；施加与落雷时刻满足 施加刻+turns；
+        审判可致死（judgment_death）；同配置双跑完全一致。"""
+        import json as _json
+        from namefight.config import load_game_config_from_data
+        data = {name: _json.loads((CONFIG_ROOT / "game" / ("%s.json" % name))
+                                  .read_text(encoding="utf-8"))
+                for name in ("system", "attributes", "skills", "titles",
+                             "battle", "ui")}
+        for s in data["skills"]["skills"]:
+            if s["id"] == "baptism":
+                s["weight"] = 99
+                for n in s["effect"]["nodes"]:
+                    if n.get("type") == "chance":
+                        n["params"]["chance"] = 1.0
+                    if n.get("type") == "apply_status":
+                        n["params"]["turns"] = 25
+                        n["params"]["value"] = 800
+            else:
+                s["weight"] = 1
+                for n in s["effect"]["nodes"]:
+                    if n.get("type") == "chance":
+                        n["params"]["chance"] = 0.0
+        data["skills"]["skills"] = [s for s in data["skills"]["skills"]
+                                    if s["id"] in ("baptism", "execution",
+                                                   "momentum")]
+        game = load_game_config_from_data(data)
+
+        def play():
+            fa = derive_fighter("洗礼审判甲", game)
+            fb = derive_fighter("洗礼审判乙", game)
+            out = run_battle(fa, fb, game)
+            gains = [(e["tick"], e["params"]["turns"])
+                     for e in out.events if e["template"] == "judgment_gain"]
+            strikes = [e["tick"] for e in out.events
+                       if e["template"] == "judgment_strike"]
+            return out, gains, strikes
+
+        out, gains, strikes = play()
+        self.assertGreater(len(gains), 0, "应采样到审判施加")
+        # 每层到期时刻 = 施加刻 + turns（个性化后的实际持续）
+        applied = {t: int(tv) for t, tv in gains}
+        for tick in strikes:
+            self.assertTrue(any(t + tv == tick for t, tv in applied.items()),
+                            "落雷刻 %d 不对应任何一层的 施加刻+持续" % tick)
+        # 战斗结束时双方身上仍可能有悬空层，只要求足量落雷被观测到
+        self.assertGreaterEqual(len(strikes), 3)
+        self.assertIn("judgment_death",
+                      [e["template"] for e in out.events],
+                      "800×多层审判应能致死")
+        out2, gains2, strikes2 = play()
+        self.assertEqual((out.winner_name, out.events),
+                         (out2.winner_name, out2.events),
+                         "审判结算必须同名同命（双跑一致）")
+
 
 if __name__ == "__main__":
     unittest.main()

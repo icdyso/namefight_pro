@@ -116,13 +116,15 @@ namefight_pro/
   （**改变即 breaking**）。
 - **状态系统（v3.0.0）**：运行时容器 `_Combatant.st`（通用字段 params/stacks/
   expires/layers/next/actions/records/total/links）+ `markers`；定义数据化于
-  `battle.json` 的 `statuses`——策略字段（stack/expire/interval/reset_on_miss/
-  lethal）+ params（施加可覆盖、可个性化可共鸣）+ **mods 被动修饰表**（8 种
-  kind，攻防聚合点按施加顺序聚合）+ **effects 效果图**（5 个状态钩子，毒发 /
-  流血 / 回春 / 眩晕 / 蓄力释放 / 吸血均为图上原子组合，`$参数` 引用施加参数）；
-  新建状态无需改引擎。
-- **tick 模型**：每刻双方 gauge += 自身有效速度，达阈值（10000）行动一次并扣回；
-  同刻多人按（gauge 余量降序、内部序）行动。
+  `battle.json` 的 `statuses`——策略字段（stack/expire/interval/max_stacks：
+  -1/缺省=不限、0=禁用、1=单层）+ params（施加可覆盖、可个性化可共鸣）+
+  **mods 被动修饰表**（10 种 kind，攻防聚合点按施加顺序聚合）+ **effects
+  效果图**（6 个状态钩子，毒发 / 流血 / 回春 / 眩晕 / 蓄力释放 / 吸血 /
+  审判逐层到期（on_status_expire，v3.4.0）均为图上原子组合，`$参数`
+  引用施加参数）；新建状态无需改引擎。
+- **tick 模型**：每刻开始先结算 layers 状态逐层到期（on_status_expire，如
+  审判落雷，先于 on_status_lose）；随后双方 gauge += 自身有效速度，达阈值
+  （10000）行动一次并扣回；同刻多人按（gauge 余量降序、内部序）行动。
 - **伤害**：`raw = 有效ATK × 三角浮动 × 暴击倍率 × 技能倍率`，
   `免伤率 = 有效DEF / (有效DEF + 2500) × (1 − 穿透)`，`dmg = max(100, raw × (1 − 免伤))`。
 - **行动顺序**：斩断打断 -> 流血 -> 行动开始技能（血契/回春/净化）-> 眩晕 ->

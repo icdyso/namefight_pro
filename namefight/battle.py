@@ -1309,22 +1309,61 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
             winner = enemy
         return winner is not None or draw
 
-    def _status_death(c):
-        """状态结算致死（毒 / 流血）：输出定义的 death_event 并结束战斗。
-        返回 True 表示战斗结束。"""
+    def _status_death(c, sid=None):
+        """状态结算致死（毒 / 流血 / 审判）：输出定义的 death_event 并结束
+        战斗（sid 指定刚结算的状态——审判最后一层炸完即不在场，须直接取
+        其定义）。返回 True 表示战斗结束。"""
         nonlocal winner
         if c.hp > 0:
             return False
-        for sid, st, sdef in statuses.each_live(c, game, tick):
+        death_event = None
+        sdef = game.statuses.get(sid) if sid else None
+        if sdef is not None:
             death_event = sdef.get("death_event")
-            if death_event:
-                ev(str(death_event), {"a": c.name})
-                break
+        if not death_event:
+            for sid2, _st, sdef2 in statuses.each_live(c, game, tick):
+                if sdef2.get("death_event"):
+                    death_event = sdef2.get("death_event")
+                    break
+        if death_event:
+            ev(str(death_event), {"a": c.name})
         winner = internal[1] if c is internal[0] else internal[0]
         return True
 
     while tick < bc.max_ticks and winner is None and not draw:
         tick += 1
+        # ---- 每刻开始：审判类逐层到期（on_status_expire，每层一次，
+        #      在失去检测之前执行——最后一层的伤害先炸、再发 on_status_lose） ----
+        for c in internal:
+            if c.hp <= 0:
+                continue
+            enemy = internal[1] if c is internal[0] else internal[0]
+            for sid, st in list(c.st.items()):
+                sdef = game.statuses.get(sid)
+                if sdef is None or sdef.get("stack") != "layers":
+                    continue
+                if sid not in c.live_prev:
+                    continue            # 上一刻已不在场（驱散 / 清除走别的路径）
+                dropped = [t for t in st["layers"] if t <= tick]
+                if not dropped:
+                    continue
+                st["layers"] = [t for t in st["layers"] if t > tick]
+                plan = game.status_plans.get(sid, {}).get("on_status_expire")
+                if not plan:
+                    continue
+                ectx = _Ctx(game, rng, ev, tick, c, enemy, combatants)
+                ectx.hook_name = "on_status_expire"
+                ectx.status = (sid, st)
+                for _layer in dropped:      # 每个到期层独立执行一次
+                    for tree in plan:
+                        if _run_tree(tree, ectx):
+                            break
+                if _status_death(c, sid):
+                    break
+            if winner is not None:
+                break
+        if winner is not None:
+            break
         # ---- 每刻开始：标记到期清理 / 状态失去检测（on_status_lose） ----
         for c in internal:
             if c.hp <= 0:

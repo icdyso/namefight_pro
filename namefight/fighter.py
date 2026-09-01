@@ -566,6 +566,11 @@ def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
         out["action_word"] = str(game.stats.get(
             "lbl_marker_" + str(disp.get("action", "set")),
             disp.get("action", "set")))
+    if node.get("kind") == "op" and node.get("type") == "hp_mod":
+        # 体力变动：治疗模板带目标词（「回复自身 / 回复敌方」）
+        out["target_word"] = str(game.stats.get(
+            "cmp_target_" + str(disp.get("target", "self")),
+            disp.get("target", "self")))
     if node.get("kind") == "op" and node.get("type") == "status_ctl":
         # 状态操控：目标词 + 操作词（延长 / 缩短 / 叠层 / 强制清除）
         out["target_word"] = str(game.stats.get(

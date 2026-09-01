@@ -272,8 +272,8 @@
     "op_taken_mod": "使所受伤害降低 {cut}",
     "op_grant_immune": "完全免疫本次伤害",
     "op_stat_mod": "{stat} 永久提升 {gain}",
-    "op_hp_mod": "回复 {value} 点生命",
-    "op_hp_mod_pct": "回复最大生命 {value} 的生命",
+    "op_hp_mod": "回复{target_word} {value} 点生命",
+    "op_hp_mod_pct": "回复{target_word}最大生命 {value} 的生命",
     "op_hp_mod_loss": "消耗自身 {value} 生命",
     "op_gauge_mod": "使行动槽变化 {gain}",
     "op_skip_action": "消耗本次行动",
@@ -291,6 +291,7 @@
     "st_tempo": "速度 +{value}、攻击 +{atk}（永久叠加）",
     "st_last_stand": "攻击 +{value} 且速度 +{spd}，持续到战斗结束",
     "st_pact_steal": "本次攻击附带 {value} 吸血，行动结束后按吸血量转化为攻击",
+    "st_judgment": "命中则刻下审判标记：每层独立倒数 {turns} 刻，到期各造成 {value} 点伤害（可叠加、可驱散）",
     "op_strike_basis": "把{basis_word}以 ×{value} 打出",
     "lbl_basis_recorded_sum": "记仇记录总和",
     "lbl_basis_taken_absorbed": "被减免的伤害",
@@ -2335,6 +2336,110 @@
           {
             "from": "n1",
             "to": "n2"
+          }
+        ]
+      }
+    },
+    {
+      "id": "baptism",
+      "name": "洗礼",
+      "description": "圣光洗净罪孽，审判随后降临。",
+      "weight": 7,
+      "mastery": [
+        0.55,
+        1.65
+      ],
+      "mastery_on": [
+        "value"
+      ],
+      "effect": {
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "trigger",
+            "type": "on_attack",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.22
+            },
+            "pos": [
+              280,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "heal",
+              "basis": "flat",
+              "value": 600,
+              "event": "baptism_heal"
+            },
+            "pos": [
+              520,
+              60
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "enemy",
+              "type": "heal",
+              "basis": "flat",
+              "value": 600,
+              "event": "baptism_heal"
+            },
+            "pos": [
+              760,
+              60
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "apply_status",
+            "params": {
+              "status": "judgment",
+              "target": "enemy",
+              "value": 900,
+              "turns": 12
+            },
+            "pos": [
+              1000,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
+          {
+            "from": "n1",
+            "to": "n2"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n3",
+            "to": "n4"
           }
         ]
       }

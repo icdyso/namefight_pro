@@ -73,7 +73,11 @@
     "retribution_record": "{a} 记仇：记录 {damage} 点伤害（{stacks} 条）",
     "retribution_release": "{a} 记仇爆发：将记录总和以 {ratio} 追加，共 {value} 点！",
     "shield_absorb": "{a} 的护盾吸收了 {damage} 点伤害",
-    "barrier_gain": "{a} 获得护盾：可吸收 {value} 点伤害，持续 {turns} 刻"
+    "barrier_gain": "{a} 获得护盾：可吸收 {value} 点伤害，持续 {turns} 刻",
+    "baptism_heal": "✨ {a} 受到洗礼，回复 {heal} 点生命。",
+    "judgment_gain": "⚖️ {b} 被刻下审判：每层到期造成 {value} 点伤害（{stacks} 层，各 {turns} 刻）",
+    "judgment_strike": "⚡ {a} 的审判降临：受到 {damage} 点伤害",
+    "judgment_death": "⚖️ {a} 在审判之雷下倒下！"
   },
   "statuses": {
     "poison": {
@@ -814,6 +818,74 @@
       "effects": {
         "nodes": [],
         "edges": []
+      }
+    },
+    "judgment": {
+      "name": "审判标记",
+      "detail": "审判将至：{stacks} 层，每层到期造成 {value} 点伤害",
+      "desc": "洗礼刻下的判决：每层独立倒数、到期即罚（on_status_expire 逐层触发）；可被净化驱散。",
+      "dispellable": true,
+      "stack": "layers",
+      "expire": "ticks",
+      "event": "judgment_gain",
+      "death_event": "judgment_death",
+      "params": {
+        "value": {
+          "fmt": "num",
+          "clamp": [
+            0,
+            null
+          ],
+          "link": true,
+          "unit": "hp",
+          "default": 900
+        },
+        "turns": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true,
+          "default": 12
+        }
+      },
+      "mods": [],
+      "effects": {
+        "nodes": [
+          {
+            "id": "e0",
+            "kind": "trigger",
+            "type": "on_status_expire",
+            "pos": [
+              80,
+              60
+            ]
+          },
+          {
+            "id": "e1",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "loss",
+              "basis": "flat",
+              "value": "$value",
+              "can_kill": true,
+              "event": "judgment_strike"
+            },
+            "pos": [
+              330,
+              60
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "e0",
+            "to": "e1"
+          }
+        ]
       }
     }
   }
