@@ -102,8 +102,8 @@ namefight_pro/
 ## 6. 设计备忘（现行规则速查）
 
 - **技能图模型（v3.2.0 最小原子 + 表达式）**：技能逻辑 = 节点图
-  `{nodes, edges}`，四类节点——trigger（11 钩子，含 on_status_gain/lose
-  等待事件）、condition（9 种，出边 gate: pass/fail 构成**分支**；compare
+  `{nodes, edges}`，四类节点——trigger（13 钩子，含 on_status_gain/lose 等待、
+  on_attack_miss 落空、on_lethal 致命拦截）、condition（9 种，出边 gate: pass/fail 构成**分支**；compare
   为通用「比较值与值」，14 种值源 × 4 种运算）、op（**13 个最小原子**：
   strike / hit_mod / taken_mod / grant_immune / stat_mod / hp_mod /
   gauge_mod / apply_status / cleanse / record / skip_action / marker /
