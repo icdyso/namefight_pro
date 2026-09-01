@@ -1070,7 +1070,16 @@
     var host = NF.qs("#ed-inspector");
     if (!host) return;
     clear(host);
-    renderInspector().forEach(function (el) { if (el) host.appendChild(el); });
+    /* 过滤空槽位并拍平嵌套数组段（共鸣绑定等节返回元素数组；
+     * 整页渲染走 NF.h 自动拍平，此处须同样处理，否则 appendChild(数组)
+     * 抛错导致面板渲染中断）。 */
+    renderInspector().forEach(function (el) {
+      if (Array.isArray(el)) {
+        el.forEach(function (e) { if (e) host.appendChild(e); });
+      } else if (el) {
+        host.appendChild(el);
+      }
+    });
   }
 
   function renderInspector() {
@@ -1131,6 +1140,98 @@
     return sel;
   }
 
+  function attrNameOf(id) {
+    /* 属性 id -> 显示名（共鸣绑定下拉用）。 */
+    var found = (state.files.attributes.attributes || []).filter(function (x) {
+      return x.id === id;
+    })[0];
+    return found ? found.name : id;
+  }
+
+  function linkVariableIds() {
+    /* 可共鸣变量池（variable_link.variables 的键 = 可绑定的属性）。 */
+    var vl = (state.files.skills.variable_link || {}).variables || {};
+    return Object.keys(vl);
+  }
+
+  function resonanceCandidates(sk) {
+    /* 图内实际存在的可共鸣数值参数：[{node, param, first}]，按节点数组顺序；
+     * first 标记该参数名首次出现（无 node 锚定的配置条目匹配首个）。 */
+    var out = [];
+    (sk.effect.nodes || []).forEach(function (n) {
+      if (n.kind !== "op" && n.kind !== "condition" && n.kind !== "struct") return;
+      specList(n).forEach(function (ps) {
+        if (!ps.link) return;
+        var v = n.params && n.params[ps.key];
+        if (typeof v !== "number") return;
+        out.push({ node: n.id, param: ps.key, first: !out.some(function (c) {
+          return c.param === ps.key; }) });
+      });
+    });
+    return out;
+  }
+
+  function findRes(sk, cand) {
+    /* 命中该候选的覆盖条目：节点精确锚定优先；无 node 的条目匹配首个同名额。 */
+    var list = sk.resonance || [];
+    var exact = list.filter(function (r) {
+      return r.node === cand.node && r.param === cand.param;
+    })[0];
+    if (exact) return exact;
+    if (!cand.first) return null;
+    return list.filter(function (r) { return !r.node && r.param === cand.param; })[0] || null;
+  }
+
+  function setResVariable(sk, cand, variable) {
+    /* 选「随机」删除绑定；选属性则固定绑定（新建默认 own / 0.45）。 */
+    if (!sk.resonance) sk.resonance = [];
+    var list = sk.resonance;
+    for (var i = list.length - 1; i >= 0; i--) {
+      var same = (list[i].node === cand.node && list[i].param === cand.param) ||
+        (!list[i].node && list[i].param === cand.param && cand.first);
+      if (same) list.splice(i, 1);
+    }
+    if (variable) {
+      list.push({ node: cand.node, param: cand.param, variable: variable,
+                  mode: "own", rate: 0.45 });
+    }
+    if (!list.length) delete sk.resonance;
+    renderInspectorOnly();
+  }
+
+  function resonanceSection(sk) {
+    /* 共鸣绑定覆盖表：图内每个可共鸣数值参数都可从「随机」改为固定属性。 */
+    if (!state.schema) return null;
+    var cands = resonanceCandidates(sk);
+    if (!cands.length) return null;
+    var varOptions = [["", "随机（默认抽取）"]].concat(linkVariableIds().map(
+      function (id) { return [id, attrNameOf(id)]; }));
+    var forms = [];
+    cands.forEach(function (cand) {
+      var r = findRes(sk, cand);
+      forms.push(field("共鸣绑定 " + cand.node + " · " + cand.param, selectInput(
+        varOptions,
+        function () { return r ? r.variable : ""; },
+        function (v) { setResVariable(sk, cand, v); })));
+      if (r) {
+        forms.push(field(cand.node + " · " + cand.param + " 模式", selectInput(
+          [["own", "己方（own）"], ["enemy", "敌方（enemy）"],
+           ["difference", "双方之差（difference）"], ["sum", "双方之和（sum）"]],
+          function () { return r.mode || "own"; },
+          function (v) { r.mode = v; })));
+        forms.push(field(cand.node + " · " + cand.param + " 共鸣倍率", numInput(
+          function () { return r.rate; }, function (v) { r.rate = v; })));
+      }
+    });
+    return [
+      h("h4", { style: { margin: "12px 0 4px" } }, "共鸣绑定（覆盖随机抽取）"),
+      h("p", { class: "ed-hint" },
+        "默认每个可共鸣参数按配置概率随机抽取属性；在此固定绑定后，该参数恒与所选属性共鸣" +
+        "（不掷概率、不抽变量）。未绑定（随机）的参数照旧。倍率越大受属性影响越强。"),
+      h("div", { class: "ed-form" }, forms),
+    ];
+  }
+
   function inspectSkill(sk) {
     /* 属性面板：技能基本信息（名称 / id / 权重 / 熟练度区间与作用参数）。 */
     return [
@@ -1158,6 +1259,7 @@
                           sk.mastery_on = parts.length === 1 ? parts[0] : parts;
                         })),
       ]),
+      resonanceSection(sk),
       h("p", { class: "ed-hint" }, "选中画布中的节点可编辑其参数；Delete 键删除选中节点/连线。"),
     ];
   }

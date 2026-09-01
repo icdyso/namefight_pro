@@ -67,7 +67,8 @@ def new_runtime():
     return {"params": {},      # 施加时合并的参数（含个性化 / 共鸣结果）
             "stacks": 0,       # count 模式层数
             "expires": 0,      # refresh / count 模式的到期刻
-            "layers": [],      # layers 模式各层的到期刻列表
+            "layers": [],      # layers 模式各层 [到期刻, 施加参数快照]（审判
+                               # 每层独立携带伤害值——不同施加的数值互不覆盖）
             "next": 0,         # on_status_tick 的下次触发刻
             "actions": 0,      # expire=actions 的剩余行动数
             "applier": None,   # 施加者引用（撕裂按施加者攻击折算用）
@@ -93,7 +94,7 @@ def live(c, sid: str, tick: int, sdef: dict) -> bool:
     if sdef.get("expire") == "actions":
         return st["actions"] > 0
     if sdef.get("stack") == "layers":
-        st["layers"] = [t for t in st["layers"] if t > tick]
+        st["layers"] = [e for e in st["layers"] if e[0] > tick]
         return bool(st["layers"])
     if sdef.get("expire") == "none":
         # 无期限状态：有施加参数 / 层数 / 记录 / 累计值之一即视为在场
@@ -157,7 +158,8 @@ def status_display(c, tick: int, guard_cap: float, game) -> list:
         if sdef.get("expire") == "actions":
             params["turns"] = st["actions"]
         elif sdef.get("stack") == "layers":
-            params["turns"] = (max(st["layers"]) - tick) if st["layers"] else 0
+            params["turns"] = (max(e[0] for e in st["layers"]) - tick) \
+                if st["layers"] else 0
         elif sdef.get("expire") not in ("none",):
             params["turns"] = max(0, st["expires"] - tick)
         # 施加参数按定义的 fmt 格式化（毒伤 / 破甲量 / 吸血比例……）

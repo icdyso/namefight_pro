@@ -2415,7 +2415,7 @@
             "params": {
               "status": "judgment",
               "target": "enemy",
-              "value": 900,
+              "value": 1300,
               "turns": 12
             },
             "pos": [

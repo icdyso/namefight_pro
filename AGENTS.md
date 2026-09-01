@@ -134,7 +134,11 @@ namefight_pro/
   效果值）；**共鸣**双槽位各 25%（可共鸣资格由 op 参数规格的 `link` 标记声明），
   模式 own10 : enemy3 : difference2 : sum1，公式
   「基数 + 变量式*合并系数」直显真实值；live 文本占位符 = `\u0001 + 槽位序号`
-  （对应 `link_calc` 下标），前端按序号替换。
+  （对应 `link_calc` 下标），前端按序号替换；技能可声明 `resonance` 覆盖表
+  （`{node?, param, variable, mode, rate}`，编辑器技能面板可编辑）固定绑定
+  共鸣属性，声明即不掷概率不抽变量。
+- **layers 叠层**：每层为 `[到期刻, 施加参数快照]`——审判类逐层到期
+  （on_status_expire）各按自己施加时结算的数值生效，不同施加互不覆盖。
 - **称号（v1.2.1）**：结构固定为「前缀+主体」（structures 仅 `prefix_core`，
   连接符空串直拼）；字段自带 desc 与 bonus（最多三种属性、可负、与属性同量纲）。
   候选词条库：`docs/title_candidates.md`（500 前缀 + 500 主体，筛选后手动并入）。

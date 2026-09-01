@@ -78,6 +78,8 @@ class SkillDef:
     plan: dict         # 编译后的执行计划 {hook: ((node, (子树, ...)), ...)}
     mastery: tuple       # 熟练度 -> 倍率区间 (lo, hi)，作用于 mastery_on 参数
     mastery_on: tuple    # 熟练度作用的参数名（默认 ("chance",)；可为多项如 ("value","spd")）
+    resonance: tuple     # 共鸣绑定覆盖表（编辑器可编辑；声明即固定绑定，
+                         # 不再随机抽取）：({param, variable, mode, rate}, ...)
 
 
 @dataclass(frozen=True)
@@ -416,6 +418,25 @@ def build_game_config(data: dict) -> GameCfg:
                 if ev_id and str(ev_id) not in battle_log_raw:
                     raise ConfigError("技能 %s 的节点 %s 引用了未定义的战报模板: %s"
                                       % (s["id"], node.get("id"), ev_id))
+        # 共鸣绑定覆盖表（可选）：声明即固定绑定，不再随机抽取；
+        # node 可选（节点 id），不填则命中图内首个该名可共鸣数值参数
+        resonance = []
+        for r in s.get("resonance", []) or []:
+            if not isinstance(r, dict) or not r.get("param") \
+                    or not r.get("variable"):
+                raise ConfigError("技能 %s 的 resonance 条目必须含 param / variable" % s["id"])
+            rate = float(r.get("rate", 0.45))
+            if not 0.0 < rate <= 1.0:
+                raise ConfigError("技能 %s 的 resonance 倍率必须在 (0, 1]" % s["id"])
+            node_id = str(r.get("node", "") or "")
+            if node_id and node_id not in {n.get("id") for n in s.get("effect", {}).get("nodes", [])}:
+                raise ConfigError("技能 %s 的共鸣覆盖引用了不存在的节点: %s"
+                                  % (s["id"], node_id))
+            resonance.append({
+                "param": str(r["param"]), "variable": str(r["variable"]),
+                "mode": str(r.get("mode", "own")), "rate": rate,
+                "node": node_id,
+            })
         skills.append(SkillDef(
             id=str(s["id"]), name=str(s.get("name", s["id"])),
             description=str(s.get("description", "")),
@@ -423,6 +444,7 @@ def build_game_config(data: dict) -> GameCfg:
             effect=dict(s.get("effect", {})), plan=plan,
             mastery=(float(mastery[0]), float(mastery[1])),
             mastery_on=mastery_on,
+            resonance=tuple(resonance),
         ))
     if not skills:
         raise ConfigError("技能池为空")
@@ -484,6 +506,16 @@ def build_game_config(data: dict) -> GameCfg:
         raise ConfigError("variable_link.max_slots 必须在 [1, 4]")
     if skill_variable_link.chance > 0 and not link_variables:
         raise ConfigError("variable_link.chance > 0 但变量池为空")
+    # 共鸣覆盖表的变量 / 模式必须在共鸣配置定义过（差值 / 求和需要参照属性）
+    link_var_ids = {v.id for v in link_variables}
+    for sk in skills:
+        for r in sk.resonance:
+            if r["variable"] not in link_var_ids:
+                raise ConfigError("技能 %s 的共鸣覆盖引用了未定义变量: %s"
+                                  % (sk.id, r["variable"]))
+            if r["mode"] not in VALID_LINK_MODES:
+                raise ConfigError("技能 %s 的共鸣覆盖模式非法: %s"
+                                  % (sk.id, r["mode"]))
 
     # 技能名称词缀（前缀/后缀，附带微小参数修正；名称与修正值同条目）
     mod_data = skills_data.get("name_modifiers", {})

@@ -838,7 +838,7 @@
           ],
           "link": true,
           "unit": "hp",
-          "default": 900
+          "default": 1300
         },
         "turns": {
           "fmt": "turns",

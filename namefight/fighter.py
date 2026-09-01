@@ -293,6 +293,15 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
         # （基数 × (1 + 率 × 变量式 / 基准)），运行期与手写表达式走同一条
         # 求值路径；links 保留为显示元数据（公式括号 / 尾句 / live 占位 /
         # link_calc 前端实时重算），base 记录共鸣前的个性化基数。
+        # v3.5.0 起技能可声明 resonance 覆盖表：声明的参数固定绑定
+        # （不掷概率、不抽变量，编辑器可编辑），未声明的照旧随机；覆盖与
+        # 随机共享 max_slots 上限。带 node 的条目精确锚定节点，无 node 的
+        # 命中图内首个该名可共鸣参数。
+        override_nodes = {(r["node"], r["param"]): i
+                          for i, r in enumerate(sdef.resonance) if r["node"]}
+        by_param = {r["param"]: i for i, r in enumerate(sdef.resonance)
+                    if not r["node"]}
+        consumed = set()                  # 已消耗的覆盖条目下标
         slots = 0
         for node in nodes:
             if slots >= link_cfg.max_slots:
@@ -301,6 +310,7 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
             candidates = [k for k, ps in specs.items() if ps.link]
             if not candidates:
                 continue
+            node_id = str(node.get("id", ""))
             links = []
             for param in candidates:
                 if slots >= link_cfg.max_slots:
@@ -309,11 +319,24 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                     continue
                 if isinstance(node["params"][param], str):
                     continue          # 表达式参数不参与共鸣（作者精确控制）
-                if rng.next_float() >= link_cfg.chance:
-                    continue
-                mode = rng.pick_weighted(link_cfg.mode_weights)
-                vdef = rng.pick_weighted((v, v.weight) for v in link_cfg.variables)
-                rate = rng.next_triangular(vdef.rate_lo, vdef.rate_hi)
+                ov_i = override_nodes.get((node_id, param),
+                                          by_param.get(param))
+                ov = sdef.resonance[ov_i] if ov_i is not None else None
+                if ov is not None and ov_i not in consumed:
+                    mode = ov["mode"]
+                    vdef = next((v for v in link_cfg.variables
+                                 if v.id == ov["variable"]), None)
+                    if vdef is None:
+                        continue
+                    rate = float(ov["rate"])
+                    consumed.add(ov_i)
+                else:
+                    if rng.next_float() >= link_cfg.chance:
+                        continue
+                    mode = rng.pick_weighted(link_cfg.mode_weights)
+                    vdef = rng.pick_weighted((v, v.weight)
+                                             for v in link_cfg.variables)
+                    rate = rng.next_triangular(vdef.rate_lo, vdef.rate_hi)
                 base_value = max(1.0, float(game.attr(vdef.id).base))
                 var_expr = {"own": "$self." + vdef.id,
                             "enemy": "$enemy." + vdef.id}.get(mode)

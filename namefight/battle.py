@@ -890,7 +890,9 @@ def _apply_status_now(ctx: _Ctx, sid: str, proc: dict, target):
     turns = max(1, int(st["params"].get("turns", 1)))
     stack = sdef.get("stack", "refresh")
     if stack == "layers":
-        st["layers"].append(ctx.tick + turns)
+        # 每层独立携带施加参数快照（审判：不同施加的伤害 / 持续互不覆盖，
+        # 共鸣使每次施加的数值都可能不同）
+        st["layers"].append([ctx.tick + turns, dict(merged)])
     elif stack == "count":
         cap = _stack_cap(st, sdef)
         if cap == 0:
@@ -1045,12 +1047,14 @@ def _op_status_ctl(ctx, proc):
     value = _r(float(proc.get("value", 0.0)))
     if op == "extend":
         if sdef.get("stack") == "layers":
-            st["layers"] = [t + max(0, int(value)) for t in st["layers"]]
+            st["layers"] = [[e[0] + max(0, int(value)), e[1]]
+                            for e in st["layers"]]
         else:
             st["expires"] += max(0, int(value))
     elif op == "shorten":
         if sdef.get("stack") == "layers":
-            st["layers"] = [t - max(0, int(value)) for t in st["layers"]]
+            st["layers"] = [[e[0] - max(0, int(value)), e[1]]
+                            for e in st["layers"]]
         else:
             st["expires"] -= max(0, int(value))
     elif op == "stacks":
@@ -1344,17 +1348,20 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                     continue
                 if sid not in c.live_prev:
                     continue            # 上一刻已不在场（驱散 / 清除走别的路径）
-                dropped = [t for t in st["layers"] if t <= tick]
+                dropped = [e for e in st["layers"] if e[0] <= tick]
                 if not dropped:
                     continue
-                st["layers"] = [t for t in st["layers"] if t > tick]
+                st["layers"] = [e for e in st["layers"] if e[0] > tick]
                 plan = game.status_plans.get(sid, {}).get("on_status_expire")
                 if not plan:
                     continue
-                ectx = _Ctx(game, rng, ev, tick, c, enemy, combatants)
-                ectx.hook_name = "on_status_expire"
-                ectx.status = (sid, st)
-                for _layer in dropped:      # 每个到期层独立执行一次
+                for exp_tick, layer_params in dropped:   # 每层携带自己的施加参数
+                    ectx = _Ctx(game, rng, ev, tick, c, enemy, combatants)
+                    ectx.hook_name = "on_status_expire"
+                    layer_view = statuses.new_runtime()
+                    layer_view["params"] = dict(layer_params)
+                    layer_view["applier"] = st.get("applier")
+                    ectx.status = (sid, layer_view)
                     for tree in plan:
                         if _run_tree(tree, ectx):
                             break
