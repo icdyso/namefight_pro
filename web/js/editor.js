@@ -103,13 +103,28 @@
     return (state.files.battle.statuses[sid] || {}).name || sid;
   }
 
+  function enumWord(key, value) {
+    /* 枚举值中文化：属性枚举取属性配置名；其余查 stats 词表
+     * （enum_* / ctl_* / cmp_target_* / cmp_* / lbl_marker_*），查无显示原值。 */
+    if (key === "stat") return attrNameOf(value);
+    var stats = state.files.skills.stats;
+    return stats["enum_" + value] || stats["ctl_" + value] ||
+      stats["cmp_target_" + value] || stats["cmp_" + value] ||
+      stats["lbl_marker_" + value] || value;
+  }
+
   function fmtParams(node) {
-    /* 节点参数摘要（画布节点下方的一行文本）。 */
+    /* 节点参数摘要（画布节点下方的一行文本；枚举与状态引用显示中文）。 */
     var out = [];
     var params = node.params || {};
+    var specs = {};
+    specList(node).forEach(function (ps) { specs[ps.key] = ps; });
     Object.keys(params).forEach(function (k) {
       var v = params[k];
-      var text = typeof v === "number" ? (Math.round(v * 10000) / 10000) : String(v);
+      var text;
+      if (k === "status") text = statusName(String(v));
+      else if (specs[k] && specs[k].kind === "enum") text = enumWord(k, String(v));
+      else text = typeof v === "number" ? (Math.round(v * 10000) / 10000) : String(v);
       out.push(k + " = " + text);
     });
     return out.length ? out.join(" · ") : "（无参数）";
@@ -1215,8 +1230,9 @@
         function (v) { setResVariable(sk, cand, v); })));
       if (r) {
         forms.push(field(cand.node + " · " + cand.param + " 模式", selectInput(
-          [["own", "己方（own）"], ["enemy", "敌方（enemy）"],
-           ["difference", "双方之差（difference）"], ["sum", "双方之和（sum）"]],
+          ["own", "enemy", "difference", "sum"].map(function (m) {
+            return [m, enumWord("mode", m)];
+          }),
           function () { return r.mode || "own"; },
           function (v) { r.mode = v; })));
         forms.push(field(cand.node + " · " + cand.param + " 共鸣倍率", numInput(
@@ -1298,9 +1314,12 @@
         return;
       }
       if (ps.key === "event") {
-        // 战报模板引用：battle_log 键下拉框（含「无」）
+        // 战报模板引用：battle_log 键下拉框（含「无」，附中文模板预览）
         var evKeys = [["", "（无战报）"]].concat(
-          Object.keys(state.files.battle.battle_log).sort().map(function (k) { return [k, k]; }));
+          Object.keys(state.files.battle.battle_log).sort().map(function (k) {
+            var t = String(state.files.battle.battle_log[k] || "");
+            return [k, k + "（" + (t.length > 16 ? t.slice(0, 16) + "…" : t) + "）"];
+          }));
         forms.push(field(label, selectInput(evKeys,
           function () { return node.params[ps.key] || ""; },
           function (v) {
@@ -1310,7 +1329,7 @@
         return;
       }
       if (ps.kind === "enum") {
-        var options = ps.options.map(function (o) { return [o, o]; });
+        var options = ps.options.map(function (o) { return [o, enumWord(ps.key, o)]; });
         forms.push(field(label, selectInput(options,
           function () { return node.params[ps.key]; },
           function (v) { node.params[ps.key] = v; renderInspectorOnly(); })));
@@ -1836,7 +1855,9 @@
           function (x) { return h("th", null, x); }))),
         h("tbody", null, (def.mods || (def.mods = [])).map(function (m, i) {
           return h("tr", null, [
-            h("td", null, selectInput(modKinds.map(function (k) { return [k, k]; }),
+            h("td", null, selectInput(modKinds.map(function (k) {
+              return [k, state.files.skills.stats["mk_" + k] || k];
+            }),
               function () { return m.kind; }, function (v) { m.kind = v; })),
             h("td", null, textInput(function () { return String(m.value); }, function (v) {
               v = v.trim();
