@@ -46,12 +46,13 @@
 - 战报以「模板 id + 参数」结构化存储；技能 / 属性等参数以 `{"ref","id"}` 传递；
   每条战报附带 `rich` 富文本段与双方状态快照（前端渲染依据）。
 - 扩展（v2.0.0 起均为纯配置操作，不改引擎）：**新技能** = `skills.json` 加条目，
-  `effect` 为节点图 `{nodes, edges}`（触发钩子 / 条件 / 效果原语类型与参数规格
-  须在 `namefight/effects.py` 注册表中，`GET /api/schema` 可查）+ `stats` 补
-  `op_*` 等词表；**新状态** = `battle.json` 的 `statuses` 加条目（kind 须为
-  `namefight/statuses.py` 注册的行为种类，同 kind 新状态自动被引擎结算覆盖）；
-  新称号字段 = `titles.json` 对应池加条目（name/desc/bonus，
-  **bonus 最多三种属性、可负**）。
+  `effect` 为节点图 `{nodes, edges}`（触发钩子 / 条件（分支 gate: pass/fail）/
+  原子 / 结构 loop（循环）的类型与参数规格须在 `namefight/effects.py` 注册表中，
+  `GET /api/schema` 可查）+ `stats` 补 `op_*` 等词表；**新状态** =
+  `battle.json` 的 `statuses` 加条目（策略字段 stack/expire/interval/lethal +
+  params + mods 被动修饰（`namefight/statuses.py` 的 MOD_KINDS）+ effects
+  效果图（5 个状态钩子，`$参数` 引用施加参数））；新称号字段 =
+  `titles.json` 对应池加条目（name/desc/bonus，**bonus 最多三种属性、可负**）。
 
 ### 2.3 技术约束
 
@@ -98,16 +99,20 @@ namefight_pro/
 
 ## 6. 设计备忘（现行规则速查）
 
-- **技能图模型（v2.0.0）**：技能逻辑 = 节点图 `{nodes, edges}`，三类节点——
-  trigger（9 钩子：battle_start / action_interrupt / action_start / before_attack /
-  on_attack / on_defend / on_hit_landed / on_hit_taken / after_action）、
-  condition（8 种，失败即跳过下游子树）、op（23 种效果原语）；注册表与参数
+- **技能图模型（v3.0.0 最小原子）**：技能逻辑 = 节点图 `{nodes, edges}`，四类
+  节点——trigger（9 钩子）、condition（9 种，出边 gate: pass/fail 构成**分支**）、
+  op（**11 个最小原子**：strike / hit_mod / taken_mod / grant_immune / stat_mod /
+  hp_mod / gauge_mod / apply_status / cleanse / record / skip_action）、struct
+  （**loop 循环**：第 1 轮必定执行，第 i 轮按 decay^(i-1) 续链）；注册表与参数
   规格在 `namefight/effects.py`，执行顺序 = 技能派生顺序 × 触发节点数组顺序 ×
-  边数组顺序（**改变即 breaking**）；引用状态的 op 声明 `status_kind`，
-  加载时校验兼容。
-- **状态系统（v2.0.0）**：运行时容器 `_Combatant.st` + `markers`；定义数据化于
-  `battle.json` 的 `statuses`（kind + 参数 + 事件模板 + 文案）；施加与各结算点
-  按 kind 分发（`statuses.by_kind`），新建同 kind 状态无需改引擎。
+  边数组顺序（pass 组先于 fail 组）× loop 轮次（**改变即 breaking**）。
+- **状态系统（v3.0.0）**：运行时容器 `_Combatant.st`（通用字段 params/stacks/
+  expires/layers/next/actions/records/total/links）+ `markers`；定义数据化于
+  `battle.json` 的 `statuses`——策略字段（stack/expire/interval/reset_on_miss/
+  lethal）+ params（施加可覆盖、可个性化可共鸣）+ **mods 被动修饰表**（8 种
+  kind，攻防聚合点按施加顺序聚合）+ **effects 效果图**（5 个状态钩子，毒发 /
+  流血 / 回春 / 眩晕 / 蓄力释放 / 吸血均为图上原子组合，`$参数` 引用施加参数）；
+  新建状态无需改引擎。
 - **tick 模型**：每刻双方 gauge += 自身有效速度，达阈值（10000）行动一次并扣回；
   同刻多人按（gauge 余量降序、内部序）行动。
 - **伤害**：`raw = 有效ATK × 三角浮动 × 暴击倍率 × 技能倍率`，

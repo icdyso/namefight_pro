@@ -55,15 +55,18 @@ class GameConfigTests(unittest.TestCase):
             self.assertTrue(sk.plan, "技能 %s 的执行计划为空" % sk.id)
             for node in _graph_nodes(sk):
                 if node["kind"] == "trigger":
-                    self.assertIn(node["type"], effects.HOOKS)
+                    self.assertIn(node["type"], effects.HOOKS + effects.STATUS_HOOKS)
                 elif node["kind"] == "condition":
                     self.assertIn(node["type"], effects.CONDITIONS)
+                elif node["kind"] == "struct":
+                    self.assertIn(node["type"], effects.STRUCTS)
                 else:
                     self.assertIn(node["type"], effects.OPS)
 
     def test_skill_graph_validation_rejects_bad_graphs(self):
-        """技能图校验：环 / 悬空边 / 未注册原语 / 多入边 / 未挂载节点 /
-        非法参数必须被拒绝（工坊保存与热重载共用同一校验）。"""
+        """技能图校验：环 / 悬空边 / 未注册原子 / 多入边 / 未挂载节点 /
+        非法参数 / 非法分支边 / 挂错挂点必须被拒绝（编辑器保存与热重载
+        共用同一校验）。"""
         def compile_raw(graph):
             try:
                 effects.compile_graph(graph, lambda sid: GAME.status_specs.get(sid))
@@ -74,31 +77,54 @@ class GameConfigTests(unittest.TestCase):
         trigger = {"id": "t", "kind": "trigger", "type": "on_attack", "params": {}}
         gate = {"id": "c", "kind": "condition", "type": "chance",
                 "params": {"chance": 0.5}}
-        op = {"id": "o", "kind": "op", "type": "attack_mult",
-              "params": {"value": 2.0}}
+        op = {"id": "o", "kind": "op", "type": "hit_mod",
+              "params": {"mult": 2.0}}
         ok = {"nodes": [trigger, gate, op],
               "edges": [{"from": "t", "to": "c"}, {"from": "c", "to": "o"}]}
         self.assertTrue(compile_raw(ok), "合法图应通过编译")
+        # 分支图合法（pass / fail 闸门）
+        branch = {"nodes": [trigger, gate,
+                            dict(op, id="o1", params={"mult": 2.0}),
+                            dict(op, id="o2", params={"mult": 0.5})],
+                  "edges": [{"from": "t", "to": "c"},
+                            {"from": "c", "to": "o1", "gate": "pass"},
+                            {"from": "c", "to": "o2", "gate": "fail"}]}
+        self.assertTrue(compile_raw(branch), "分支图应通过编译")
         # 环
-        self.assertFalse(compile_raw({"nodes": [dict(trigger, type="on_defense"), gate, op],
+        self.assertFalse(compile_raw({"nodes": [trigger, gate, op],
                                       "edges": [{"from": "t", "to": "c"},
                                                 {"from": "c", "to": "o"},
                                                 {"from": "o", "to": "c"}]}))
         # 悬空边
         self.assertFalse(compile_raw({"nodes": [trigger, gate],
                                       "edges": [{"from": "t", "to": "ghost"}]}))
-        # 未注册原语
+        # 未注册原子
         self.assertFalse(compile_raw({"nodes": [trigger, dict(op, type="fireball")],
                                       "edges": [{"from": "t", "to": "o"}]}))
         # 未挂在触发节点之下
         self.assertFalse(compile_raw({"nodes": [trigger, gate, op],
                                       "edges": [{"from": "t", "to": "c"}]}))
         # 非法参数（类型不符）
-        self.assertFalse(compile_raw({"nodes": [trigger, dict(op, params={"value": "x"})],
+        self.assertFalse(compile_raw({"nodes": [trigger, dict(op, params={"mult": "x"})],
                                       "edges": [{"from": "t", "to": "o"}]}))
-        # 原语挂错挂点
-        self.assertFalse(compile_raw({"nodes": [dict(trigger, type="on_defense"), op],
+        # 原子挂错挂点
+        self.assertFalse(compile_raw({"nodes": [dict(trigger, type="on_defend"), op],
                                       "edges": [{"from": "t", "to": "o"}]}))
+        # gate=fail 的边只能出自条件节点
+        self.assertFalse(compile_raw({"nodes": [trigger, op,
+                                                dict(op, id="o2")],
+                                      "edges": [{"from": "t", "to": "o"},
+                                                {"from": "o", "to": "o2", "gate": "fail"}]}))
+        # 状态钩子不能出现在技能图（on_status_tick 非技能钩子）
+        self.assertFalse(compile_raw({"nodes": [dict(trigger, type="on_status_tick"), op],
+                                      "edges": [{"from": "t", "to": "o"}]}))
+
+    def test_status_effect_graphs_compile(self):
+        """状态定义的效果图全部可编译且挂点为状态钩子（v3.0.0）。"""
+        for sid, plans in GAME.status_plans.items():
+            for hook in plans:
+                self.assertIn(hook, effects.STATUS_HOOKS,
+                              "状态 %s 的效果图挂点非法" % sid)
 
     def test_md5_variance_ranges_sane(self):
         var = GAME.skill_md5_variance
@@ -203,13 +229,28 @@ class ConfigTextTests(unittest.TestCase):
             self.assertIn("detail", entry)
 
     def test_status_defs_sane(self):
-        from namefight.statuses import STATUS_KINDS
+        """状态定义 v3：策略字段合法、mods 种类注册、lethal 引用声明参数。"""
+        from namefight.statuses import MOD_KINDS
         for sid, entry in GAME.statuses.items():
-            self.assertIn(entry.get("kind"), STATUS_KINDS,
-                          "状态 %s 的行为种类未注册" % sid)
-            for param in (entry.get("params") or {}):
-                self.assertIn(param, STATUS_KINDS[entry["kind"]]["params"],
-                              "状态 %s 的参数 %s 不属于其行为种类" % (sid, param))
+            self.assertIn(entry.get("stack", "refresh"),
+                          ("refresh", "layers", "count"),
+                          "状态 %s 的 stack 策略非法" % sid)
+            self.assertIn(entry.get("expire", "ticks"),
+                          ("ticks", "actions", "none"),
+                          "状态 %s 的 expire 策略非法" % sid)
+            declared = set(entry.get("params") or {})
+            for m in entry.get("mods") or []:
+                self.assertIn(m.get("kind"), MOD_KINDS,
+                              "状态 %s 的修饰种类未注册" % sid)
+                if isinstance(m.get("value"), str):
+                    self.assertTrue(m["value"].startswith("$")
+                                    and m["value"][1:] in declared,
+                                    "状态 %s 的修饰引用未声明参数" % sid)
+            for key in ("chance", "value", "decay"):
+                v = (entry.get("lethal") or {}).get(key)
+                if isinstance(v, str):
+                    self.assertTrue(v.startswith("$") and v[1:] in declared,
+                                    "状态 %s 的 lethal.%s 引用未声明参数" % (sid, key))
 
     def test_every_stat_key_has_text(self):
         for key in STATS_KEYS_USED:

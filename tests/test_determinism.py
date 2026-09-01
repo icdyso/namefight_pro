@@ -582,8 +582,8 @@ class FighterDeterminism(unittest.TestCase):
                                        msg="生命应保持整数值（实测 %r）" % hp)
 
     def test_blood_pact_buff_shows_accumulated_atk(self):
-        """血契标记契约（v0.10.0）：只显示累计转化的攻击量（v2.0.0 起
-        存于通用状态容器 blood_pact.total_gain）。"""
+        """血契标记契约（v0.10.0）：只显示累计转化的攻击量（v3.0.0 起
+        存于通用状态容器 blood_pact.total）。"""
         from namefight.statuses import ensure
         fa = derive_fighter("血契甲", GAME)
         fb = derive_fighter("血契乙", GAME)
@@ -592,12 +592,11 @@ class FighterDeterminism(unittest.TestCase):
         snap = _snapshot([ca, cb], GAME.battle.gauge_threshold, 0, GAME)
         self.assertEqual([b for b in snap["a"]["buffs"] if b["id"] == "blood_pact"], [],
                          "未转化过攻击时不显示血契标记")
-        ensure(ca, "blood_pact")["total_gain"] = 237.6
+        ensure(ca, "blood_pact")["total"] = 237.6
         snap = _snapshot([ca, cb], GAME.battle.gauge_threshold, 0, GAME)
         pact = [b for b in snap["a"]["buffs"] if b["id"] == "blood_pact"]
         self.assertEqual(len(pact), 1)
-        self.assertEqual(sorted(pact[0]["params"].keys()), ["value"])
-        self.assertEqual(pact[0]["params"]["value"], "238")
+        self.assertEqual(pact[0]["params"]["total"], "238")
 
     def test_battle_log_rich_segments(self):
         """富文本契约（v0.10.0）：每条战报带 rich 段，各段拼接后与纯文本

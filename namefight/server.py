@@ -186,8 +186,9 @@ def make_handler(state: AppState):
 
         @staticmethod
         def _schema_payload(game):
-            """引擎自描述（v2.0.0）：钩子 / 条件 / 效果原语 / 状态种类的注册表
-            元数据，可视化编辑器据此渲染表单，前端不再硬编码任何效果类型。"""
+            """引擎自描述（v3.0.0）：钩子 / 条件 / 原子 / 结构节点 / 状态定义
+            的注册表元数据，可视化编辑器据此渲染表单与画布，前端不硬编码
+            任何效果类型。"""
 
             def ps_json(ps):
                 return {"key": ps.key, "kind": ps.kind, "fmt": ps.fmt,
@@ -200,35 +201,46 @@ def make_handler(state: AppState):
                         "text_key": meta["text_key"]}
 
             ops = {}
+            structs = {}
             for t, meta in effects.OPS.items():
-                entry = {"hooks": list(meta["hooks"]), "logged": meta["logged"],
+                entry = {"hooks": list(meta.get("hooks", ())),
+                         "logged": meta.get("logged", False),
                          "text_key": meta["text_key"],
                          "params": [ps_json(ps) for ps in meta["params"]]}
                 if t == "apply_status":
                     entry["status_params"] = True  # 数值参数随所选状态定义而定
-                if "status_kind" in meta:
-                    # 携带 status 参数的原语要求的状态行为种类（编辑器过滤下拉框）
-                    entry["status_kind"] = meta["status_kind"]
-                ops[t] = entry
+                if t in effects.STRUCTS:
+                    structs[t] = entry            # 结构节点（loop 循环）
+                else:
+                    ops[t] = entry
             conds = {t: entry_json(meta) for t, meta in effects.CONDITIONS.items()}
-            kinds = {k: {"params": list(v["params"]),
-                         "dispellable": v["dispellable"]}
-                     for k, v in statuses.STATUS_KINDS.items()}
             status_defs = {}
             for sid, entry in game.statuses.items():
                 status_defs[sid] = {
-                    "kind": entry.get("kind"),
-                    "logged": bool(entry.get("logged", False)),
-                    "timing": entry.get("timing"),
-                    "power": entry.get("power"),
-                    "params": [ps_json(ps) for ps in game.status_specs[sid].values()],
+                    "name": entry.get("name"),
+                    "dispellable": bool(entry.get("dispellable", False)),
+                    "stack": entry.get("stack", "refresh"),
+                    "expire": entry.get("expire", "ticks"),
+                    "interval": entry.get("interval", 0),
+                    "max_stacks": entry.get("max_stacks", 0),
+                    "reset_on_miss": bool(entry.get("reset_on_miss", False)),
+                    "lethal": bool(entry.get("lethal")),
+                    "event": entry.get("event"),
+                    "death_event": entry.get("death_event"),
+                    "params": [dict(ps_json(ps),
+                                    default=entry.get("params", {}).get(k, {}).get("default"))
+                               for k, ps in game.status_specs.get(sid, {}).items()],
+                    "mods": entry.get("mods") or [],
+                    "effects": entry.get("effects") or {"nodes": [], "edges": []},
                 }
             return {
                 "version": game.system.version,
                 "hooks": list(effects.HOOKS),
+                "status_hooks": list(effects.STATUS_HOOKS),
                 "conditions": conds,
                 "ops": ops,
-                "status_kinds": kinds,
+                "structs": structs,
+                "mod_kinds": dict(statuses.MOD_KINDS),
                 "statuses": status_defs,
             }
 

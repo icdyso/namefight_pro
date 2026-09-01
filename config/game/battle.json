@@ -26,23 +26,23 @@
     "battle_start": "⚔️ {a} 对阵 {b}！",
     "tick_marker": "-- 第 {tick} 刻 --",
     "turn_stun": "😵 {a} 眩晕未醒，无法行动。",
-    "poison_tick": "☠️ {a} 毒发，损失 {damage} 点生命。",
+    "poison_tick": "{a} 毒发，损失 {damage} 点生命",
     "poison_death": "☠️ {a} 毒发身亡！",
-    "bleed_tick": "🩸 {a} 血流不止，损失 {damage} 点生命。",
+    "bleed_tick": "{a} 流血，损失 {damage} 点生命",
     "bleed_death": "🩸 {a} 失血过多而亡！",
     "regen_tick": "🌿 {a} 回春生效，回复 {heal} 点生命。",
     "skill_proc": "{a} 使用了 {skill}！",
     "attack_start": "　🗡️ {a} 发起攻击！",
     "effect_execution": "　　斩杀时机已到，伤害倍率提升至 {mult}！",
     "effect_lifesteal": "　　🩸 {a} 吸取了 {heal} 点生命。",
-    "effect_poison": "　　🧪 {b} 中毒了！",
-    "effect_stun": "　　💫 {b} 被砸晕了！",
+    "effect_poison": "{b} 中毒：每刻损失 {value} 点生命，持续 {turns} 刻",
+    "effect_stun": "{b} 被眩晕 {turns} 刻",
     "effect_heal": "✦ {a} 回复了 {heal} 点生命。",
-    "regen_mark": "　　🌿 {a} 获得回春印记：每 {tick} 刻回复 {value} 点生命（{turns} 刻）。",
+    "regen_mark": "{a} 获得回春印记：每 {tick} 刻回复 {value} 点生命，持续 {turns} 刻",
     "effect_reduction": "　　🛡️ {b} 的锻痕硬抗了下来，伤害降低 {ratio}！",
-    "effect_reflect": "　　🌵 {b} 的反甲生效：{a} 受到 {damage} 点反弹伤害！",
+    "effect_reflect": "{a} 的荆棘反弹：{b} 受到 {damage} 点伤害",
     "effect_link": "　　⚡ 共鸣：{a} 的{field}随{scope}{stat}变动，变为 {final}！",
-    "low_hp_trigger": "🔥 {a} 背水一战：攻击 +{value}，速度 +{spd}！",
+    "low_hp_trigger": "{a} 背水一战：攻击 +{value}、速度 +{spd}",
     "attack_crit": "💥 暴击！",
     "attack_miss": "💨 {b} 身形一晃，{a} 的攻击落空！",
     "attack_hit": "　⚔️ {a} 命中 {b}，造成 {damage} 点伤害！",
@@ -50,65 +50,108 @@
     "victory": "🏆 {winner} 赢得了战斗！",
     "draw": "⚖️ 双方战成平手。",
     "timeout": "⏳ 行动刻耗尽，按剩余生命比例判定--",
-    "charge_start": "　　🌀 {a} 开始蓄力（下次行动：伤害倍率 {mult} 的巨击）！",
-    "charge_release": "　　💥 {a} 蓄力释放：必定命中，暴击率 +{crit}，伤害倍率 {mult}！",
-    "thunder_cast": "　　⚡ {a} 引下雷罚：连续真实伤害（每道攻击的 {value}，至多 {max} 道）！",
-    "thunder_hit": "　　⚡ 雷罚第 {hit} 道劈中 {b}，造成 {damage} 点真实伤害！",
-    "sever_proc": "　　✂️ {a} 斩断了 {b} 的回合！",
+    "charge_start": "{a} 开始蓄力：下次攻击 ×{value} 且暴击 +{crit}",
+    "charge_release": "{a} 蓄力释放！×{mult} 巨击（暴击 +{crit}，必定命中）",
+    "thunder_hit": "{a} 的雷罚第 {hit} 道劈落：{b} 受到 {damage} 点真实伤害",
+    "sever_proc": "{a} 斩断 {b} 的行动并反击！",
     "will_trigger": "　　💛 {a} 不屈意志触发：生命回复至 {heal}！下次触发概率衰减。",
     "purify_cleanse": "✧ {a} 净化全场：驱散 {count} 种效果，回复 {heal} 点生命。",
-    "pact_proc": "　　🩸 {a} 缔结血契：消耗 {cost} 点生命，本次攻击吸血 {value}！",
-    "pact_gain": "　　🩸 血契转化：{a} 的吸血化作力量，攻击 +{value}（当前 {atk}）！",
+    "pact_proc": "{a} 献祭 {cost} 点生命：本次攻击附带吸血 {value}",
+    "pact_gain": "{a} 血契转化：攻击 +{value}",
     "immune": "　　🛡️ {b} 壁垒坚不可摧，完全免疫了这次伤害！",
-    "guard_stack": "　　🔨 {b} 千锤百炼：锻痕 {stacks} 层，伤害减免 {value}！",
-    "grudge_stack": "　　😤 {a} 怨念 +1（{stacks} 层，伤害倍率 {mult}）！",
-    "tempo_stack": "　　⏩ {a} 渐入佳境（{stacks} 层），速度 {spd}，攻击 {atk}！",
-    "lifesteal_buff": "　　🩸 {a} 进入嗜血状态：{turns} 次行动内吸血 {value}！",
-    "shred_apply": "　　🔨 护甲被击碎！{b} 防御 −{value}（当前防御 {def}）。",
-    "bleed_apply": "　　🩸 {b} 被撕裂，开始流血！",
-    "overload_cost": "　　🔥 {a} 燃血强化，损失 {cost} 点生命，伤害倍率 {mult}！",
-    "gamble_win": "　　🎲 赌赢了！伤害倍率提升至 {mult}！",
-    "gamble_lose": "　　🎲 赌输了……伤害倍率降至 {mult}。",
-    "streak_up": "　　📈 {a} 士气高涨（连击 ×{stacks}），伤害倍率 {mult}！",
+    "guard_stack": "{b} 锻痕叠层 ×{stacks}：受伤减少 {value}",
+    "grudge_stack": "{a} 怨念积攒 ×{stacks}：伤害倍率 {mult}",
+    "tempo_stack": "{a} 渐入佳境：速度 +{value}、攻击 +{atk}（第 {stacks} 层）",
+    "lifesteal_buff": "{a} 获得吸血：造成伤害的 {value} 转化为生命（{turns} 次行动内）",
+    "shred_apply": "{b} 护甲碎裂：防御 −{value}（{stacks} 层，持续 {turns} 刻）",
+    "bleed_apply": "{b} 开始流血：每次行动损失攻击者攻击 {value} 的生命，持续 {turns} 刻",
+    "overload_cost": "{a} 燃烧 {cost} 点生命，伤害提升！",
+    "gamble_win": "孤注一掷成功！伤害 ×{mult}",
+    "gamble_lose": "孤注一掷失败…伤害 ×{mult}",
+    "streak_up": "{a} 乘胜追击！连击 ×{stacks}，伤害倍率 {mult}",
     "effect_bulwark": "　　🛡️ {b} 稳守壁垒，伤害降低 {ratio}！",
-    "retribution_record": "　　📝 {a} 记下了这一击（{stacks} 条）！",
-    "retribution_release": "　　😤 {a} 新仇旧怨一起算：追加 {value} 点伤害（记录 ×{ratio}）！"
+    "retribution_record": "{a} 记仇：记录 {damage} 点伤害（{stacks} 条）",
+    "retribution_release": "{a} 记仇爆发：将记录总和以 {ratio} 追加，共 {value} 点！"
   },
   "statuses": {
     "poison": {
-      "kind": "dot",
-      "timing": "every_tick",
-      "logged": true,
+      "name": "中毒",
+      "detail": "每刻损失 {value} 点生命（剩 {turns} 刻）",
+      "desc": "毒发每刻结算，持续以刻计。",
+      "dispellable": true,
+      "stack": "refresh",
+      "expire": "ticks",
+      "interval": 1,
       "event": "effect_poison",
+      "death_event": "poison_death",
       "params": {
-        "damage": {
+        "value": {
           "fmt": "num",
           "clamp": [
             0,
             null
           ],
           "link": true,
-          "unit": "hp"
+          "unit": "hp",
+          "default": 38
         },
-        "ticks": {
+        "turns": {
           "fmt": "turns",
           "clamp": [
             1,
             20
           ],
-          "link": true
+          "link": true,
+          "default": 12
         }
       },
-      "name": "中毒",
-      "detail": "每刻损失 {damage} 点生命（剩 {turns} 刻）",
-      "desc": "毒发每刻结算，持续以刻计。"
+      "mods": [],
+      "effects": {
+        "nodes": [
+          {
+            "id": "t",
+            "kind": "trigger",
+            "type": "on_status_tick",
+            "pos": [
+              40,
+              50
+            ]
+          },
+          {
+            "id": "e0",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "loss",
+              "basis": "flat",
+              "value": "$value",
+              "can_kill": true,
+              "event": "poison_tick"
+            },
+            "pos": [
+              300,
+              50
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "t",
+            "to": "e0"
+          }
+        ]
+      }
     },
     "bleed": {
-      "kind": "dot",
-      "timing": "on_owner_action",
-      "power": "atk",
-      "logged": true,
+      "name": "流血",
+      "detail": "每次行动损失攻击者攻击 {value} 的生命（剩 {turns} 刻）",
+      "desc": "撕裂伤随攻击者的攻击而定。",
+      "dispellable": true,
+      "stack": "refresh",
+      "expire": "ticks",
       "event": "bleed_apply",
+      "death_event": "bleed_death",
       "params": {
         "value": {
           "fmt": "pct",
@@ -116,42 +159,116 @@
             0.02,
             1
           ],
-          "link": true
+          "link": true,
+          "default": 0.2
         },
-        "ticks": {
+        "turns": {
           "fmt": "turns",
           "clamp": [
             1,
             20
           ],
-          "link": true
+          "link": true,
+          "default": 12
         }
       },
-      "name": "流血",
-      "detail": "每次行动损失 {damage} 点生命（剩 {turns} 刻）",
-      "desc": "撕裂伤随攻击者的攻击而定。"
+      "mods": [],
+      "effects": {
+        "nodes": [
+          {
+            "id": "t",
+            "kind": "trigger",
+            "type": "on_owner_action",
+            "pos": [
+              40,
+              50
+            ]
+          },
+          {
+            "id": "e0",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "loss",
+              "basis": "applier_atk",
+              "ratio": "$value",
+              "can_kill": true,
+              "event": "bleed_tick"
+            },
+            "pos": [
+              300,
+              50
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "t",
+            "to": "e0"
+          }
+        ]
+      }
     },
     "stun": {
-      "kind": "control",
-      "logged": true,
+      "name": "眩晕",
+      "detail": "剩 {turns} 刻无法行动",
+      "desc": "眩晕在持续期间消耗拥有者的行动。",
+      "dispellable": true,
+      "stack": "refresh",
+      "expire": "ticks",
       "event": "effect_stun",
       "params": {
-        "ticks": {
+        "turns": {
           "fmt": "turns",
           "clamp": [
             1,
             20
           ],
-          "link": true
+          "link": true,
+          "default": 4
         }
       },
-      "name": "眩晕",
-      "detail": "{turns} 刻内无法行动",
-      "desc": "眩晕在持续期间消耗对方的行动。"
+      "mods": [],
+      "effects": {
+        "nodes": [
+          {
+            "id": "t",
+            "kind": "trigger",
+            "type": "on_owner_action",
+            "pos": [
+              40,
+              50
+            ]
+          },
+          {
+            "id": "e0",
+            "kind": "op",
+            "type": "skip_action",
+            "params": {
+              "event": "turn_stun"
+            },
+            "pos": [
+              300,
+              50
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "t",
+            "to": "e0"
+          }
+        ]
+      }
     },
     "shred": {
-      "kind": "shred",
-      "logged": true,
+      "name": "破甲",
+      "detail": "防御 −{value}（{stacks} 层，剩 {turns} 刻）",
+      "desc": "护甲碎裂，防御降低。",
+      "dispellable": true,
+      "stack": "count",
+      "expire": "ticks",
       "event": "shred_apply",
       "params": {
         "value": {
@@ -161,35 +278,109 @@
             null
           ],
           "link": true,
-          "unit": "def"
+          "unit": "def",
+          "default": 340
         },
-        "ticks": {
+        "turns": {
           "fmt": "turns",
           "clamp": [
             1,
             20
           ],
-          "link": true
+          "link": true,
+          "default": 16
         },
         "max_stacks": {
-          "fmt": "num"
+          "fmt": "num",
+          "default": 3
         }
       },
-      "name": "破甲",
-      "detail": "防御 −{value}（{stacks} 层，剩 {turns} 刻）",
-      "desc": "护甲碎裂，防御降低。"
+      "mods": [
+        {
+          "kind": "def_break",
+          "value": "$value",
+          "per_stack": true
+        }
+      ],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "charge": {
-      "kind": "charge",
-      "logged": true,
-      "params": {},
       "name": "蓄力",
-      "detail": "下次行动：必定命中的巨大一击",
-      "desc": "蓄力占用一次行动，可被净化驱散。"
+      "detail": "下次行动：必定命中的一击（×{value}，暴击 +{crit}）",
+      "desc": "蓄力占用一次行动，可被净化驱散。",
+      "dispellable": true,
+      "stack": "refresh",
+      "expire": "none",
+      "event": "charge_start",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.5,
+            8
+          ],
+          "link": true,
+          "default": 2.2
+        },
+        "crit": {
+          "fmt": "pct",
+          "clamp": [
+            0,
+            1
+          ],
+          "link": true,
+          "default": 0.25
+        }
+      },
+      "mods": [],
+      "effects": {
+        "nodes": [
+          {
+            "id": "t",
+            "kind": "trigger",
+            "type": "on_owner_action_consume",
+            "pos": [
+              40,
+              50
+            ]
+          },
+          {
+            "id": "e0",
+            "kind": "op",
+            "type": "strike",
+            "params": {
+              "target": "enemy",
+              "mult": "$value",
+              "crit_bonus": "$crit",
+              "must_hit": true,
+              "mode": "replace",
+              "event": "charge_release"
+            },
+            "pos": [
+              300,
+              50
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "t",
+            "to": "e0"
+          }
+        ]
+      }
     },
     "momentum": {
-      "kind": "momentum",
-      "logged": false,
+      "name": "乘胜",
+      "detail": "连击 ×{stacks}，伤害倍率 {mult}",
+      "desc": "攻击落空后清零。",
+      "dispellable": true,
+      "stack": "count",
+      "expire": "none",
+      "reset_on_miss": true,
       "event": "streak_up",
       "params": {
         "value": {
@@ -198,24 +389,33 @@
             0.005,
             0.3
           ],
-          "link": true
+          "link": true,
+          "default": 0.065
         },
-        "cap": {
-          "fmt": "turns",
-          "clamp": [
-            1,
-            20
-          ],
-          "link": true
+        "max_stacks": {
+          "fmt": "num",
+          "default": 5
         }
       },
-      "name": "乘胜",
-      "detail": "连击 ×{stacks}，伤害倍率 {mult}",
-      "desc": "攻击落空后清零。"
+      "mods": [
+        {
+          "kind": "dmg_out_pct",
+          "value": "$value",
+          "per_stack": true
+        }
+      ],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "grudge": {
-      "kind": "grudge",
-      "logged": false,
+      "name": "怨念",
+      "detail": "怨念 ×{stacks}，伤害倍率 {mult}",
+      "desc": "挨打积攒的怨念提高造成的伤害。",
+      "dispellable": true,
+      "stack": "layers",
+      "expire": "ticks",
       "event": "grudge_stack",
       "params": {
         "value": {
@@ -224,66 +424,93 @@
             0.005,
             0.3
           ],
-          "link": true
+          "link": true,
+          "default": 0.07
         },
-        "ticks": {
+        "turns": {
           "fmt": "turns",
           "clamp": [
             1,
             20
           ],
-          "link": true
+          "link": true,
+          "default": 20
         }
       },
-      "name": "怨念",
-      "detail": "×{stacks} 层，伤害倍率 {mult}",
-      "desc": "被命中时概率积攒，层数无上限，随刻消退。"
+      "mods": [
+        {
+          "kind": "dmg_out_pct",
+          "value": "$value",
+          "per_stack": true
+        }
+      ],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "guard": {
-      "kind": "guard",
-      "logged": true,
+      "name": "锻痕",
+      "detail": "锻痕 ×{stacks}：受伤减少 {value}",
+      "desc": "每次受击叠一层，层随刻到期。",
+      "dispellable": true,
+      "stack": "layers",
+      "expire": "ticks",
       "event": "guard_stack",
       "params": {
         "value": {
           "fmt": "pct",
           "clamp": [
-            0.01,
+            0.005,
             0.3
           ],
-          "link": true
+          "link": true,
+          "default": 0.07
         },
-        "ticks": {
+        "turns": {
           "fmt": "turns",
           "clamp": [
             1,
             20
           ],
-          "link": true
+          "link": true,
+          "default": 20
         }
       },
-      "name": "锻痕",
-      "detail": "{stacks} 层，伤害减免 {value}",
-      "desc": "受击时概率叠加，随刻消退。"
+      "mods": [
+        {
+          "kind": "dmg_in_cut_pct",
+          "value": "$value",
+          "per_stack": true
+        }
+      ],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "retribution": {
-      "kind": "record",
-      "logged": false,
-      "params": {},
       "name": "记仇",
-      "detail": "已记录 {stacks} 条（合计 {value} 点）",
-      "desc": "下次命中把记录总和按倍率追加打出。"
-    },
-    "last_stand": {
-      "kind": "boost",
-      "logged": false,
+      "detail": "记录 {stacks} 条伤害（共 {value}）",
+      "desc": "下次命中把记录总和按倍率追加打出；可被净化驱散。",
+      "dispellable": true,
+      "stack": "refresh",
+      "expire": "none",
       "params": {},
-      "name": "背水一战",
-      "detail": "攻击 +{value}，速度 +{spd}",
-      "desc": "濒危时爆发的斗志。"
+      "mods": [],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "regen": {
-      "kind": "regen",
-      "logged": true,
+      "name": "回春",
+      "detail": "每 {tick} 刻回复 {value} 点（剩 {turns} 刻）",
+      "desc": "回春印记按间隔刻回复生命。",
+      "dispellable": true,
+      "stack": "refresh",
+      "expire": "ticks",
+      "interval": "$tick",
       "event": "regen_mark",
       "params": {
         "value": {
@@ -293,76 +520,292 @@
             null
           ],
           "link": true,
-          "unit": "hp"
+          "unit": "hp",
+          "default": 150
         },
         "tick": {
-          "fmt": "num"
-        },
-        "duration": {
-          "fmt": "num"
-        }
-      },
-      "name": "回春",
-      "detail": "每 {tick} 刻回复 {value} 点生命（剩 {turns} 刻）",
-      "desc": "回春印记缓慢滋养伤口。"
-    },
-    "lifesteal": {
-      "kind": "lifesteal",
-      "logged": true,
-      "event": "lifesteal_buff",
-      "params": {
-        "value": {
-          "fmt": "pct",
-          "clamp": [
-            0.05,
-            1.5
-          ],
-          "link": true
+          "fmt": "num",
+          "default": 10
         },
         "turns": {
           "fmt": "turns",
           "clamp": [
             1,
-            20
+            40
           ],
-          "link": true
+          "link": true,
+          "default": 30
         }
       },
+      "mods": [],
+      "effects": {
+        "nodes": [
+          {
+            "id": "t",
+            "kind": "trigger",
+            "type": "on_status_tick",
+            "pos": [
+              40,
+              50
+            ]
+          },
+          {
+            "id": "e0",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "heal",
+              "basis": "flat",
+              "value": "$value",
+              "event": "regen_tick"
+            },
+            "pos": [
+              300,
+              50
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "t",
+            "to": "e0"
+          }
+        ]
+      }
+    },
+    "lifesteal": {
       "name": "嗜血",
-      "detail": "吸血 {value}（剩 {turns} 次行动）",
-      "desc": "所造成伤害的一部分转化为生命。"
+      "detail": "攻击吸血 {value}（剩 {turns} 次行动）",
+      "desc": "造成的伤害按比例转化为生命。",
+      "dispellable": true,
+      "stack": "refresh",
+      "expire": "actions",
+      "event": "lifesteal_buff",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.02,
+            1
+          ],
+          "link": true,
+          "default": 0.28
+        },
+        "turns": {
+          "fmt": "num",
+          "default": 2
+        }
+      },
+      "mods": [
+        {
+          "kind": "lifesteal_pct",
+          "value": "$value"
+        }
+      ],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
+    },
+    "pact_steal": {
+      "name": "血契之噬",
+      "detail": "本次攻击吸血 {value}",
+      "desc": "血契的吸血部分，行动结束后按比例转化为攻击。",
+      "dispellable": false,
+      "stack": "refresh",
+      "expire": "actions",
+      "event": "lifesteal_buff",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.02,
+            1.5
+          ],
+          "link": true,
+          "default": 0.68
+        },
+        "turns": {
+          "fmt": "num",
+          "default": 1
+        }
+      },
+      "mods": [
+        {
+          "kind": "lifesteal_pct",
+          "value": "$value",
+          "record": "lifesteal"
+        }
+      ],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "will": {
-      "kind": "will",
-      "logged": false,
-      "params": {},
-      "name": "不屈",
-      "detail": "致命伤害：{value} 概率回复至 {heal} 生命",
-      "desc": "每次触发后概率指数衰减。"
+      "name": "不屈意志",
+      "detail": "致命伤 {chance} 概率触发：回复 {value} 最大生命（逐次衰减 {decay}）",
+      "desc": "死亡拦截为引擎级原语，不可驱散。",
+      "dispellable": false,
+      "stack": "refresh",
+      "expire": "none",
+      "params": {
+        "chance": {
+          "fmt": "pct",
+          "clamp": [
+            0.01,
+            0.95
+          ],
+          "default": 0.52
+        },
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.05,
+            0.9
+          ],
+          "link": true,
+          "default": 0.28
+        },
+        "decay": {
+          "fmt": "pct",
+          "clamp": [
+            0.05,
+            0.9
+          ],
+          "link": true,
+          "default": 0.5
+        }
+      },
+      "lethal": {
+        "chance": "$chance",
+        "value": "$value",
+        "decay": "$decay"
+      },
+      "mods": [],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "will_used": {
-      "kind": "will",
-      "logged": false,
+      "name": "不屈意志（已触发）",
+      "detail": "已触发过重生",
+      "desc": "不屈意志的已耗尽展示。",
+      "dispellable": false,
+      "stack": "refresh",
+      "expire": "none",
       "params": {},
-      "name": "不屈（概率已尽）",
-      "detail": "触发概率已衰减殆尽",
-      "desc": ""
+      "mods": [],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "tempo": {
-      "kind": "tempo",
-      "logged": false,
-      "params": {},
       "name": "渐入佳境",
-      "detail": "速度 +{value}，攻击 +{atk}（{stacks} 层）",
-      "desc": "行动后概率叠加，无上限。"
+      "detail": "每层 速度 +{value}、攻击 +{atk}（{stacks} 层）",
+      "desc": "永久成长，不可驱散。",
+      "dispellable": false,
+      "stack": "count",
+      "expire": "none",
+      "event": "tempo_stack",
+      "params": {
+        "value": {
+          "fmt": "num",
+          "clamp": [
+            0,
+            null
+          ],
+          "link": true,
+          "unit": "spd",
+          "default": 100
+        },
+        "atk": {
+          "fmt": "num",
+          "clamp": [
+            0,
+            null
+          ],
+          "link": true,
+          "unit": "atk",
+          "default": 10
+        }
+      },
+      "mods": [
+        {
+          "kind": "spd_flat",
+          "value": "$value",
+          "per_stack": true
+        },
+        {
+          "kind": "atk_flat",
+          "value": "$atk",
+          "per_stack": true
+        }
+      ],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
+    },
+    "last_stand": {
+      "name": "背水一战",
+      "detail": "攻击 +{value}、速度 +{spd}",
+      "desc": "生命过低时的一次性永久爆发。",
+      "dispellable": false,
+      "stack": "refresh",
+      "expire": "none",
+      "event": "low_hp_trigger",
+      "params": {
+        "value": {
+          "fmt": "pct",
+          "clamp": [
+            0.05,
+            3
+          ],
+          "link": true,
+          "default": 0.2
+        },
+        "spd": {
+          "fmt": "pct",
+          "clamp": [
+            0.05,
+            3
+          ],
+          "link": true,
+          "default": 0.2
+        }
+      },
+      "mods": [
+        {
+          "kind": "atk_pct",
+          "value": "$value"
+        },
+        {
+          "kind": "spd_pct",
+          "value": "$spd"
+        }
+      ],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     },
     "blood_pact": {
-      "kind": "pact",
-      "logged": false,
-      "params": {},
       "name": "血契",
-      "detail": "累计攻击 +{value}",
-      "desc": "献祭所得吸血已永久转化为攻击。"
+      "detail": "已转化攻击 +{total}",
+      "desc": "血契转化攻击的累计展示，不可驱散。",
+      "dispellable": false,
+      "stack": "refresh",
+      "expire": "none",
+      "params": {},
+      "mods": [],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
     }
   }
 }

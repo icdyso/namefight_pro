@@ -84,14 +84,33 @@
 .ed-node.k-trigger .ed-node-head { background: rgba(96, 220, 160, .18); color: #7fe0b0; }
 .ed-node.k-condition .ed-node-head { background: rgba(230, 184, 76, .16); color: #e6c877; }
 .ed-node.k-op .ed-node-head { background: rgba(79, 124, 255, .18); color: #9db4ff; }
+.ed-node.k-struct .ed-node-head { background: rgba(200, 130, 255, .16); color: #cf9dff; }
+
+/* loop 循环容器：虚线框自适应包裹循环体（后代节点绘制在其内部之上） */
+.ed-node { z-index: 1; }
+.ed-node.ed-container { z-index: 0; min-height: 60px; pointer-events: none;
+  background: rgba(200, 130, 255, .05); border: 1.5px dashed rgba(200, 130, 255, .55);
+  border-radius: 14px; box-shadow: none; }
+.ed-node.ed-container .ed-node-head { pointer-events: auto; cursor: move; }
+.ed-node.ed-container .ed-node-params { pointer-events: none; }
+.ed-node.ed-container.sel { border-color: var(--blue, #4f7cff);
+  box-shadow: 0 0 0 2px rgba(79, 124, 255, .3); }
+.ed-node.ed-container .ed-port { pointer-events: auto; }
 .ed-node-head .kind { font-size: 10px; opacity: .7; border: 1px solid currentColor;
   border-radius: 4px; padding: 0 4px; }
 .ed-node-params { padding: 6px 10px 8px; font-size: 12px; opacity: .85; line-height: 1.7; }
 .ed-port { position: absolute; width: 12px; height: 12px; border-radius: 50%;
   background: var(--panel, #171b24); border: 2px solid var(--blue, #4f7cff); cursor: crosshair; }
 .ed-port.out { right: -7px; top: 14px; }
+.ed-port.out.fail { top: 40px; border-color: #ff9a8a; }   /* 条件失败分支端口 */
 .ed-port.in { left: -7px; top: 14px; border-color: #7fe0b0; }
 .ed-port:hover { box-shadow: 0 0 0 3px rgba(79, 124, 255, .3); }
+
+/* 战斗页左侧的战斗常数折叠区 */
+.ed-consts { border-bottom: 1px solid var(--line, #2a2f3a); padding: 0 8px; }
+.ed-consts summary { cursor: pointer; padding: 8px 4px; font-size: 12px; opacity: .8; }
+.ed-consts[open] { padding-bottom: 8px; }
+.ed-consts .ed-form { grid-template-columns: 1fr 1fr; }
 
 .ed-palette { width: 190px; min-width: 190px; border-right: 1px solid var(--line, #2a2f3a);
   padding: 10px 12px; overflow-y: auto; font-size: 13px; }

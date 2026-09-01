@@ -4,11 +4,12 @@ v0.10.0 起：数值规则与文案**合并在 config/game/*.json 单层配置**
 每个条目（属性/技能/称号字段/词缀）的文字与其数值/加成保存在同一条目内，
 不再拆分 locales 目录（英文等多语言支持已移除，单语言 zh）。
 
-v2.0.0 起：技能 effect 为「节点 + 连边」的技能图（effects.compile_graph
-校验并编译），状态定义（行为种类 + 参数规格 + 文案）位于 battle.json 的
-statuses 节（statuses.STATUS_KINDS 校验行为种类）。
+v3.0.0 起：技能 effect 与状态定义的 effects 均为「节点 + 连边」的图
+（effects.compile_graph 校验并编译，支持条件分支与 loop 循环）；状态定义
+（策略字段 + 参数规格 + mods 被动修饰 + 效果图 + 文案）位于 battle.json 的
+statuses 节，同样编译为执行计划（GameCfg.status_plans）。
 
-启动时一次性加载并校验；v1.0.0 起创意工坊可通过 /api/config/save 在运行时
+启动时一次性加载并校验；v1.0.0 起编辑器可通过 /api/config/save 在运行时
 校验并保存配置、随后热重载，无需重启进程。
 """
 from __future__ import annotations
@@ -188,8 +189,9 @@ class GameCfg:
     battle: BattleCfg
     stats: dict          # 技能参数标签模板 + 共鸣句式（skills.json -> stats）
     battle_log: dict     # 战报模板（battle.json -> battle_log）
-    statuses: dict       # 状态定义（行为种类 + 文案；battle.json -> statuses）
+    statuses: dict       # 状态定义（策略字段 + mods + 效果图 + 文案）
     status_specs: dict   # {状态id: {参数名: ParamSpec}}（校验/共鸣/编辑器共用）
+    status_plans: dict   # {状态id: {钩子: 执行树}}（状态效果图编译产物）
     ui: dict             # 界面文案（ui.json）
 
     def attr(self, attr_id: str) -> AttributeDef:
@@ -307,8 +309,20 @@ def build_game_config(data: dict) -> GameCfg:
     if missing:
         raise ConfigError("attributes.json 缺少引擎必需属性: %s" % missing)
 
-    # 状态定义（battle.json -> statuses）：行为种类 + 参数规格 + 文案；
-    # 必须先于技能解析（apply_status 的参数校验依赖状态定义）
+    # 战报模板先于状态 / 技能解析（event 引用的模板 id 需要校验存在）
+    battle_log_raw = battle_data.get("battle_log", {})
+    if not isinstance(battle_log_raw, dict):
+        raise ConfigError("battle.json 的 battle_log 必须是对象")
+
+    def _check_event(sid, event, label):
+        """校验事件模板 id 存在于 battle_log（缺失模板会让战报渲染出 id 原文）。"""
+        if event and str(event) not in battle_log_raw:
+            raise ConfigError("状态 %s 的 %s 引用了未定义的战报模板: %s"
+                              % (sid, label, event))
+
+    # 状态定义（battle.json -> statuses）：策略字段 + 参数规格 + mods
+    # 被动修饰 + 效果图 + 文案；必须先于技能解析（apply_status 的参数校验
+    # 依赖状态定义）
     statuses_data = battle_data.get("statuses", {})
     if not isinstance(statuses_data, dict) or not statuses_data:
         raise ConfigError("battle.json 的 statuses 必须是非空对象")
@@ -316,37 +330,71 @@ def build_game_config(data: dict) -> GameCfg:
     for sid, entry in statuses_data.items():
         if not isinstance(entry, dict):
             raise ConfigError("状态 %s 的定义必须是对象" % sid)
-        kind = str(entry.get("kind", ""))
-        kdef = statuses.STATUS_KINDS.get(kind)
-        if kdef is None:
-            raise ConfigError("状态 %s 的行为种类未注册: %s" % (sid, kind))
         if not str(entry.get("name", "")) or "detail" not in entry:
             raise ConfigError("状态 %s 缺少 name/detail 文案" % sid)
-        if kind == "dot":
-            timing = str(entry.get("timing", "every_tick"))
-            if timing not in kdef["timings"]:
-                raise ConfigError("dot 状态 %s 的 timing 非法: %s" % (sid, timing))
-            power = str(entry.get("power", ""))
-            if power not in kdef["powers"]:
-                raise ConfigError("dot 状态 %s 的 power 非法: %s" % (sid, power))
+        if entry.get("stack", "refresh") not in ("refresh", "layers", "count"):
+            raise ConfigError("状态 %s 的 stack 策略非法" % sid)
+        if entry.get("expire", "ticks") not in ("ticks", "actions", "none"):
+            raise ConfigError("状态 %s 的 expire 策略非法" % sid)
         specs = statuses.status_param_specs(entry)
-        for key in specs:
-            if key not in kdef["params"]:
-                raise ConfigError("状态 %s 的参数 %s 不属于行为种类 %s"
-                                  % (sid, key, kind))
         status_specs[str(sid)] = specs
-
-    skills = []
-    seen_skills = set()
+        _check_event(sid, entry.get("event"), "event")
+        _check_event(sid, entry.get("death_event"), "death_event")
 
     def _status_specs(sid):
-        """技能图校验用的状态参数规格回调（apply_status）。"""
+        """图校验用的状态参数规格回调（apply_status）。"""
         if not sid:
             return None
         if sid not in status_specs:
             raise ValueError("apply_status 引用了未定义的状态: %s" % sid)
         return status_specs[sid]
 
+    # mods 被动修饰与 lethal 块的 "$参数" 引用必须指向已声明的参数
+    for sid, entry in statuses_data.items():
+        declared = set(status_specs[sid])
+        for m in entry.get("mods") or ():
+            if m.get("kind") not in statuses.MOD_KINDS:
+                raise ConfigError("状态 %s 的修饰种类未注册: %s"
+                                  % (sid, m.get("kind")))
+            value = m.get("value", 0.0)
+            if isinstance(value, str) and value.startswith("$") \
+                    and value[1:] not in declared:
+                raise ConfigError("状态 %s 的修饰引用了未声明参数: %s"
+                                  % (sid, value))
+        interval = entry.get("interval", 0)
+        if isinstance(interval, str) and interval.startswith("$") \
+                and interval[1:] not in declared:
+            raise ConfigError("状态 %s 的 interval 引用了未声明参数: %s"
+                              % (sid, interval))
+        lethal = entry.get("lethal") or {}
+        for key in ("chance", "value", "decay"):
+            v = lethal.get(key)
+            if isinstance(v, str) and v.startswith("$") and v[1:] not in declared:
+                raise ConfigError("状态 %s 的 lethal.%s 引用了未声明参数: %s"
+                                  % (sid, key, v))
+        # 状态效果图编译（钩子为 STATUS_HOOKS）
+        if entry.get("effects"):
+            for node in (entry["effects"].get("nodes") or []):
+                ev_id = (node.get("params") or {}).get("event")
+                _check_event(sid, ev_id, "效果图 event")
+                for pkey, pval in (node.get("params") or {}).items():
+                    if isinstance(pval, str) and pval.startswith("$") \
+                            and pval[1:] not in declared:
+                        raise ConfigError("状态 %s 的效果图引用了未声明参数: %s"
+                                          % (sid, pval))
+
+    # 状态效果图统一编译为执行计划（GameCfg.status_plans）
+    status_plans = {}
+    for sid, entry in statuses_data.items():
+        try:
+            plan = statuses.compile_status_effects(entry, _status_specs)
+        except ValueError as e:
+            raise ConfigError("状态 %s 的效果图非法: %s" % (sid, e)) from e
+        if plan:
+            status_plans[str(sid)] = plan
+
+    skills = []
+    seen_skills = set()
     for s in skills_data.get("skills", []):
         if s["id"] in seen_skills:
             raise ConfigError("技能 id 重复: %s" % s["id"])
@@ -367,25 +415,13 @@ def build_game_config(data: dict) -> GameCfg:
             plan = effects.compile_graph(s.get("effect", {}), _status_specs)
         except ValueError as e:
             raise ConfigError("技能 %s 的技能图非法: %s" % (s["id"], e)) from e
-        # 携带 status 参数的原语：状态必须存在且行为种类匹配
-        #（apply_status 的 "apply" = 任意可施加种类，见 statuses.APPLY_KINDS）
+        # 原子 event 参数引用的战报模板必须存在
         for node in s.get("effect", {}).get("nodes", []):
-            if node.get("kind") != "op":
-                continue
-            req_kind = effects.OPS.get(node.get("type"), {}).get("status_kind")
-            if req_kind is None:
-                continue
-            sid = (node.get("params") or {}).get("status")
-            if not sid or sid not in statuses_data:
-                raise ConfigError("技能 %s 的原语 %s 引用了未定义状态: %s"
-                                  % (s["id"], node["type"], sid))
-            want = statuses.APPLY_KINDS if req_kind == "apply" else {req_kind}
-            actual = statuses_data[sid].get("kind")
-            if actual not in want:
-                raise ConfigError(
-                    "技能 %s 的原语 %s 需要行为种类 %s 的状态，%s（%s）不匹配"
-                    % (s["id"], node["type"],
-                       "/".join(sorted(want)), sid, actual))
+            if node.get("kind") in ("op", "struct"):
+                ev_id = (node.get("params") or {}).get("event")
+                if ev_id and str(ev_id) not in battle_log_raw:
+                    raise ConfigError("技能 %s 的节点 %s 引用了未定义的战报模板: %s"
+                                      % (s["id"], node.get("id"), ev_id))
         skills.append(SkillDef(
             id=str(s["id"]), name=str(s.get("name", s["id"])),
             description=str(s.get("description", "")),
@@ -589,9 +625,6 @@ def build_game_config(data: dict) -> GameCfg:
     stats = skills_data.get("stats", {})
     if not isinstance(stats, dict):
         raise ConfigError("skills.json 的 stats 必须是对象")
-    battle_log = battle_data.get("battle_log", {})
-    if not isinstance(battle_log, dict):
-        raise ConfigError("battle.json 的 battle_log 必须是对象")
     if not isinstance(ui_data, dict):
         raise ConfigError("ui.json 必须是对象")
 
@@ -604,6 +637,7 @@ def build_game_config(data: dict) -> GameCfg:
         skill_variable_link=skill_variable_link,
         skill_name_modifiers=skill_name_modifiers,
         battle=battle,
-        stats=stats, battle_log=battle_log,
-        statuses=statuses_data, status_specs=status_specs, ui=ui_data,
+        stats=stats, battle_log=battle_log_raw,
+        statuses=statuses_data, status_specs=status_specs,
+        status_plans=status_plans, ui=ui_data,
     )

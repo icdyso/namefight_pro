@@ -48,12 +48,13 @@ STATS_KEYS_USED = frozenset(
     {"link_sep", "link_formula", "link_expr_difference", "link_expr_sum",
      "link_ratio", "link_difference", "link_sum",
      "scope_own", "scope_enemy", "scope_difference", "scope_sum",
-     "mod_chance", "mod_value", "mod_damage", "mod_turns", "mod_ticks",
+     "mod_chance", "mod_value", "mod_turns",
      "final_damage", "final_turns",
-     "mastery_text", "mastery_text_value", "mastery_text_immune"}
-    # 状态定义声明的可共鸣参数（damage/ticks/turns）不在注册表内，手工补齐；
+     "mastery_text", "mastery_text_value", "mastery_text_immune",
+     "op_hp_mod_loss"}
+    # 状态定义声明的可共鸣参数（turns 等）不在注册表内，手工补齐；
     # apply_status 的描述模板为 st_<状态id>，无通用 op 模板
-    | {"field_damage", "field_ticks", "field_turns"}
+    | {"field_turns"}
     | {"field_" + k for k in _LINK_FIELD_KEYS}
     | {"hook_" + h for h in effects.HOOKS}
     | {"cond_" + c for c in effects.CONDITIONS}
@@ -457,16 +458,30 @@ def _display_param(node: dict, params: dict, key: str, game: GameCfg) -> str:
 
 
 def _node_clause(node: dict, disp: dict, game: GameCfg):
-    """单个节点的描述（条件从句 / 效果原语句）模板参数。"""
+    """单个节点的描述（条件从句 / 原子句 / 结构句）模板键。
+    hp_mod 按 type 参数取治疗 / 流失两个模板。"""
     if node["kind"] == "condition":
         return "cond_" + node["type"]
     if node["kind"] == "op" and node["type"] == "apply_status":
         return "st_" + str(disp.get("status", ""))
+    if node["kind"] == "op" and node["type"] == "hp_mod" \
+            and str(disp.get("type")) == "loss":
+        return "op_hp_mod_loss"
+    if node["kind"] == "op" and node["type"] == "strike" \
+            and str(disp.get("basis", "none")) != "none":
+        return "op_strike_basis"               # 附加伤害型打击（记仇释放 / 反弹）
+    if node["kind"] == "op" and node["type"] == "hit_mod" and "mult" not in disp:
+        return "op_hit_mod_pen_crit" if "crit_bonus" in disp else "op_hit_mod_pen"
+    if node["kind"] == "op" and node["type"] == "stat_mod" \
+            and str(disp.get("basis", "flat")) == "recorded_lifesteal":
+        return "op_stat_mod_recorded"          # 按吸血量转化（血契）
     return "op_" + node["type"]
 
 
 def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
-    """模板参数：数值按规格格式化（共鸣公式由调用方注入）。"""
+    """模板参数：数值按规格格式化（共鸣公式由调用方注入）；
+    状态 id / 属性 id 等引用参数替换为显示名；hp_mod 的展示值取
+    value（固定量）或 ratio（比例）中实际存在的一个。"""
     out = {}
     specs = _node_specs(node, game)
     for key in disp:
@@ -475,9 +490,25 @@ def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
         if isinstance(disp[key], bool):
             out[key] = disp[key]
         elif isinstance(disp[key], str):
-            out[key] = disp[key]
+            if key == "status":
+                out[key] = str(game.statuses.get(disp[key], {})
+                               .get("name", disp[key]))
+            elif key == "stat":
+                try:
+                    out[key] = game.attr(str(disp[key])).name
+                except Exception:
+                    out[key] = disp[key]
+            else:
+                out[key] = disp[key]
         else:
             out[key] = format_field(disp[key], fmt)
+    if node.get("kind") == "op" and node.get("type") == "hp_mod" \
+            and "value" not in out and "ratio" in out:
+        out["value"] = out["ratio"]          # 比例基准的流失也用 {value} 位展示
+    if node.get("kind") == "op" and node.get("type") == "strike" \
+            and str(disp.get("basis", "none")) != "none":
+        out["basis_word"] = str(game.stats.get(
+            "lbl_basis_" + str(disp.get("basis")), disp.get("basis")))
     return out
 
 
@@ -542,25 +573,27 @@ def _link_formula(node: dict, link: dict, param: str, game: GameCfg):
 
 
 def _children_map(pgraph: dict):
+    """节点 id -> [(gate, 子节点id), ...]（按边数组顺序；gate = pass/fail）。"""
     children = {n["id"]: [] for n in pgraph.get("nodes", ())}
     for e in pgraph.get("edges", ()):
-        children.setdefault(e["from"], []).append(e["to"])
+        children.setdefault(e["from"], []).append((e.get("gate", "pass"), e["to"]))
     return children
 
 
 def _natural_text(pgraph: dict, fighter: Fighter, game: GameCfg,
                   simple: bool = False, live: bool = False) -> str:
-    """标准化自然语言描述（v2.0.0 组合式）：
+    """标准化自然语言描述（v3.0.0 组合式，支持判断 / 分支 / 循环）：
 
     - 按触发节点在 nodes 数组中的顺序逐链生成句子，句间以「；」相连；
-    - 每链 = 非概率条件从句 + 触发词 + 概率从句 + 首个效果句（顺拼）+ 其余
-      条件/效果句（逗号相连）；参数为共鸣估算后的最终值（敌方按基础值估算）；
-    - 每个共鸣参数的公式括号紧跟该数值（simple 模式隐藏公式）；
-      live=True 时共鸣数值位替换为「LIVE_MARKER + 槽位序号」（序号对应
-      link_calc 下标），供前端按快照实时填充。"""
+    - 每链递归组合：条件从句在前、原子句在后，子句以「，」相连；条件节点的
+      fail 分支以「否则」衔接（分支）；loop 结构节点输出循环从句（循环）；
+    - 参数为共鸣估算后的最终值（敌方按基础值估算）；每个共鸣参数的公式
+      括号紧跟该数值（simple 模式隐藏公式）；live=True 时共鸣数值位替换为
+      「LIVE_MARKER + 槽位序号」（序号对应 link_calc 下标），供前端实时填充。"""
     stats = game.stats
     display, _coeffs = estimated_resonanced_eff(fighter, pgraph, game)
     disp_by_id = {node["id"]: disp for node, disp in display}
+    node_by_id = {n["id"]: n for n in pgraph.get("nodes", ())}
     slot_of = {}
     for idx, (node, link) in enumerate(_walk_links(pgraph)):
         slot_of[(node["id"], str(link.get("param")))] = idx
@@ -586,6 +619,9 @@ def _natural_text(pgraph: dict, fighter: Fighter, game: GameCfg,
                 params[param] = final
             else:
                 params[param] = final + formula
+            # hp_mod 的比例基准参数在模板中以 {value} 位展示（见 _clause_params）
+            if node.get("type") == "hp_mod" and param == "ratio":
+                params["value"] = params[param]
             if tail:
                 tails.append(tail)
         key = _node_clause(node, disp, game)
@@ -598,33 +634,36 @@ def _natural_text(pgraph: dict, fighter: Fighter, game: GameCfg,
             return ""
         return render_template(template, params, game)
 
-    def visit(nid, pre, gate, first, rest):
-        """沿链收集：pre=非概率条件从句，gate=概率从句，first=首效果句，
-        rest=其余从句。返回是否已拼出首效果句。"""
-        node = next(n for n in pgraph["nodes"] if n["id"] == nid)
-        text = render(node)
+    def chain_text(nid: str) -> str:
+        """以节点 nid 为根的子链文本：条件从句在前、原子句在后；条件节点的
+        fail 子链以「否则」衔接在 pass 子链之后（分支语义）。"""
+        node = node_by_id[nid]
+        parts = [p for p in [render(node)] if p]
         if node["kind"] == "condition":
-            if node["type"] == "chance":
-                gate.append(text)
-            else:
-                (rest if first[0] else pre).append(text)
-        elif node["kind"] == "op" and text:
-            if not first[0]:
-                first[0] = text
-            else:
-                rest.append(text)
-        for cid in children.get(nid, ()):
-            visit(cid, pre, gate, first, rest)
+            for gate, cid in children.get(nid, ()):
+                sub = chain_text(cid)
+                if not sub:
+                    continue
+                if gate == "fail":
+                    parts.append("否则" + sub)
+                else:
+                    parts.append(sub)
+        else:
+            for _gate, cid in children.get(nid, ()):
+                sub = chain_text(cid)
+                if sub:
+                    parts.append(sub)
+        return "，".join(parts)
 
     for node in pgraph.get("nodes", ()):
         if node["kind"] != "trigger":
             continue
-        pre, gate, first, rest = [], [], [""], []
-        for cid in children.get(node["id"], ()):
-            visit(cid, pre, gate, first, rest)
         hook_word = str(stats.get("hook_" + node["type"], ""))
-        head = hook_word + "".join(gate) + first[0]
-        parts = [p for p in pre if p] + ([head] if head else []) + [p for p in rest if p]
+        parts = [p for p in [hook_word] if p]
+        for _gate, cid in children.get(node["id"], ()):
+            sub = chain_text(cid)
+            if sub:
+                parts.append(sub)
         chain_texts.append("，".join(parts))
 
     text = "；".join(t for t in chain_texts if t)

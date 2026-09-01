@@ -92,7 +92,7 @@
         "name": "蚀骨",
         "weight": 2,
         "mod": {
-          "damage": 1
+          "value": 1
         }
       },
       {
@@ -144,7 +144,7 @@
         "name": "入骨",
         "weight": 2,
         "mod": {
-          "damage": 1
+          "value": 1
         }
       },
       {
@@ -181,36 +181,17 @@
     "cond_self_hp_above": "自身生命不低于 {threshold} 时",
     "cond_target_hp_below": "敌方生命低于 {threshold} 时",
     "cond_target_hp_above": "敌方生命高于 {threshold} 时",
-    "cond_has_marker": "带有标记 {marker} 时",
-    "cond_no_marker": "没有标记 {marker} 时",
     "cond_once_per_battle": "（每场战斗一次）",
-    "op_prepare_charge": "改为蓄力：下次攻击必定命中、暴击率 +{crit}，伤害提升至 {value}",
-    "op_thunder_strike": "改为雷罚：劈下至多 {max_hits} 道真伤落雷，每道为攻击的 {value}，之后每道概率为前道的 {decay}",
-    "op_attack_mult": "使伤害提升至 {value}",
-    "op_random_mult": "进行一场豪赌：{win} 概率使伤害提升至 {value}，否则伤害降低至 {penalty}",
-    "op_momentum_mult": "伤害按乘胜层数提升（每层 +{value}，至多 {cap} 层）",
-    "op_armor_pen_flat": "改为重击：本次攻击无视敌方 {value} 的防御",
-    "op_armor_pen_full": "洞悉弱点：本次攻击无视全部防御，且暴击率 +{crit}",
-    "op_self_cost": "消耗自身 {cost} 最大生命",
-    "op_heal": "回复 {value} 点生命",
-    "op_cleanse": "驱散双方所有标记与增益减益（每驱散 1 种为自己回复 {per} 点生命），并回复 {value} 点生命",
-    "op_gauge_add": "使行动槽额外前进 {value}（若为暴击则改为 {crit_value}）",
-    "op_gauge_delay": "打断其行动并使行动槽倒退 {delay}",
-    "op_quick_strike": "立即反击，造成 {value} 的伤害",
-    "op_stat_gain": "速度 +{value}、攻击 +{atk}",
-    "op_stat_boost_once": "攻击 +{value} 且速度 +{spd}，持续到战斗结束",
-    "op_will_register": "受到致命伤害时有 {chance} 概率重生并回复 {value} 最大生命；每次触发后概率衰减为前次的 {decay}",
-    "op_record_damage": "记录该次伤害（至多 {cap} 条）：下次命中将记录总和以 {ratio} 追加打出",
-    "op_reflect_damage": "触发反噬：免除该次伤害的 {value}，并将其以 {ratio} 反弹给攻击者",
-    "st_poison": "使敌方中毒：其每刻损失 {damage} 点生命，持续 {ticks} 刻",
-    "st_bleed": "撕裂敌方：其每次行动损失相当于攻击者攻击 {value} 的生命，持续 {ticks} 刻",
-    "st_stun": "命中则令其 {ticks} 刻内无法行动",
-    "st_shred": "使对方防御 −{value}，持续 {ticks} 刻，至多叠加 {max_stacks} 层",
-    "st_guard": "叠加一层锻痕：伤害减免 +{value}，持续 {ticks} 刻",
-    "st_momentum": "获得 1 层乘胜（每层伤害 +{value}，至多 {cap} 层；攻击落空时清零）",
-    "st_grudge": "积攒 1 层怨念（持续 {ticks} 刻）：每层使伤害 +{value}",
+    "op_cleanse": "驱散双方所有状态（每驱散 1 种回复 {per} 点生命），并回复 {value} 点生命",
+    "st_poison": "使敌方中毒：其每刻损失 {value} 点生命，持续 {turns} 刻",
+    "st_bleed": "撕裂敌方：其每次行动损失相当于攻击者攻击 {value} 的生命，持续 {turns} 刻",
+    "st_stun": "命中则令其 {turns} 刻内无法行动",
+    "st_shred": "使对方防御 −{value}，持续 {turns} 刻，至多叠加 {max_stacks} 层",
+    "st_guard": "叠加一层锻痕：伤害减免 +{value}，持续 {turns} 刻",
+    "st_momentum": "获得 1 层乘胜（每层伤害 +{value}，至多 {max_stacks} 层；攻击落空时清零）",
+    "st_grudge": "积攒 1 层怨念（持续 {turns} 刻）：每层使伤害 +{value}",
     "st_lifesteal": "进入嗜血：{turns} 次行动内，所造成伤害的 {value} 转化为自身生命",
-    "st_regen": "获得回春印记：每 {tick} 刻回复 {value} 点生命，持续 {duration} 刻",
+    "st_regen": "获得回春印记：每 {tick} 刻回复 {value} 点生命，持续 {turns} 刻",
     "link_formula": "（{base} + {expr}*{merged}）",
     "link_expr_difference": "【{own}-{enemy}】{emoji}",
     "link_expr_sum": "【{own}+{enemy}】{emoji}",
@@ -225,18 +206,13 @@
     "field_crit": "暴击加成",
     "field_threshold": "触发门槛",
     "field_turns": "持续行动数",
-    "field_damage": "毒伤",
-    "field_ticks": "持续刻数",
     "field_decay": "衰减比例",
-    "field_delay": "行动槽倒退量",
-    "field_crit_value": "暴击前进量",
     "field_ratio": "追加倍率",
     "field_cap": "层数上限",
     "field_cost": "消耗比例",
     "field_convert": "转化比例",
     "field_per": "驱散回复量",
     "field_spd": "速度加成",
-    "field_penalty": "惩罚倍率",
     "field_atk": "攻击加成",
     "mod_chance": "触发率 {v}",
     "mod_value": "效果值 {v}",
@@ -291,14 +267,54 @@
     "lbl_will_register": "注册不屈",
     "lbl_record_damage": "记录伤害",
     "lbl_reflect_damage": "反弹伤害",
-    "op_damage_reduce": "所受伤害降低 {value}",
-    "op_immune_chance": "且有 {immune} 的概率完全免疫伤害",
-    "op_pact_cost": "消耗 {cost} 最大生命，本次攻击附带 {value} 吸血，并按吸血量的 {convert} 永久增加攻击",
-    "op_pact_convert": "把本次吸血按血契比例永久转化为攻击",
     "lbl_damage_reduce": "减伤",
     "lbl_immune_chance": "概率免疫",
     "lbl_pact_cost": "血契献祭",
-    "lbl_pact_convert": "血契转化"
+    "lbl_pact_convert": "血契转化",
+    "op_strike": "打出 ×{mult} 的打击",
+    "op_hit_mod": "使本次攻击 ×{mult}",
+    "op_taken_mod": "使所受伤害降低 {cut}",
+    "op_grant_immune": "完全免疫本次伤害",
+    "op_stat_mod": "{stat} 永久提升 {gain}",
+    "op_hp_mod": "回复 {value} 点生命",
+    "op_hp_mod_loss": "消耗自身 {value} 生命",
+    "op_gauge_mod": "使行动槽变化 {gain}",
+    "op_skip_action": "消耗本次行动",
+    "op_record": "记录该次伤害（至多 {cap} 条），下次命中时追加打出",
+    "op_loop": "连续至多 {max} 次（逐次按 {decay} 衰减）",
+    "cond_last_crit": "本次为暴击时",
+    "cond_has_status": "自身带有{status}时",
+    "cond_no_status": "自身没有{status}时",
+    "field_mult": "攻击倍率",
+    "field_max": "循环上限",
+    "field_gain": "属性增量",
+    "field_cut": "减伤比例",
+    "st_charge": "改为蓄力：下次攻击必定命中、暴击率 +{crit}，伤害提升至 {value}",
+    "st_will": "受到致命伤害时有 {chance} 概率重生并回复 {value} 最大生命；每次触发后概率衰减为前次的 {decay}",
+    "st_tempo": "速度 +{value}、攻击 +{atk}（永久叠加）",
+    "st_last_stand": "攻击 +{value} 且速度 +{spd}，持续到战斗结束",
+    "st_pact_steal": "本次攻击附带 {value} 吸血，行动结束后按吸血量转化为攻击",
+    "op_strike_basis": "把{basis_word}以 ×{value} 打出",
+    "lbl_basis_recorded_sum": "记仇记录总和",
+    "lbl_basis_taken_absorbed": "被减免的伤害",
+    "op_hit_mod_pen": "本次攻击无视敌方 {pen} 的防御",
+    "op_hit_mod_pen_crit": "本次攻击无视敌方 {pen} 的防御，且暴击率 +{crit_bonus}",
+    "field_pen": "穿透比例",
+    "field_crit_bonus": "暴击加成",
+    "lbl_strike": "攻击",
+    "lbl_hit_mod": "攻击修饰",
+    "lbl_taken_mod": "减伤",
+    "lbl_grant_immune": "免疫",
+    "lbl_stat_mod": "属性变动",
+    "lbl_hp_mod": "体力变动",
+    "lbl_gauge_mod": "行动槽",
+    "lbl_skip_action": "吞行动",
+    "lbl_record": "记录",
+    "lbl_loop": "循环",
+    "lbl_last_crit": "上次暴击",
+    "lbl_has_status": "有状态",
+    "lbl_no_status": "无状态",
+    "op_stat_mod_recorded": "把本次吸血量的 {value} 永久转化为{stat}"
   },
   "skills": [
     {
@@ -313,43 +329,58 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.14
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
-            "type": "prepare_charge",
+            "type": "apply_status",
             "params": {
               "status": "charge",
+              "target": "self",
               "value": 2.2,
               "crit": 0.25
             },
             "pos": [
               560,
-              60
+              50
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "skip_action",
+            "params": {},
+            "pos": [
+              820,
+              50
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -373,53 +404,58 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.33
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "condition",
             "type": "target_hp_below",
             "params": {
               "threshold": 0.33
             },
             "pos": [
-              520,
-              60
+              560,
+              50
             ]
           },
           {
-            "id": "n4",
+            "id": "n3",
             "kind": "op",
-            "type": "attack_mult",
+            "type": "hit_mod",
             "params": {
-              "value": 2.45
+              "mult": 2.45,
+              "announce": true
             },
             "pos": [
-              800,
-              60
+              820,
+              50
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -427,10 +463,6 @@
           {
             "from": "n2",
             "to": "n3"
-          },
-          {
-            "from": "n3",
-            "to": "n4"
           }
         ]
       }
@@ -447,29 +479,29 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.25
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
             "type": "apply_status",
             "params": {
@@ -480,18 +512,18 @@
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }
@@ -508,51 +540,51 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.3
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
             "type": "apply_status",
             "params": {
               "status": "poison",
               "target": "enemy",
-              "damage": 38,
-              "ticks": 12
+              "value": 38,
+              "turns": 12
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }
@@ -569,55 +601,59 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.125
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "hit_mod",
+            "params": {
+              "pen": 0.35
+            },
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "armor_pen_flat",
-            "params": {
-              "value": 0.35
-            },
-            "pos": [
-              560,
-              60
-            ]
-          },
-          {
-            "id": "n4",
-            "kind": "op",
             "type": "apply_status",
             "params": {
               "status": "stun",
               "target": "enemy",
-              "ticks": 4
+              "turns": 4
             },
             "pos": [
-              840,
-              60
+              820,
+              50
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -625,10 +661,6 @@
           {
             "from": "n2",
             "to": "n3"
-          },
-          {
-            "from": "n3",
-            "to": "n4"
           }
         ]
       }
@@ -645,44 +677,62 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.78
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "struct",
+            "type": "loop",
+            "params": {
+              "max": 9,
+              "decay": 0.93
+            },
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "thunder_strike",
+            "type": "strike",
             "params": {
-              "value": 0.27,
-              "decay": 0.93,
-              "chain": 0.78,
-              "max_hits": 9
+              "target": "enemy",
+              "mult": 0.27,
+              "real": true,
+              "mode": "replace",
+              "event": "thunder_hit"
             },
             "pos": [
-              560,
-              60
+              820,
+              120
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -706,53 +756,61 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "action_interrupt",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.085
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "gauge_mod",
+            "params": {
+              "target": "enemy",
+              "gain": -900
+            },
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "gauge_delay",
+            "type": "strike",
             "params": {
-              "delay": 900
+              "target": "enemy",
+              "mult": 0.45,
+              "mode": "extra",
+              "event": "sever_proc"
             },
             "pos": [
-              560,
-              60
-            ]
-          },
-          {
-            "id": "n4",
-            "kind": "op",
-            "type": "quick_strike",
-            "params": {
-              "value": 0.45
-            },
-            "pos": [
-              840,
-              60
+              820,
+              50
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -760,10 +818,6 @@
           {
             "from": "n2",
             "to": "n3"
-          },
-          {
-            "from": "n3",
-            "to": "n4"
           }
         ]
       }
@@ -780,49 +834,81 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
-            "type": "on_attack",
-            "params": {},
+            "type": "on_hit_landed",
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.62
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "last_crit",
+            "params": {},
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "gauge_add",
+            "type": "gauge_mod",
             "params": {
-              "value": 2800,
-              "crit_value": 4800
+              "target": "self",
+              "gain": 4800
             },
             "pos": [
-              560,
-              60
+              820,
+              50
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "gauge_mod",
+            "params": {
+              "target": "self",
+              "gain": 2800
+            },
+            "pos": [
+              820,
+              160
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
           },
           {
             "from": "n2",
-            "to": "n3"
+            "to": "n3",
+            "gate": "pass"
+          },
+          {
+            "from": "n2",
+            "to": "n4",
+            "gate": "fail"
           }
         ]
       }
@@ -839,51 +925,51 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_defend",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.65
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
             "type": "apply_status",
             "params": {
               "status": "guard",
               "target": "self",
               "value": 0.07,
-              "ticks": 20
+              "turns": 20
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }
@@ -900,42 +986,60 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_defend",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.23
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "taken_mod",
+            "params": {
+              "cut": 0.18
+            },
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "reflect_damage",
+            "type": "strike",
             "params": {
-              "value": 0.18,
-              "ratio": 1.25
+              "target": "enemy",
+              "basis": "taken_absorbed",
+              "value": 1.25,
+              "event": "effect_reflect"
             },
             "pos": [
-              560,
-              60
+              820,
+              50
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -956,63 +1060,79 @@
         0.6,
         1.6
       ],
-      "mastery_on": "immune",
+      "mastery_on": "chance",
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_defend",
-            "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "self_hp_above",
             "params": {
               "threshold": 0.7
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "taken_mod",
+            "params": {
+              "cut": 0.08,
+              "event": "effect_bulwark"
+            },
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
-            "kind": "op",
-            "type": "damage_reduce",
+            "kind": "condition",
+            "type": "chance",
             "params": {
-              "value": 0.08
+              "chance": 0.03
             },
             "pos": [
               560,
-              60
+              160
             ]
           },
           {
             "id": "n4",
             "kind": "op",
-            "type": "immune_chance",
+            "type": "grant_immune",
             "params": {
-              "immune": 0.03
+              "event": "immune"
             },
             "pos": [
-              840,
-              60
+              820,
+              50
             ]
           }
         ],
         "edges": [
           {
+            "from": "n0",
+            "to": "n1"
+          },
+          {
             "from": "n1",
             "to": "n2"
           },
           {
-            "from": "n2",
+            "from": "n1",
             "to": "n3"
           },
           {
@@ -1034,50 +1154,78 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_hit_taken",
-            "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.29
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
-            "type": "record_damage",
+            "type": "record",
             "params": {
               "status": "retribution",
-              "ratio": 0.38,
+              "what": "damage_taken",
               "cap": 6
             },
             "pos": [
               560,
-              60
+              50
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "trigger",
+            "type": "on_hit_landed",
+            "pos": [
+              40,
+              160
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "strike",
+            "params": {
+              "target": "enemy",
+              "basis": "recorded_sum",
+              "value": 0.38,
+              "mode": "append",
+              "event": "retribution_release"
+            },
+            "pos": [
+              300,
+              160
             ]
           }
         ],
         "edges": [
           {
+            "from": "n0",
+            "to": "n1"
+          },
+          {
             "from": "n1",
             "to": "n2"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n3",
+            "to": "n4"
           }
         ]
       }
@@ -1094,35 +1242,36 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "battle_start",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "op",
-            "type": "will_register",
+            "type": "apply_status",
             "params": {
               "status": "will",
+              "target": "self",
               "chance": 0.52,
               "value": 0.28,
               "decay": 0.5
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           }
         ]
       }
@@ -1139,41 +1288,45 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "action_start",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.15
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "heal",
+              "basis": "flat",
+              "value": 550,
+              "event": "effect_heal"
+            },
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
-            "kind": "op",
-            "type": "heal",
-            "params": {
-              "value": 550
-            },
-            "pos": [
-              560,
-              60
-            ]
-          },
-          {
-            "id": "n4",
             "kind": "op",
             "type": "apply_status",
             "params": {
@@ -1181,15 +1334,19 @@
               "target": "self",
               "value": 150,
               "tick": 10,
-              "duration": 30
+              "turns": 30
             },
             "pos": [
-              840,
-              60
+              820,
+              50
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -1197,10 +1354,6 @@
           {
             "from": "n2",
             "to": "n3"
-          },
-          {
-            "from": "n3",
-            "to": "n4"
           }
         ]
       }
@@ -1217,49 +1370,50 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "action_start",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.13
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
             "type": "cleanse",
             "params": {
+              "scope": "both",
               "value": 215,
               "per": 190
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }
@@ -1280,13 +1434,25 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "before_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "condition",
+            "type": "once_per_battle",
+            "params": {
+              "key": "last_stand"
+            },
+            "pos": [
+              300,
+              50
             ]
           },
           {
@@ -1297,26 +1463,31 @@
               "threshold": 0.3
             },
             "pos": [
-              280,
-              60
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "stat_boost_once",
+            "type": "apply_status",
             "params": {
               "status": "last_stand",
+              "target": "self",
               "value": 0.2,
               "spd": 0.2
             },
             "pos": [
-              560,
-              60
+              820,
+              50
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -1340,94 +1511,51 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
-            "kind": "trigger",
-            "type": "on_attack",
-            "params": {},
-            "pos": [
-              40,
-              60
-            ]
-          },
-          {
-            "id": "n2",
-            "kind": "condition",
-            "type": "chance",
-            "params": {
-              "chance": 0.8
-            },
-            "pos": [
-              280,
-              60
-            ]
-          },
-          {
-            "id": "n3",
-            "kind": "op",
-            "type": "momentum_mult",
-            "params": {
-              "value": 0.065,
-              "cap": 5
-            },
-            "pos": [
-              560,
-              60
-            ]
-          },
-          {
-            "id": "n4",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_hit_landed",
             "params": {},
             "pos": [
               40,
-              260
+              50
             ]
           },
           {
-            "id": "n5",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.8
             },
             "pos": [
-              280,
-              260
+              300,
+              50
             ]
           },
           {
-            "id": "n6",
+            "id": "n2",
             "kind": "op",
             "type": "apply_status",
             "params": {
               "status": "momentum",
               "target": "self",
               "value": 0.065,
-              "cap": 5
+              "max_stacks": 5
             },
             "pos": [
               560,
-              260
+              50
             ]
           }
         ],
         "edges": [
           {
+            "from": "n0",
+            "to": "n1"
+          },
+          {
             "from": "n1",
             "to": "n2"
-          },
-          {
-            "from": "n2",
-            "to": "n3"
-          },
-          {
-            "from": "n4",
-            "to": "n5"
-          },
-          {
-            "from": "n5",
-            "to": "n6"
           }
         ]
       }
@@ -1444,54 +1572,62 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.35
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "loss",
+              "basis": "maxhp",
+              "ratio": 0.05,
+              "floor1": true,
+              "event": "overload_cost"
+            },
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "attack_mult",
+            "type": "hit_mod",
             "params": {
-              "value": 2.15,
-              "announce": false
+              "mult": 2.15
             },
             "pos": [
-              560,
-              60
-            ]
-          },
-          {
-            "id": "n4",
-            "kind": "op",
-            "type": "self_cost",
-            "params": {
-              "cost": 0.05
-            },
-            "pos": [
-              840,
-              60
+              820,
+              50
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -1499,10 +1635,6 @@
           {
             "from": "n2",
             "to": "n3"
-          },
-          {
-            "from": "n3",
-            "to": "n4"
           }
         ]
       }
@@ -1519,52 +1651,52 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.36
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
             "type": "apply_status",
             "params": {
               "status": "shred",
               "target": "enemy",
               "value": 340,
-              "ticks": 16,
+              "turns": 16,
               "max_stacks": 3
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }
@@ -1581,51 +1713,51 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.32
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
             "type": "apply_status",
             "params": {
               "status": "bleed",
               "target": "enemy",
               "value": 0.2,
-              "ticks": 12
+              "turns": 12
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }
@@ -1642,13 +1774,24 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
-            "params": {},
             "pos": [
               40,
-              60
+              50
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.39
+            },
+            "pos": [
+              300,
+              50
             ]
           },
           {
@@ -1659,33 +1802,55 @@
               "chance": 0.39
             },
             "pos": [
-              280,
-              60
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "random_mult",
+            "type": "hit_mod",
             "params": {
-              "win": 0.39,
-              "value": 2.2,
-              "penalty": 0.5
+              "mult": 2.2,
+              "event": "gamble_win"
             },
             "pos": [
-              560,
-              60
+              820,
+              50
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "op",
+            "type": "hit_mod",
+            "params": {
+              "mult": 0.5,
+              "event": "gamble_lose"
+            },
+            "pos": [
+              820,
+              160
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
           },
           {
             "from": "n2",
-            "to": "n3"
+            "to": "n3",
+            "gate": "pass"
+          },
+          {
+            "from": "n2",
+            "to": "n4",
+            "gate": "fail"
           }
         ]
       }
@@ -1702,50 +1867,51 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "after_action",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.16
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
-            "type": "stat_gain",
+            "type": "apply_status",
             "params": {
               "status": "tempo",
+              "target": "self",
               "value": 100,
               "atk": 10
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }
@@ -1762,48 +1928,49 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_attack",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.42
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
-            "type": "armor_pen_full",
+            "type": "hit_mod",
             "params": {
-              "crit": 0.06
+              "pen": 1.0,
+              "crit_bonus": 0.06
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }
@@ -1820,66 +1987,90 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "action_start",
-            "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.4
             },
             "pos": [
-              280,
-              60
+              300,
+              50
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "loss",
+              "basis": "maxhp",
+              "ratio": 0.06,
+              "floor1": true,
+              "event": "pact_proc"
+            },
+            "pos": [
+              560,
+              50
             ]
           },
           {
             "id": "n3",
             "kind": "op",
-            "type": "pact_cost",
+            "type": "apply_status",
             "params": {
-              "status": "blood_pact",
-              "cost": 0.06,
+              "status": "pact_steal",
+              "target": "self",
               "value": 0.68,
-              "convert": 0.11
+              "turns": 1
             },
             "pos": [
-              560,
-              60
+              820,
+              50
             ]
           },
           {
             "id": "n4",
             "kind": "trigger",
             "type": "after_action",
-            "params": {},
             "pos": [
               40,
-              260
+              160
             ]
           },
           {
             "id": "n5",
             "kind": "op",
-            "type": "pact_convert",
+            "type": "stat_mod",
             "params": {
-              "status": "blood_pact"
+              "target": "self",
+              "stat": "atk",
+              "basis": "recorded_lifesteal",
+              "value": 0.11,
+              "status": "blood_pact",
+              "event": "pact_gain"
             },
             "pos": [
-              280,
-              260
+              300,
+              160
             ]
           }
         ],
         "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
           {
             "from": "n1",
             "to": "n2"
@@ -1907,51 +2098,51 @@
       "effect": {
         "nodes": [
           {
-            "id": "n1",
+            "id": "n0",
             "kind": "trigger",
             "type": "on_hit_taken",
             "params": {},
             "pos": [
               40,
-              60
+              50
             ]
           },
           {
-            "id": "n2",
+            "id": "n1",
             "kind": "condition",
             "type": "chance",
             "params": {
               "chance": 0.6
             },
             "pos": [
-              280,
-              60
+              300,
+              50
             ]
           },
           {
-            "id": "n3",
+            "id": "n2",
             "kind": "op",
             "type": "apply_status",
             "params": {
               "status": "grudge",
               "target": "self",
               "value": 0.07,
-              "ticks": 20
+              "turns": 20
             },
             "pos": [
               560,
-              60
+              50
             ]
           }
         ],
         "edges": [
           {
-            "from": "n1",
-            "to": "n2"
+            "from": "n0",
+            "to": "n1"
           },
           {
-            "from": "n2",
-            "to": "n3"
+            "from": "n1",
+            "to": "n2"
           }
         ]
       }

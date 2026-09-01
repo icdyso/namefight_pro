@@ -2,7 +2,7 @@
 
 > 本文档是游戏的**完整规则说明书**：流程图、全部细则与数值、每个 JSON 配置文件的
 > 意义与调整指南。按 AGENTS.md 第 3.6 条，**每次更新涉及规则/数值/配置结构时必须
-> 同步更新本文档**。当前版本：**v2.0.0**（与 `config/game/system.json` 的 `version` 一致）。
+> 同步更新本文档**。当前版本：**v3.0.0**（与 `config/game/system.json` 的 `version` 一致）。
 
 ---
 
@@ -114,6 +114,24 @@ v2.0.0 的增量（**breaking：同名对战结果改变**）：
   触发率、孤注一掷独立胜负参数、破甲按刻到期、报复可驱散、血契转化为显式
   节点、护盾/反甲上限入配置（`guard_reduction_cap` / `reflect_split_cap`）。
 
+v3.0.0 的增量（**breaking：同名对战结果改变**，最小原子化）：
+
+- **最小原子规则集**：23 个效果原语压缩为 **11 个原子 + 1 个结构**——攻击方式
+  （strike / hit_mod / taken_mod / grant_immune）、基础变动（stat_mod 属性 /
+  hp_mod 体力 / gauge_mod 行动槽）、施加与驱散（apply_status / cleanse）、
+  记录与信号（record / skip_action）、结构（**loop 循环**：第 1 轮必定执行，
+  第 i 轮按 decay^(i-1) 续链，至多 max 轮——雷罚连击）；
+- **判断 / 分支 / 循环入图**：条件节点出边分 **pass / fail 两条**（孤注一掷的
+  胜负分支、疾影的暴击判定分支）；新条件 `last_crit`（本次暴击）、
+  `has_status` / `no_status`；`once_per_battle` 修复为下游真执行才占次数；
+- **状态定义 v3**：策略字段（stack 叠层 / expire 到期 / interval 间隔 /
+  reset_on_miss 落空清零 / **lethal 致命拦截**——不屈）+ params 数值参数 +
+  **mods 被动修饰表**（8 种 kind：增伤 / 减伤 / 攻防速乘区与加值 / 破甲 / 吸血）+
+  **effects 效果图**（与技能图同格式，5 个状态钩子：施加时 / 每 interval 刻 /
+  拥有者行动时 / 替换拥有者行动 / 命中后）——毒发、流血、回春、眩晕、蓄力
+  释放、血契吸血全部是状态图上的原子组合，可分状态编辑；效果图中以
+  `"$参数名"` 引用施加参数（含个性化 / 共鸣结果）。
+
 ```mermaid
 flowchart LR
     A[名字输入] --> B[归一化]
@@ -211,13 +229,24 @@ flowchart LR
 ### 4.1 技能池（`game/skills.json` -> `skills`）
 
 每名斗士不放回抽取 **1–3** 个（三角形，2 最常见；v1.1.0 用户调参下限 2 -> 1）。
-共 **25** 个技能。**v2.0.0 起技能逻辑为节点图**（`effect = {nodes, edges}`）：
-触发节点声明执行钩子（9 种：battle_start / action_interrupt / action_start /
-before_attack / on_attack / on_defend / on_hit_landed / on_hit_taken /
-after_action），条件节点（8 种：chance / self_hp_below / self_hp_above /
-target_hp_below / target_hp_above / has_marker / no_marker / once_per_battle）
-门控下游子树，效果节点为 23 种原语（op）之一；执行顺序 = 技能派生顺序 ×
-触发节点数组顺序 × 边数组顺序（改变即 breaking）。
+共 **25** 个技能。**v3.0.0 起技能逻辑为节点图**（`effect = {nodes, edges}`），
+节点四类，构成「判断 / 分支 / 循环」完备的规则集：
+
+- **trigger 触发**（9 种钩子）：battle_start / action_interrupt / action_start /
+  before_attack / on_attack / on_defend / on_hit_landed / on_hit_taken / after_action；
+- **condition 条件**（9 种，出边带 gate: pass/fail 构成**分支**）：chance /
+  self_hp_below / self_hp_above / target_hp_below / target_hp_above /
+  has_status / no_status / once_per_battle / last_crit；
+- **op 原子**（11 种最小原子）：strike（攻击：目标/倍率/真伤/穿透/暴击加成/
+  必中/追加·替换·附加/基准）、hit_mod（修饰本次攻击）、taken_mod（减免所受）、
+  grant_immune（完全免疫）、stat_mod（属性永久 ±）、hp_mod（体力治疗/流失）、
+  gauge_mod（行动槽）、apply_status（施加状态，唯一状态入口）、cleanse（驱散）、
+  record（记录所受伤害/吸血量）、skip_action（吞行动）；
+- **struct 结构**（loop **循环**：第 1 轮必定执行，第 i 轮按 decay^(i-1)
+  续链，至多 max 轮）。
+
+执行顺序 = 技能派生顺序 × 触发节点数组顺序 × 边数组顺序（pass 组先于
+fail 组）× loop 轮次（改变即 breaking）。
 **各技能基础触发率按强度互不相同**（强效低频：斩断 8.5% … 弱效高频：
 乘胜追击 80%），任何触发率永不超过 100%（个性化后截断 [2%, 95%]）。
 v1.1.0 在三角形分布 + 用户调参的新环境下七轮重调
@@ -445,17 +474,29 @@ dmg    = 取整一次( max( 100, raw × (1 − 免伤率) ) )
 减伤后  = max( 100, dmg × (1 − 锻痕/壁垒减伤率) )        // 壁垒免疫则直接为 0
 ```
 
-### 状态类规则（v0.9.0 起以「刻」为期；v2.0.0 状态定义数据化于 battle.json）
+### 状态类规则（v0.9.0 起以「刻」为期；v3.0.0 状态定义 = 策略字段 + params + mods + 效果图）
 
-- **状态容器**：`_Combatant.st`（状态 id → 运行时数据）+ `markers`（标记集合）；
-  16 种状态定义于 `battle.json` 的 `statuses` 节（kind + 参数规格 + 事件模板 +
-  文案），行为由 16 个 kind 决定（dot / control / shred / guard / momentum /
-  grudge / record / lifesteal / regen / charge / will / tempo / boost / pact …）；
-  **新建同 kind 状态（第二种毒、第二个叠层）无需改引擎**；
+- **状态容器**：`_Combatant.st`（状态 id → 运行时数据）+ `markers`（一次性 /
+  不屈已触发标记）；状态定义于 `battle.json` 的 `statuses` 节，每个自带：
+  - 策略字段：`stack`（refresh 刷新 / layers 逐层独立到期 / count 计数至上限）、
+    `expire`（ticks 按刻 / actions 按行动数 / none 无期限）、`interval`
+    （on_status_tick 间隔，可 `$参数`）、`reset_on_miss`（落空清零——乘胜）、
+    `lethal`（致命伤害按衰减概率重生——不屈，引擎级死亡拦截）；
+  - `params`：数值参数规格（施加时以 apply_status 参数覆盖默认值，
+    个性化 / 共鸣即作用于此；持续参数统一命名 `turns`）；
+  - `mods`：被动修饰表（8 种 kind：dmg_out_pct 增伤 / dmg_in_cut_pct 减伤
+    （总量钳 guard_reduction_cap）/ atk_pct · spd_pct 乘区 / atk_flat · spd_flat
+    加值 / def_break 破甲 / lifesteal_pct 吸血（可 record 吸血量）），
+    引擎在攻防聚合点按施加顺序聚合；
+  - `effects`：**状态效果图**（与技能图同格式，钩子为 5 个状态钩子：
+    on_status_apply / on_status_tick / on_owner_action / on_owner_action_consume
+    （替换拥有者行动——蓄力释放）/ on_owner_attack_hit），图中以 `"$参数名"`
+    引用施加参数——毒发、流血、回春、眩晕、蓄力释放、血契吸血全部是
+    图上的原子组合；**新建状态（再添一种毒、新叠层）无需改引擎**；
 - **刻期限状态**：中毒 / 流血 / 眩晕 / 破甲 / 回春印记 / 怨念层 / 锻痕层--
-  持续 `ticks` 刻，到期自动失效（**v2.0.0 修复：破甲此前实际永不过期**）；
-  **毒伤在每刻开始结算（v1.1.0，眩晕与打断不影响毒），流血伤害仍在拥有者
-  行动时机结算**（同为 dot kind，`timing` 字段区分：every_tick / on_owner_action）；
+  持续 `turns` 刻（或行动数），到期自动失效（**v2.0.0 修复：破甲此前实际
+  永不过期**）；毒伤在每刻开始结算（interval 1），流血在拥有者行动时结算
+  （on_owner_action 钩子）；眩晕同走 on_owner_action（skip_action 原子）；
 - 眩晕持续期间拥有者的行动被跳过（短持续可能完全错过行动窗口，属刻意设计）；
 - 净化驱散**双方**所有标记与增益减益（毒/血/晕/破甲/蓄力/乘胜层/怨念层/锻痕层/
   记录/嗜血/回春），**不可驱散**：背水一战、大器晚成层数（永久成长）、
@@ -569,30 +610,33 @@ dmg    = 取整一次( max( 100, raw × (1 − 免伤率) ) )
 ### skills.json -- 技能池与个性化
 - `skill_count{min,max}`；
 - `skills[] {id,name,description,weight,mastery[lo,hi],mastery_on?,effect}`：
-  **v2.0.0 起 `effect` 为节点图** `{nodes:[{id,kind(trigger/condition/op),type,
-  params,pos}], edges:[{from,to}]}`——`kind=trigger` 的 `type` 须为 9 种钩子
-  之一、`kind=condition` 为 8 种条件之一、`kind=op` 为 23 种原语之一
-  （注册表见 `namefight/effects.py`，或 `GET /api/schema` 查询）；参数按原语
-  规格逐个校验（类型 / 钳制 / 必填）；图必须无环、无悬空、每技能至少一个
-  触发节点；`pos` 为编辑器画布坐标（引擎忽略）；`mastery_on` 默认 chance；
+  **v3.0.0 起 `effect` 为节点图** `{nodes:[{id,kind(trigger/condition/op/struct),
+  type,params,pos}], edges:[{from,to,gate?}]}`——`kind=trigger` 的 `type` 须为
+  9 种技能钩子之一、`kind=condition` 为 9 种条件之一（出边 gate 可为
+  pass/fail 构成分支）、`kind=op` 为 11 种原子之一、`kind=struct` 为 loop
+  （注册表见 `namefight/effects.py`，或 `GET /api/schema` 查询）；参数按原子
+  规格逐个校验（类型 / 钳制 / 必填；`event` 参数引用的战报模板必须存在）；
+  图必须无环、无悬空、每技能至少一个触发节点；`pos` 为编辑器画布坐标
+  （引擎忽略）；`mastery_on` 默认 chance；
   **名称与风味描述与数值保存在同一条目**；
-- `stats`（v2.0.0 组合式词表）：钩子引导语 `hook_*`、条件从句 `cond_*`、
-  原语句 `op_*`、状态名 `st_<状态id>`、标签 `lbl_*`、公式 `link_formula`、
-  变量式 `link_expr_*`、尾句 `link_ratio`/`link_difference`/`link_sum`、
-  范围词 `scope_*`、共鸣标记 `link_*`、字段名 `field_*`、词缀模板 `mod_*`、
+- `stats`（组合式词表）：钩子引导语 `hook_*`、条件从句 `cond_*`、原子句
+  `op_*`（含 op_hp_mod_loss / op_strike_basis / op_hit_mod_pen 等变体）、
+  状态句 `st_<状态id>`、标签 `lbl_*`、公式 `link_formula`、变量式
+  `link_expr_*`、尾句 `link_ratio`/`link_difference`/`link_sum`、范围词
+  `scope_*`、共鸣标记 `link_*`、字段名 `field_*`、词缀模板 `mod_*`、
   熟练度 `mastery_text*`、连接符 `link_sep`（占位符与参数同名）；
 - `md5_variance{value[lo,hi]}`：数值三角形分布扰动区间；
 - `variable_link`：`chance` / `mode_weights` / `max_slots`（1–4）/ `variables`
-  （**v2.0.0 删除 `targets`**：可共鸣资格改由原语参数规格的 `link` 标记声明）；
+  （可共鸣资格由原子参数规格的 `link` 标记声明）；
 - `name_modifiers`：`prefix_chance` / `suffix_chance` / `mod_variance` /
   `prefixes[] / suffixes[]`（`{id,name,weight,mod}`，名称与修正值同条目；
-  `mod` 键限定 chance/value/damage/turns/ticks）。
+  `mod` 键限定 chance/value/turns）。
 
 示例：共鸣必发且全差值 -> `"chance": 1.0, "mode_weights": {"own":1,"difference":4}`。
 
 **调平衡**：改数值/权重后运行 `python tools/balance_check.py [名字数] [对局数]`
 （固定种子蒙特卡洛），检查各技能持有者胜率是否回到 45%–55% 区间
-（v2.0.0 重构后基线 41.4%–73.2%，待纯配置回调）。
+（v3.0.0 原子化后基线 17.6%–83.8%，待纯配置回调）。
 
 ### titles.json -- 称号（名称/描述/加成同条目）
 `structures[] {id,weight,fields[],connectors[]}`（字段限定 prefix/core/core2/suffix；
@@ -602,12 +646,14 @@ v1.2.1 起仅 `prefix_core`，结构固定为前缀+主体）
 候选词条库：`docs/title_candidates.md`（500 前缀 + 500 主体）。
 
 ### battle.json -- 战斗常数 + 状态定义 + 战报文案 + 回放配置
-战斗常数见第 6 节表；`statuses`（**v2.0.0**：16 种状态定义
-`{kind, timing?, power?, params?, event?, name, detail, desc}`，kind 须为
-`namefight/statuses.py` 注册的行为种类之一，可施加类状态可带 `event`
-（施加时的战报模板 id）；原 `buffs` 文案节并入此处，单一来源）；
-`battle_log`（全部战报模板，含普通攻击宣告 `attack_start`，覆盖引擎全部
-模板 id，有测试）、`playback`（`message_delay_ms` 每条停顿 >=16；
+战斗常数见第 6 节表；`statuses`（**v3.0.0**：状态定义 = 策略字段（stack /
+expire / interval / max_stacks / reset_on_miss / lethal）+ `params` 数值参数
+规格（fmt/clamp/link/unit/default）+ `mods` 被动修饰表（kind 须为
+`namefight/statuses.py` 注册的 8 种之一，value 可 `$参数` 引用）+
+`effects` 效果图（钩子为 5 个状态钩子，图中 `$参数` 引用施加参数）+
+`event`/`death_event` 战报模板 id + name/detail/desc 文案）；`battle_log`
+（全部战报模板，含普通攻击宣告 `attack_start`，覆盖引擎全部模板 id 与
+原子 event 参数引用，有测试）、`playback`（`message_delay_ms` 每条停顿 >=16；
 `action_pause_every` >=1 与 `action_pause_ms` >=0 控制普通模式的行动间
 较长停顿）。
 示例：更快战斗 -> `"gauge_threshold": 80`；更慢战报 ->
@@ -641,15 +687,21 @@ v1.2.1 起仅 `prefix_core`，结构固定为前缀+主体）
   （`link_calc` + `\u0001 + 槽位序号` 占位符按序号替换），数值变化时卡牌闪烁；
 - **简易显示模式**：页眉开关（记忆 localStorage），隐藏技能描述中的共鸣公式；
 - **对战实时技能数据**在简易模式下同样随快照刷新（live 文本 + 快照重算）；
-- **可视化编辑器**（v2.0.0，`/editor.html`，取代 v1.0.0 的创意工坊）：
+- **可视化编辑器**（v2.0.0 `/editor.html`；v3.0.0 升级为双画布）：
   独立管理页，六个页签（技能/属性/称号/战斗/文案/系统）；
   **技能页为节点画布**——SVG 贝塞尔连线 + DOM 节点（滚轮缩放、拖空白平移、
-  端口拖拽建边、Delete 删除），左侧触发/条件/效果三类调色板点击添加节点，
-  右侧属性面板按 `GET /api/schema` 的参数规格渲染类型化表单（状态引用参数
-  为按 kind 过滤的下拉框，可共鸣参数带 ⟡ 标记）；其余页签为结构化表单；
-  全页签保留 JSON 源码模式逃生口；编辑仅影响草稿，页签以 ● 标记脏文件；
-  「试运行」以草稿推导并打一场（不落盘），非法草稿显示校验错误；
-  「保存并生效」经后端完整校验后原子写盘并热重载（确认框防误触）。
+  端口拖拽建边、Delete 删除；条件节点带 pass/fail 双输出端口，fail 分支
+  红色连线），左侧触发/条件/结构/原子四类调色板点击添加节点，右侧属性面板
+  按 `GET /api/schema` 的参数规格渲染类型化表单（状态引用与战报模板参数
+  为下拉框、`$引用` 为专用文本控件、可共鸣参数带 ⟡ 标记）；
+  **loop 为自适应容器**——虚线框按子树真实尺寸包裹循环体，拖动容器整体
+  移动；选中节点后点调色板「循环」或属性面板「包裹为循环」即可一键包裹，
+  「解除循环」保留循环体；**战斗页为状态编辑器**——左栏战斗常数（折叠）+
+  状态列表，中间为所选状态的**效果图画布**（5 个状态钩子调色板），右栏为
+  状态定义表单（策略字段 / params 规格 / mods 表 / lethal）；其余页签为
+  结构化表单；全页签保留 JSON 源码模式逃生口；编辑仅影响草稿，页签以 ●
+  标记脏文件；「试运行」以草稿推导并打一场（不落盘），非法草稿显示校验
+  错误；「保存并生效」经后端完整校验后原子写盘并热重载（确认框防误触）。
   游戏前端零硬编码文案（编辑器页为管理向例外，文案内置）。
 
 ---

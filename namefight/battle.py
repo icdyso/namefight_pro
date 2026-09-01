@@ -1,34 +1,35 @@
 """确定性对战引擎（核心不变量见 AGENTS.md 2.1）。
 
-v2.0.0 起技能逻辑完全数据化，battle.py 只保留**调度器**角色：
+v3.0.0 起引擎只认识**最小原子规则集**（effects.OPS，12 个）：攻击方式
+（strike / hit_mod / taken_mod / grant_immune）、基础变动（stat_mod 属性 /
+hp_mod 体力 / gauge_mod 行动槽）、施加与驱散（apply_status / cleanse）、
+记录与控制流（record / skip_action / loop）。技能逻辑（skills.json）与
+状态逻辑（battle.json statuses 的 effects 图）全部是原子在图上的组合，
+battle.py 只保留**调度器**角色——tick 循环、攻击 / 防御结算流程、原子
+行为实现（_OP_IMPL，与 effects.OPS 一一对应）与状态图调度。
 
-- 执行时机（钩子）、触发条件、参数规格声明于 effects.py 注册表，
-  技能图存于 skills.json（nodes + edges，见 effects.py 模块说明）；
-- 效果原语（op）在本模块以 _OP_IMPL 注册表实现，与 effects.OPS 一一对应；
-  复合原语已拆解为正交原语（壁垒 = damage_reduce + immune_chance、
-  血契 = pact_cost + pact_convert），携带 status 参数的原语显式声明
-  写入哪条状态定义；
-- 状态按**行为种类**结算（statuses.by_kind 按施加顺序遍历）：施加行为在
-  _STATUS_APPLY 注册表（dot 依据状态定义的 timing/power 区分每刻毒 /
-  行动流血），事件模板 id 由状态定义的 event 字段决定——自建同类状态
-  无需改引擎即可参与战斗、驱散与快照展示。
+图的执行语言（确定性契约）：节点按（技能派生顺序 × 触发节点数组顺序 ×
+边数组顺序）执行；条件节点按判定走 pass / fail 分支（判断与分支）；
+loop 结构节点反复执行子树（循环，第 i 轮按 decay^(i-1) 续链）；条件失败
+即跳过其 pass 子树。改变任一顺序 = breaking。
 
 tick 战斗模型（不变）：
 - 每个 tick 双方行动槽（gauge）累加自身有效速度，达到阈值（10000，
-  速度 ~1000 ≈ 每 10 刻一动）即可行动一次并扣回阈值；
-  同刻多人行动按（gauge 余量降序、内部序）执行；内部序 = 速度降序、
-  规范化名字升序，与输入顺序无关；
-- 行动结算顺序：斩断打断 -> 流血 -> 行动开始钩子 -> 眩晕 -> 攻击前钩子
-  -> 攻击（蓄力释放优先）；行动后：成长钩子、嗜血递减；
+  速度 ~1000 ≈ 每 10 刻一动）即可行动一次并扣回；同刻多人行动按
+  （gauge 余量降序、内部序）执行；内部序 = 速度降序、规范化名字升序；
+- 行动结算顺序：斩断打断 -> 拥有者行动开始状态图（流血 / 眩晕）->
+  行动开始钩子 -> 眩晕吞行动 -> 攻击前钩子 -> 攻击（蓄力释放优先）；
+  行动后：成长钩子、按行动衰减类到期、吸血记录清零；
 - 数值量纲与取整政策不变：全程浮点、最终应用时取整一次（_r）；
-  伤害 raw = 有效ATK × 三角浮动 × 暴击倍率 × 技能倍率，
+- 伤害 raw = 有效ATK × 三角浮动 × 暴击倍率 × 技能倍率，
   免伤率 = 有效DEF / (有效DEF + defense_constant) × (1 − 穿透)，
   dmg = max(min_damage, raw × (1 − 免伤))；
-- 随机数消耗顺序 = （技能派生顺序 × 触发节点数组顺序 × 边数组顺序），
-  条件失败即跳过其下游子树（改变即 breaking，见 AGENTS.md 2.1.4）；
-- 战报协议不变：模板 id + 参数 + rich 段 + 双方状态快照；角色名一律为
-  「【称号】名字」（_Combatant.name）；record=False 时不记录战报（真战力
-  批量模拟），随机数消耗与胜负完全一致。
+- 被动属性 / 伤害修饰由状态定义的 mods 表聚合（statuses.sum_mod）：
+  攻 / 速乘区与加值、防御减值（破甲）、增伤（乘胜 / 怨念）、减伤（锻痕）、
+  吸血比例——聚合点全部按状态施加顺序遍历，确定性保证；
+- 战报协议不变：模板 id + 参数 + rich 段 + 双方状态快照；原子自带的
+  event 参数声明战报模板 id（配置层校验其存在）；
+- record=False 时不记录战报（真战力批量模拟），随机数消耗与胜负完全一致。
 """
 from __future__ import annotations
 
@@ -38,26 +39,28 @@ from dataclasses import dataclass, field
 
 from . import effects, statuses
 from .config import GameCfg
+from .effects import OPS  # noqa: F401  （测试/Schema 引用）
 from .fighter import (Fighter, apply_resonance, compose_title_name,
                       format_resonance_final, personalized_effects,
                       resonance_coeff)
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
 
-# 引擎固定输出的战报模板 id（状态施加/叠层类事件由状态定义的 event 字段
-# 决定，见 _STATUS_APPLY；测试据此与状态定义共同校验文案齐全；v2.0.0
-# 删除了从未使用的 effect_damage_up 死模板）
+# 引擎会输出的战报模板 id（测试据此校验配置都有对应文案；原子通过 event
+# 参数引用的模板 id 由 config.py 校验存在于 battle_log，不在此列）
 TEMPLATES_USED = frozenset({
-    "battle_start", "tick_marker", "turn_stun", "poison_tick", "poison_death",
-    "bleed_tick", "bleed_death", "regen_tick", "skill_proc", "attack_start",
-    "effect_execution", "effect_lifesteal",
-    "effect_heal", "effect_reduction", "effect_link", "low_hp_trigger",
-    "attack_crit", "attack_miss", "attack_hit", "death", "victory", "draw",
-    "timeout",
-    "charge_start", "charge_release", "thunder_cast", "thunder_hit",
-    "sever_proc", "will_trigger", "purify_cleanse", "pact_proc", "pact_gain",
-    "immune", "tempo_stack", "overload_cost", "gamble_win", "gamble_lose",
-    "effect_bulwark", "retribution_release",
+    "battle_start", "tick_marker", "poison_death", "bleed_death",
+    "skill_proc", "attack_start", "attack_crit", "attack_miss", "attack_hit",
+    "poison_tick", "bleed_tick", "regen_tick", "effect_heal",
+    "effect_lifesteal", "effect_poison", "effect_stun", "regen_mark",
+    "effect_reduction", "effect_reflect", "effect_link", "low_hp_trigger",
+    "death", "victory", "draw", "timeout",
+    "charge_start", "charge_release", "thunder_hit", "sever_proc",
+    "will_trigger", "purify_cleanse", "pact_proc", "pact_gain",
+    "immune", "guard_stack", "grudge_stack", "tempo_stack", "lifesteal_buff",
+    "shred_apply", "bleed_apply", "overload_cost", "gamble_win", "gamble_lose",
+    "streak_up", "effect_bulwark", "retribution_record", "retribution_release",
+    "effect_execution", "turn_stun",
 })
 
 # 「使用了技能」行的输出挂点（其余挂点的效果以自身专属事件表达）
@@ -88,8 +91,9 @@ class _Combatant:
     gauge: float = 0.0       # 行动槽
     seq: int = 0             # 内部序（速度降序、名字升序）
     st: dict = field(default_factory=dict)      # 状态容器：状态id -> 运行时dict
-    markers: set = field(default_factory=set)   # 标记集合（一次性/姿态开关）
+    markers: set = field(default_factory=set)   # 标记集合（一次性 / 不屈已触发）
     damage_dealt: float = 0.0
+    steal_rec: float = 0.0   # 本次行动的吸血累计（血契转化基准，行动末清零）
 
 
 @dataclass
@@ -109,43 +113,35 @@ def _r(x: float) -> int:
     return int(round(float(x)))
 
 
-def _eff_atk(c: _Combatant, game: GameCfg) -> float:
-    """有效攻击：叠加全部背水类（boost）状态的乘区加成。"""
-    mult = 1.0
-    for _sid, s, _sdef in statuses.by_kind(c, game, "boost"):
-        mult *= 1.0 + s["value"]
-    return c.atk * mult
+# ---- 被动修饰聚合（状态定义 mods 表；聚合点见各调用处） ----
+
+def _eff_atk(c: _Combatant, game: GameCfg, tick: int = 0) -> float:
+    """有效攻击：乘区（atk_pct，背水一战）+ 加值（atk_flat，渐入佳境）。"""
+    return (c.atk * (1.0 + statuses.sum_mod(c, game, tick, "atk_pct"))
+            + statuses.sum_mod(c, game, tick, "atk_flat"))
 
 
 def _eff_def(c: _Combatant, game: GameCfg, tick: int = 0) -> float:
-    """有效防御：依次扣减全部破甲状态的叠层总量（不低于 0）。
-    v2.0.0 修复：破甲随到期刻失效（v1.x 仅快照展示到期、实际永续）。"""
-    shred = 0.0
-    for _sid, s, _sdef in statuses.by_kind(c, game, "shred"):
-        if s["until"] > tick:
-            shred += s["value"] * s["stacks"]
-    return max(0.0, c.defense - shred)
+    """有效防御：扣减全部破甲类修饰（def_break × 在场层数，不低于 0）。"""
+    return max(0.0, c.defense - statuses.sum_mod(c, game, tick, "def_break"))
 
 
-def _eff_spd(c: _Combatant, game: GameCfg) -> float:
-    """有效速度：叠加全部 boost 状态的速度乘区加成。"""
-    mult = 1.0
-    for _sid, s, _sdef in statuses.by_kind(c, game, "boost"):
-        mult *= 1.0 + s["spd"]
-    return c.spd * mult
+def _eff_spd(c: _Combatant, game: GameCfg, tick: int = 0) -> float:
+    """有效速度：乘区（spd_pct）+ 加值（spd_flat）。"""
+    return (c.spd * (1.0 + statuses.sum_mod(c, game, tick, "spd_pct"))
+            + statuses.sum_mod(c, game, tick, "spd_flat"))
 
 
 def _live_value(c: _Combatant, vid: str, game: GameCfg, tick: int = 0) -> float:
-    """共鸣取用的「当前值」：hp 为当前生命，atk/spd 含 boost 加成，
-    def 为破甲后的有效防御。"""
+    """共鸣取用的「当前值」：hp 为当前生命，atk/spd 含修饰，def 为破甲后。"""
     if vid == "hp":
         return float(max(0, c.hp))
     if vid == "atk":
-        return _eff_atk(c, game)
+        return _eff_atk(c, game, tick)
     if vid == "def":
         return _eff_def(c, game, tick)
     if vid == "spd":
-        return _eff_spd(c, game)
+        return _eff_spd(c, game, tick)
     if vid == "crit":
         return float(c.crit)
     if vid == "dodge":
@@ -153,17 +149,24 @@ def _live_value(c: _Combatant, vid: str, game: GameCfg, tick: int = 0) -> float:
     return 0.0
 
 
-def _hurt(c: _Combatant, amount: float, ev, rng, game: GameCfg) -> None:
-    """扣除生命；若致命且任一不屈类（will）状态仍可触发，按施加顺序取
-    第一个判定：成功则回复一定百分比最大生命，且该状态概率指数衰减。"""
+def _hurt(c: _Combatant, amount: float, ev, rng, game: GameCfg, tick: int = 0) -> None:
+    """扣除生命；若致命且任一含 lethal 块的状态（不屈类）仍可触发，按施加
+    顺序取第一个判定：成功则回复一定百分比最大生命，且概率指数衰减。"""
     c.hp -= amount
-    for _sid, will, _sdef in statuses.by_kind(c, game, "will"):
-        if c.hp > 0 or will["chance"] <= 0:
+    for sid, st, sdef in statuses.each_live(c, game, tick):
+        lethal = sdef.get("lethal")
+        if not lethal or c.hp > 0:
             continue
-        if rng.next_float() < will["chance"]:
-            c.hp = _r(c.max_hp * will["heal"])
-            will["chance"] *= will["decay"]
-            will["used"] += 1
+        chance = float(statuses.resolve(lethal.get("chance", 0.0), st["params"]))
+        if chance <= 0:
+            continue
+        if rng.next_float() < chance:
+            heal_pct = float(statuses.resolve(lethal.get("value", 0.0),
+                                              st["params"]))
+            decay = float(statuses.resolve(lethal.get("decay", 1.0), st["params"]))
+            c.hp = _r(c.max_hp * heal_pct)
+            st["params"]["chance"] = chance * decay   # 概率乘算衰减
+            c.markers.add("will_used:" + sid)
             ev("will_trigger", {"a": c.name, "heal": format_num(c.hp)})
         return
 
@@ -200,7 +203,7 @@ def _compute_damage(actor, enemy, mult, crit, game: GameCfg, rng,
     bc = game.battle
     variance = rng.next_triangular(bc.variance_lo, bc.variance_hi)  # 三角浮动
     crit_mult = bc.crit_multiplier if crit else 1.0                 # 暴击倍率
-    raw = _eff_atk(actor, game) * bc.atk_factor * variance * crit_mult * mult
+    raw = _eff_atk(actor, game, tick) * bc.atk_factor * variance * crit_mult * mult
     armor = _eff_def(enemy, game, tick)
     reduction = armor / (armor + bc.defense_constant) * (1.0 - pen)  # 免伤率
     return max(float(bc.min_damage), raw * (1.0 - reduction))
@@ -208,17 +211,16 @@ def _compute_damage(actor, enemy, mult, crit, game: GameCfg, rng,
 
 def _snapshot(combatants, threshold: float, tick: int, game: GameCfg) -> dict:
     """双方状态快照（按输入位置 a/b），状态以 id+params 存储、渲染时查
-    statuses 配置文案。数值均为引擎真实值（v0.10.0 起）；血契类标记只显示
-    累计转化攻击。"""
+    statuses 配置文案。数值均为引擎真实值（v0.10.0 起）。"""
     def one(c):
         buffs = statuses.status_display(c, tick, game.battle.guard_reduction_cap,
                                         game)
-        spd = _eff_spd(c, game)
+        spd = _eff_spd(c, game, tick)
         gauge_pct = max(0.0, min(100.0, c.gauge * 100.0 / threshold))
         return {
             "hp": round(max(0.0, float(c.hp)), 2),
             "max_hp": round(float(c.max_hp), 2),
-            "atk": round(_eff_atk(c, game), 2),
+            "atk": round(_eff_atk(c, game, tick), 2),
             "def": round(_eff_def(c, game, tick), 2),
             "spd": round(spd, 2),
             "crit": round(float(c.crit), 2),
@@ -233,34 +235,39 @@ def _snapshot(combatants, threshold: float, tick: int, game: GameCfg) -> dict:
     return {"a": one(combatants[0]), "b": one(combatants[1])}
 
 
-# ---- 链执行器：条件判定 + 共鸣参数计算 + 效果原语分发 ----
+# ---- 链执行器：条件分支 + 循环 + 共鸣参数计算 + 原子分发 ----
 
 class _Ctx:
-    """一次挂点执行的上下文。owner = 技能归属方，opponent = 对手；
-    ac = 攻击链累加器；dc = 防御链累加器；dmg = 命中反应时的本次伤害。"""
+    """一次挂点执行的上下文。owner = 图归属方（技能归属者 / 状态拥有者），
+    opponent = 对手；ac = 攻击链累加器；dc = 防御链累加器；dmg = 命中反应时
+    的本次伤害；status = 状态图执行时的 (状态id, 运行时dict)（"$参数"
+    引用与施加者折算的来源）。"""
 
     __slots__ = ("game", "rng", "ev", "tick", "owner", "opponent",
                  "combatants", "ac", "dc", "dmg", "skill", "node",
-                 "proc_logged", "executed", "defer", "hook_name", "crit_hit")
+                 "proc_logged", "executed", "defer", "hook_name", "crit_hit",
+                 "loop_i", "status")
 
     def __init__(self, game, rng, ev, tick, owner, opponent, combatants):
         self.game = game              # GameCfg 配置快照
         self.rng = rng                # 对战主随机源
         self.ev = ev                  # 战报发射器
         self.tick = tick              # 当前刻
-        self.owner = owner            # 技能归属方
+        self.owner = owner            # 图归属方
         self.opponent = opponent      # 对手
         self.combatants = combatants  # 双方列表（净化等全体效果用）
-        self.ac = None                # 攻击链累加器 {mult, pen, crit_flat, crit}
-        self.dc = None                # 防御链累加器 {dmg, guard_done}
+        self.ac = None                # 攻击链累加器 {mult, pen, crit_flat, must_hit, crit, replaced}
+        self.dc = None                # 防御链累加器 {dmg, absorbed}
         self.dmg = 0.0                # 命中反应钩子下的本次伤害
-        self.skill = None             # 当前技能 SkillDef
+        self.skill = None             # 当前技能 SkillDef（状态图为 None）
         self.node = None              # 当前节点 dict
         self.proc_logged = False      # 本技能本次挂点是否已宣告
-        self.executed = False         # 本挂点是否有原语实际执行（打断判定用）
+        self.executed = 0             # 本挂点已执行的原子计数（打断判定 / 一次性回滚用）
         self.defer = None             # 攻击链的延迟施加队列
         self.hook_name = ""           # 当前挂点名
         self.crit_hit = False         # 命中反应时的暴击标记
+        self.loop_i = 0               # loop 结构节点的当前轮次（战报序号用）
+        self.status = None            # 状态图上下文 (状态id, 运行时dict)
 
 
 def _node_specs(ctx: _Ctx, node: dict):
@@ -282,22 +289,28 @@ def _res_spec(ctx: _Ctx, node: dict, param: str):
 
 
 def _proc_params(node: dict, ctx: _Ctx) -> dict:
-    """按双方当前值应用该节点的全部共鸣变数，返回本次实际参数。"""
+    """按双方当前值应用该节点的全部共鸣变数，再把 "$参数名" 引用解析为
+    状态运行时参数（状态图执行时），返回本次实际参数。"""
     params = node.get("params", {})
     links = node.get("links")
-    if not links:
-        return params
     proc = dict(params)
-    owner, opp = ctx.owner, ctx.opponent
-    for link in links:
-        param = str(link.get("param"))
-        if param not in proc:
-            continue
-        coeff = resonance_coeff(
-            lambda vid: _live_value(owner, vid, ctx.game, ctx.tick),
-            lambda vid: _live_value(opp, vid, ctx.game, ctx.tick),
-            link, ctx.game)
-        proc = apply_resonance(proc, coeff, param, _res_spec(ctx, node, param))
+    if links:
+        owner, opp = ctx.owner, ctx.opponent
+        for link in links:
+            param = str(link.get("param"))
+            if param not in proc:
+                continue
+            coeff = resonance_coeff(
+                lambda vid: _live_value(owner, vid, ctx.game, ctx.tick),
+                lambda vid: _live_value(opp, vid, ctx.game, ctx.tick),
+                link, ctx.game)
+            proc = apply_resonance(proc, coeff, param,
+                                   _res_spec(ctx, node, param))
+    if ctx.status is not None:
+        _sid, st = ctx.status
+        for key, value in list(proc.items()):
+            if isinstance(value, str) and value.startswith("$"):
+                proc[key] = st["params"].get(value[1:], 0.0)
     return proc
 
 
@@ -319,9 +332,10 @@ def _emit_link_events(ctx: _Ctx, node: dict, proc: dict):
 
 
 def _cond_pass(node: dict, ctx: _Ctx, proc: dict) -> bool:
-    """条件判定：失败返回 False（其下游子树整枝跳过）。"""
+    """条件判定（判断）：返回走哪一组成员（pass / fail 分支）。"""
     t = node["type"]
     owner, opp = ctx.owner, ctx.opponent
+    game, tick = ctx.game, ctx.tick
     if t == "chance":
         return not (ctx.rng.next_float() > float(proc.get("chance", 1.0)))
     if t == "self_hp_below":
@@ -332,36 +346,80 @@ def _cond_pass(node: dict, ctx: _Ctx, proc: dict) -> bool:
         return opp.hp <= opp.max_hp * float(proc.get("threshold", 0.0))
     if t == "target_hp_above":
         return opp.hp > opp.max_hp * float(proc.get("threshold", 0.0))
-    if t == "has_marker":
-        return str(proc.get("marker")) in owner.markers
-    if t == "no_marker":
-        return str(proc.get("marker")) not in owner.markers
+    if t == "has_status":
+        sid = str(proc.get("status"))
+        sdef = game.statuses.get(sid, {})
+        return statuses.live(owner, sid, tick, sdef)
+    if t == "no_status":
+        sid = str(proc.get("status"))
+        sdef = game.statuses.get(sid, {})
+        return not statuses.live(owner, sid, tick, sdef)
     if t == "once_per_battle":
-        marker = "once:" + str(proc.get("marker"))
+        marker = "once:" + str(proc.get("key"))
         if marker in owner.markers:
             return False
         owner.markers.add(marker)
         return True
+    if t == "last_crit":
+        return bool(ctx.crit_hit)
     return True
 
 
 def _run_tree(tree, ctx: _Ctx):
     """递归执行一棵链树；返回子树传出的信号
-    （'consume' 占用行动 / 'replace' 替换攻击 / 'immune' 免疫终止防御）。"""
+    （'consume' 吞掉行动 / 'immune' 免疫终止防御链）。
+    条件节点按判定结果走 pass / fail 分支（分支）；loop 结构节点反复执行
+    子树（循环：第 1 轮必定执行，第 i 轮按 decay^(i-1) 续链，至多 max 轮）。"""
     node, children = tree
     ctx.node = node
+    if node["kind"] == "trigger":
+        # 触发节点本身只是时机声明：直通执行其子树
+        for _gate, child in children:
+            sig = _run_tree(child, ctx)
+            if sig:
+                return sig
+        return None
     if node["kind"] == "condition":
         proc = _proc_params(node, ctx)
-        if not _cond_pass(node, ctx, proc):
-            return None
-    elif node["kind"] == "op":
+        want = "pass" if _cond_pass(node, ctx, proc) else "fail"
+        once_marker = None
+        if node["type"] == "once_per_battle" and want == "pass":
+            # 一次性条件：仅当下游子树真的执行了原子才消耗标记，
+            # 否则回滚（如「生命过低时，每场一次」——未到时机不占次数）
+            once_marker = "once:" + str(proc.get("key"))
+        executed_before = ctx.executed
+        for gate, child in children:
+            if gate == want:
+                sig = _run_tree(child, ctx)
+                if sig:
+                    return sig
+        if once_marker is not None and ctx.executed == executed_before:
+            ctx.owner.markers.discard(once_marker)
+        return None
+    if node["kind"] == "struct":                    # 循环结构（loop）
         proc = _proc_params(node, ctx)
-        ctx.executed = True
-        _announce(ctx, node, proc)
-        sig = _OP_IMPL[node["type"]](ctx, proc)
-        if sig:
-            return sig
-    for child in children:
+        max_rounds = max(1, int(proc.get("max", 1)))
+        decay = float(proc.get("decay", 0.9))
+        for i in range(1, max_rounds + 1):
+            if i > 1 and ctx.rng.next_float() >= decay ** (i - 1):
+                break
+            ctx.loop_i = i
+            for _gate, child in children:
+                sig = _run_tree(child, ctx)
+                if sig:
+                    return sig
+            if ctx.owner.hp <= 0 or ctx.opponent.hp <= 0:
+                break
+        ctx.loop_i = 0
+        return None
+    # 原子节点
+    proc = _proc_params(node, ctx)
+    ctx.executed += 1
+    _announce(ctx, node, proc)
+    sig = _OP_IMPL[node["type"]](ctx, proc)
+    if sig:
+        return sig
+    for gate, child in children:
         sig = _run_tree(child, ctx)
         if sig:
             return sig
@@ -369,14 +427,16 @@ def _run_tree(tree, ctx: _Ctx):
 
 
 def _announce(ctx: _Ctx, node: dict, proc: dict):
-    """技能宣告：首次执行的需要宣告的原语输出「使用了技能」行（每技能
-    每次挂点至多一条，与 v1.x 一致），随后输出共鸣事件。"""
+    """技能宣告：首次执行的需要宣告的原子输出「使用了技能」行（每技能
+    每次挂点至多一条，与 v1.x 一致；状态图无技能归属，不宣告），
+    随后输出共鸣事件。"""
     hook = ctx.hook_name
-    logged = effects.OPS[node["type"]]["logged"]
+    logged = OPS[node["type"]]["logged"]
     if node["type"] == "apply_status":
         sdef = ctx.game.statuses.get(str(proc.get("status")), {})
         logged = bool(sdef.get("logged", logged))
-    if logged and hook in _PROC_HOOKS and not ctx.proc_logged:
+    if logged and hook in _PROC_HOOKS and not ctx.proc_logged \
+            and ctx.skill is not None:
         ctx.proc_logged = True
         ctx.ev("skill_proc", {"a": ctx.owner.name,
                               "skill": {"ref": "skill", "id": ctx.skill.id}})
@@ -400,263 +460,335 @@ def _run_hook(skills, hook: str, ctx: _Ctx):
     return None
 
 
-# ---- 状态施加行为（按行为种类注册；事件模板 id 来自状态定义 event 字段） ----
-
-def _apply_dot(ctx, sid, sdef, proc, target):
-    """dot：timing=every_tick 每刻结算伤害（毒）；timing=on_owner_action
-    拥有者行动时结算（流血）。power=atk 时伤害按施加者攻击系数折算。"""
-    power = str(sdef.get("power", ""))     # 伤害来源："" 固定值 / "atk" 攻击系数
-    if power == "atk":
-        key = "value"
-        amount = _eff_atk(ctx.owner, ctx.game) * ctx.game.battle.atk_factor \
-            * float(proc.get("value", 0.0))
-    else:
-        key = "damage"
-        amount = float(proc.get("damage", 0.0))
-    ticks = max(1, int(proc.get("ticks", 1)))   # 持续刻数
-    if target.hp > 0 and float(proc.get(key, 0.0)) > 0:
-        s = statuses.ensure(target, sid)
-        s["damage"] = _r(amount)
-        s["until"] = ctx.tick + ticks
-        ctx.ev(str(sdef.get("event", "")), {"b": target.name,
-                                            "damage": format_num(s["damage"]),
-                                            "turns": ticks})
+def _run_status_hooks(c, opponent, combatants, hook: str, game, rng, ev,
+                      tick: int, only=None):
+    """执行战斗者在场状态的某钩子效果图（按施加顺序，确定性保证）。
+    only = (状态id, 运行时dict) 时只执行该状态（tick 到期调度用）。
+    返回子树传出的信号（如眩晕的 consume）。"""
+    ctx = _Ctx(game, rng, ev, tick, c, opponent, combatants)
+    ctx.hook_name = hook
+    for sid, st, _sdef in statuses.each_live(c, game, tick):
+        if only is not None and sid != only[0]:
+            continue
+        plan = game.status_plans.get(sid, {}).get(hook)
+        if not plan:
+            continue
+        ctx.status = (sid, st)
+        for tree in plan:
+            sig = _run_tree(tree, ctx)
+            if sig:
+                return sig
+    return None
 
 
-def _apply_control(ctx, sid, sdef, proc, target):
-    """control：眩晕——拥有者在持续期间行动被消耗。"""
-    if target.hp > 0:
-        s = statuses.ensure(target, sid)
-        s["until"] = ctx.tick + max(1, int(proc.get("ticks", 1)))
-        ctx.ev(str(sdef.get("event", "")), {"b": target.name})
+# ---- 原子实现（与 effects.OPS 一一对应；12 个最小原子） ----
+
+def _strike_target(ctx, proc):
+    """攻击原子的目标：enemy 对手 / self 自己。"""
+    return ctx.opponent if str(proc.get("target", "enemy")) == "enemy" \
+        else ctx.owner
 
 
-def _apply_shred(ctx, sid, sdef, proc, target):
-    """shred：破甲叠层（每层取历史最大值，至多 max_stacks 层）。"""
-    if target.hp > 0:
-        s = statuses.ensure(target, sid)
-        max_stacks = max(1, int(proc.get("max_stacks", 1)))  # 层数上限
-        if s["stacks"] < max_stacks:
-            s["stacks"] += 1
-        s["max_stacks"] = max_stacks
-        s["value"] = max(s["value"], _r(float(proc.get("value", 0.0))))
-        s["until"] = ctx.tick + max(1, int(proc.get("ticks", 1)))
-        ctx.ev(str(sdef.get("event", "")),
-               {"b": target.name,
-                "value": format_num(s["value"] * s["stacks"]),
-                "def": format_num(_eff_def(target, ctx.game, ctx.tick))})
-
-
-def _apply_guard(ctx, sid, sdef, proc, target):
-    """guard：锻痕叠层（每次受击至多叠一层，层随刻到期）。"""
-    if ctx.dc is None or ctx.dc["guard_done"]:
-        return
-    ctx.dc["guard_done"] = True   # 一次受击只叠一层（与 v1.x 一致）
-    s = statuses.ensure(target, sid)
-    s["value"] = float(proc.get("value", 0.0))
-    s["layers"].append(ctx.tick + max(1, int(proc.get("ticks", 1))))
-    n = sum(1 for t in s["layers"] if t > ctx.tick)
-    ctx.ev(str(sdef.get("event", "")),
-           {"b": target.name, "stacks": n,
-            "value": format_pct(min(ctx.game.battle.guard_reduction_cap,
-                                    s["value"] * n))})
-
-
-def _apply_momentum(ctx, sid, sdef, proc, target):
-    """momentum：乘胜计数（命中叠层、攻击落空清零，至多 cap 层）。"""
-    s = statuses.ensure(target, sid)
-    s["value"] = float(proc.get("value", 0.0))
-    s["cap"] = int(proc.get("cap", 0))
-    if s["stacks"] < s["cap"]:
-        s["stacks"] += 1
-        ctx.ev(str(sdef.get("event", "")),
-               {"a": target.name, "stacks": s["stacks"],
-                "mult": format_pct(1.0 + s["value"] * s["stacks"])})
-
-
-def _apply_grudge(ctx, sid, sdef, proc, target):
-    """grudge：怨念层（被命中积攒，拥有者攻击按层增伤，层随刻到期）。"""
-    s = statuses.ensure(target, sid)
-    s["value"] = float(proc.get("value", 0.0))
-    s["layers"].append(ctx.tick + max(1, int(proc.get("ticks", 1))))
-    n = sum(1 for t in s["layers"] if t > ctx.tick)
-    ctx.ev(str(sdef.get("event", "")),
-           {"a": target.name, "stacks": n,
-            "mult": format_pct(1.0 + s["value"] * n)})
-
-
-def _apply_lifesteal(ctx, sid, sdef, proc, target):
-    """lifesteal：嗜血（按行动数衰减的吸血比例）。"""
-    s = statuses.ensure(target, sid)
-    s["value"] = float(proc.get("value", 0.0))
-    s["turns"] = max(1, int(proc.get("turns", 1)))
-    ctx.ev(str(sdef.get("event", "")),
-           {"a": target.name, "value": format_pct(s["value"]),
-            "turns": s["turns"]})
-
-
-def _apply_regen(ctx, sid, sdef, proc, target):
-    """regen：回春印记（每 interval 刻回复 value，持续 duration 刻）。"""
-    s = statuses.ensure(target, sid)
-    s["value"] = _r(float(proc.get("value", 0.0)))
-    s["interval"] = max(1, int(proc.get("tick", 1)))   # 回复间隔（刻）
-    s["next"] = ctx.tick + s["interval"]               # 下次回复刻
-    s["until"] = ctx.tick + max(1, int(proc.get("duration", 1)))  # 到期刻
-    ctx.ev(str(sdef.get("event", "")),
-           {"a": target.name, "value": format_num(s["value"]),
-            "tick": s["interval"], "turns": s["until"] - ctx.tick})
-
-
-# 施加行为注册表：行为种类 -> 施加函数（与 statuses.APPLY_KINDS 一一对应）
-_STATUS_APPLY = {
-    "dot": _apply_dot,
-    "control": _apply_control,
-    "shred": _apply_shred,
-    "guard": _apply_guard,
-    "momentum": _apply_momentum,
-    "grudge": _apply_grudge,
-    "lifesteal": _apply_lifesteal,
-    "regen": _apply_regen,
-}
-
-assert set(_STATUS_APPLY) == set(statuses.APPLY_KINDS), "施加行为注册表与可施加种类不一致"
-
-
-# ---- 效果原语实现（与 effects.OPS 一一对应） ----
-
-def _op_prepare_charge(ctx, proc):
-    """蓄力：本次行动用于蓄力，下次行动释放（必定命中 + 暴击加成）；
-    触发时的参数与共鸣存入 charge 状态，释放时按当前值重算。"""
-    sid = str(proc.get("status"))
-    st = statuses.ensure(ctx.owner, sid)
-    st["params"] = dict(ctx.node.get("params", {}))   # 存原始参数（释放时重算共鸣）
-    st["links"] = list(ctx.node.get("links") or [])
-    ctx.ev("charge_start", {"a": ctx.owner.name,
-                            "mult": format_pct(float(proc.get("value", 3.0)))})
-    return "consume"
-
-
-def _op_thunder_strike(ctx, proc):
-    """雷罚：连续真实伤害替换本次攻击（首道必中，后续按 chain×decay^i 衰减；
-    真实伤害无视防御与暴击，但吃防守减免并触发受击反应）。"""
+def _op_strike(ctx, proc):
+    """strike 攻击原子。mode=extra 追加打击（完整攻击管线：闪避 / 暴击 /
+    防御 / 受击反应 / 吸血）；mode=replace 亦为完整打击并标记替换本次攻击
+    （雷罚连击、蓄力释放）；basis != none 时为附加伤害（记仇释放 / 反甲
+    反弹：不闪避不暴击不防御，直接结算）。real=真伤（无视防御 / 闪避 /
+    暴击，但吃减免并触发受击反应）。"""
     game, rng, ev = ctx.game, ctx.rng, ctx.ev
     bc = game.battle
-    owner, opp = ctx.owner, ctx.opponent
-    value = float(proc.get("value", 0.3))              # 每道伤害占攻击的比例
-    decay = float(proc.get("decay", 0.9))              # 后续每道的概率衰减
-    chain = float(proc.get("chain", 0.8))              # 首道之后的续链概率
-    max_hits = max(1, int(proc.get("max_hits", 1)))    # 至多道数
-    ev("thunder_cast", {"a": owner.name, "value": format_pct(value), "max": max_hits})
-    for i in range(1, max_hits + 1):
-        if i > 1 and rng.next_float() >= chain * (decay ** (i - 1)):
-            break
-        raw = max(float(bc.min_damage),
-                  _eff_atk(owner, game) * bc.atk_factor * value
-                  * rng.next_triangular(bc.variance_lo, bc.variance_hi))
-        dmg = _defend(opp, owner, raw, game, rng, ev, ctx.tick)
-        dmg = _r(dmg)
-        if dmg > 0:
-            _hurt(opp, dmg, ev, rng, game)
-            owner.damage_dealt += dmg
-            ev("thunder_hit", {"a": owner.name, "b": opp.name,
-                               "damage": format_num(dmg), "hit": i})
-            _hit_reactions(owner, opp, dmg, False, game, rng, ev, ctx.tick)
-        if opp.hp <= 0 or owner.hp <= 0:
-            break
-    return "replace"
+    owner = ctx.owner
+    target = _strike_target(ctx, proc)
+    basis = str(proc.get("basis", "none"))
+    mode = str(proc.get("mode", "extra"))
+    value = float(proc.get("value", 1.0))
+    event = proc.get("event")
 
+    if basis != "none":
+        # 附加伤害：recorded_sum 记录总和（记仇，消耗全部记录）/
+        # taken_absorbed 本次被减免量（反甲反弹）
+        if basis == "recorded_sum":
+            total = 0.0
+            for _sid, st, _sdef in statuses.each_live(owner, game, ctx.tick):
+                if st["records"]:
+                    total += sum(st["records"])
+                    st["records"] = []
+            amount = _r(total * value)
+            event = event or "retribution_release"
+        else:
+            absorbed = ctx.dc["absorbed"] if ctx.dc else 0.0
+            amount = _r(absorbed * value)
+            event = event or "effect_reflect"
+        if amount <= 0 or target.hp <= 0:
+            return None
+        _hurt(target, amount, ev, rng, game, ctx.tick)
+        owner.damage_dealt += amount
+        ev(str(event), {"a": owner.name, "b": target.name,
+                        "damage": format_num(amount),
+                        "value": format_num(amount),
+                        "ratio": format_pct(value), "hit": ctx.loop_i})
+        return None
 
-def _op_attack_mult(ctx, proc):
-    """倍率修正（斩杀 / 燃血等）；announce=false 时不单独宣告。"""
-    ctx.ac["mult"] *= float(proc.get("value", 1.0))
-    if proc.get("announce", True):
-        ctx.ev("effect_execution", {"mult": format_pct(ctx.ac["mult"])})
-    return None
-
-
-def _op_random_mult(ctx, proc):
-    """豪赌：独立 win 概率决定提升或降低（v2.0.0 修复 v1.x 触发率双用）。"""
-    if ctx.rng.next_float() < float(proc.get("win", 0.5)):
-        boost = float(proc.get("value", 1.0))
-        ctx.ac["mult"] *= boost
-        ctx.ev("gamble_win", {"mult": format_pct(boost)})
+    mult = float(proc.get("mult", 1.0))
+    real = bool(proc.get("real", False))
+    must_hit = bool(proc.get("must_hit", False))
+    pen = float(proc.get("pen", 0.0))
+    crit_bonus = float(proc.get("crit_bonus", 0.0))
+    if target.hp <= 0 or owner.hp <= 0:
+        return None
+    # 闪避判定（真实伤害 / 必中跳过）
+    if not real and not must_hit:
+        if rng.next_float() < target.dodge / 100.0:
+            ev("attack_miss", {"a": owner.name, "b": target.name})
+            return None
+    crit = False
+    if not real:
+        crit = rng.next_float() < min(bc.crit_cap / 100.0,
+                                      owner.crit / 100.0 + crit_bonus)
+        if crit:
+            ev("attack_crit", {})
+    if real:
+        # 真实伤害：无视防御与暴击，仅三角浮动（吃防守减免、触发受击反应）
+        variance = rng.next_triangular(bc.variance_lo, bc.variance_hi)
+        dmg = max(float(bc.min_damage),
+                  _eff_atk(owner, game, ctx.tick) * bc.atk_factor * mult * variance)
     else:
-        drop = float(proc.get("penalty", 1.0))
-        ctx.ac["mult"] *= drop
-        ctx.ev("gamble_lose", {"mult": format_pct(drop)})
+        dmg = _compute_damage(owner, target, mult, crit, game, rng,
+                              pen=pen, tick=ctx.tick)
+    dmg = _defend(target, owner, dmg, game, rng, ev, ctx.tick)
+    dmg = _r(dmg)
+    if dmg > 0:
+        _hurt(target, dmg, ev, rng, game, ctx.tick)
+        owner.damage_dealt += dmg
+        ev(str(event or "attack_hit"),
+           {"a": owner.name, "b": target.name, "damage": format_num(dmg),
+            "mult": format_pct(mult), "crit": format_pct(crit_bonus),
+            "hit": ctx.loop_i})
+        _apply_lifesteal(owner, dmg, ev, game, ctx.tick)
+        _hit_reactions(owner, target, dmg, crit, game, rng, ev, ctx.tick)
+    if mode == "replace" and ctx.ac is not None:
+        ctx.ac["replaced"] = True     # 标记替换本次攻击（攻击管线查验）
     return None
 
 
-def _op_momentum_mult(ctx, proc):
-    """乘胜消耗：按当前连击层数提升本次伤害（每层 value，至多 cap 层）。"""
-    value = float(proc.get("value", 0.0))
-    cap = int(proc.get("cap", 0))
-    for _sid, s, _sdef in statuses.by_kind(ctx.owner, ctx.game, "momentum"):
-        if s["stacks"] > 0:
-            ctx.ac["mult"] *= 1.0 + value * min(s["stacks"], cap)
+def _op_hit_mod(ctx, proc):
+    """hit_mod：修饰本次攻击（倍率乘区 / 穿透取大 / 暴击加成 / 必中）。"""
+    ac = ctx.ac
+    mult = float(proc.get("mult", 1.0))
+    if mult != 1.0:
+        ac["mult"] *= mult
+    ac["pen"] = max(ac["pen"], float(proc.get("pen", 0.0)))
+    ac["crit_flat"] += float(proc.get("crit_bonus", 0.0))
+    if proc.get("must_hit"):
+        ac["must_hit"] = True
+    event = proc.get("event")
+    if event:
+        ctx.ev(str(event), {"mult": format_pct(mult)})
+    elif proc.get("announce", False):
+        ctx.ev("effect_execution", {"mult": format_pct(ac["mult"])})
     return None
 
 
-def _op_armor_pen_flat(ctx, proc):
-    """重击穿透：本次攻击按比例抵消灭伤率。"""
-    ctx.ac["pen"] = max(ctx.ac["pen"], float(proc.get("value", 0.0)))
+def _op_taken_mod(ctx, proc):
+    """taken_mod：减免本次所受伤害的一部分（被减免量计入 absorbed，
+    供反甲的 taken_absorbed 基准反弹）。"""
+    bc = ctx.game.battle
+    ratio = float(proc.get("cut", 0.0))
+    if ctx.dc["dmg"] > 0 and ratio > 0:
+        avoided = ctx.dc["dmg"] * ratio
+        ctx.dc["absorbed"] += avoided
+        ctx.dc["dmg"] = max(float(bc.min_damage), ctx.dc["dmg"] - avoided)
+        event = proc.get("event")
+        if event:
+            ctx.ev(str(event), {"b": ctx.owner.name, "ratio": format_pct(ratio)})
     return None
 
 
-def _op_armor_pen_full(ctx, proc):
-    """洞悉：本次攻击无视全部防御，并提升暴击率（分数口径，0.06 = +6%）。"""
-    ctx.ac["pen"] = 1.0
-    ctx.ac["crit_flat"] += float(proc.get("crit", 0.0))
+def _op_grant_immune(ctx, proc):
+    """grant_immune：完全免疫本次伤害（清零并终止防御链）。
+    触发概率由上游 chance 条件表达（分支）。"""
+    if ctx.dc["dmg"] > 0:
+        ctx.dc["dmg"] = 0.0
+        ctx.dc["absorbed"] = 0.0
+        ctx.ev(str(proc.get("event") or "immune"), {"b": ctx.owner.name})
+        return "immune"
     return None
 
 
-def _op_self_cost(ctx, proc):
-    """燃血：消耗自身最大生命的一部分（不会自灭，保底 1 点）。"""
-    cost = _r(ctx.owner.max_hp * float(proc.get("cost", 0.0)))
-    ctx.owner.hp = max(1.0, ctx.owner.hp - cost)
-    ctx.ev("overload_cost", {"a": ctx.owner.name, "cost": format_num(cost),
-                             "mult": format_pct(ctx.ac["mult"])})
+def _op_stat_mod(ctx, proc):
+    """stat_mod：属性变动原子（永久 ±）。basis=flat 直接增量；
+    basis=recorded_lifesteal 时增量 = value × 本次行动记录的吸血总量
+    （血契转化）。status 参数（可选）把增量累计到某状态的 total 供展示。"""
+    owner = ctx.owner if str(proc.get("target", "self")) == "self" \
+        else ctx.opponent
+    gain = float(proc.get("gain", 0.0))
+    if str(proc.get("basis", "flat")) == "recorded_lifesteal":
+        gain = float(proc.get("value", 0.0)) * owner.steal_rec
+    gain = _r(gain)
+    if gain == 0:
+        return None
+    stat = str(proc.get("stat", "atk"))
+    if stat == "hp":
+        owner.max_hp += gain
+        owner.hp = max(1.0, owner.hp + gain)
+    elif stat == "def":
+        owner.defense = max(0.0, owner.defense + gain)
+    else:
+        setattr(owner, stat, max(0.0, getattr(owner, stat) + gain))
+    sid = proc.get("status")
+    if sid:
+        st = statuses.ensure(owner, str(sid))
+        st["total"] += gain
+        st["params"].setdefault("value", 0.0)
+    event = proc.get("event")
+    if event:
+        ctx.ev(str(event), {"a": owner.name, "value": format_num(gain),
+                            "atk": format_num(_eff_atk(owner, ctx.game,
+                                                       ctx.tick))})
+    return None
+
+
+def _op_hp_mod(ctx, proc):
+    """hp_mod：体力变动原子。type=heal 治疗（不溢出）；type=loss 流失
+    （不触发受击反应与不屈；can_kill=true 可致死——毒 / 流血，由调用方在
+    状态结算后检查死亡并输出 death_event；floor1=true 保底 1 点——燃血 /
+    血契献祭）。basis：flat 固定量 / maxhp 最大生命比例 / applier_atk
+    施加者攻击 × value（撕裂，需状态图上下文）/ dealt 本次造成伤害 × value
+    （吸血）。"""
+    game = ctx.game
+    target = ctx.owner if str(proc.get("target", "self")) == "self" \
+        else ctx.opponent
+    basis = str(proc.get("basis", "flat"))
+    value = float(proc.get("value", 0.0))          # flat 基准的固定量
+    ratio = float(proc.get("ratio", 0.0))          # 比例基准的系数
+    if basis == "maxhp":
+        amount = target.max_hp * ratio
+    elif basis == "applier_atk":
+        applier = ctx.status[1]["applier"] if ctx.status else ctx.owner
+        amount = _eff_atk(applier, game, ctx.tick) * game.battle.atk_factor * ratio
+    elif basis == "dealt":
+        amount = ctx.dmg * ratio
+    else:
+        amount = value
+    if str(proc.get("type", "heal")) == "heal":
+        gained = _r(min(amount, target.max_hp - target.hp))
+        if gained > 0:
+            target.hp += gained
+            ctx.ev(str(proc.get("event") or "effect_heal"),
+                   {"a": target.name, "heal": format_num(gained),
+                    "value": format_num(gained)})
+        return None
+    # 体力流失（取整契约：最终应用时取整一次）
+    if proc.get("floor1"):
+        cost = _r(amount)
+        target.hp = max(1.0, target.hp - cost)
+        ctx.ev(str(proc.get("event") or "overload_cost"),
+               {"a": target.name, "cost": format_num(cost),
+                "value": format_num(cost)})
+    else:
+        loss = _r(amount)            # can_kill：可能致死（毒 / 流血）
+        target.hp -= loss
+        event = proc.get("event")
+        if event:
+            ctx.ev(str(event), {"a": target.name, "damage": format_num(loss),
+                                "value": format_num(loss)})
+    return None
+
+
+def _op_gauge_mod(ctx, proc):
+    """gauge_mod：行动槽推进 / 倒退（×100 量纲；斩断倒退 / 疾影前进）。"""
+    target = ctx.owner if str(proc.get("target", "self")) == "self" \
+        else ctx.opponent
+    target.gauge = max(0.0, target.gauge + _r(float(proc.get("gain", 0.0))))
     return None
 
 
 def _op_apply_status(ctx, proc):
-    """施加状态：行为按状态定义的 kind 分发（_STATUS_APPLY）。攻击链上对
-    敌方施加的状态延迟到命中后生效（与 v1.x 一致）。"""
+    """apply_status：施加状态（唯一状态入口）。数值参数覆盖定义默认值
+    （个性化 / 共鸣即作用于此）；叠层 / 到期 / 间隔策略由状态定义声明。
+    攻击链上对敌方施加的状态延迟到命中后生效（与 v1.x 一致）。"""
     sid = str(proc.get("status"))
     target = ctx.opponent if str(proc.get("target")) == "enemy" else ctx.owner
-
     if ctx.hook_name == "on_attack" and target is ctx.opponent:
-        # 延迟施加：命中结算后、目标仍存活才生效
         snapshot_proc = dict(proc)
-        ctx.defer.append(lambda: _apply_status_now(
-            ctx, sid, snapshot_proc, target))
+        ctx.defer.append(lambda: _apply_status_now(ctx, sid, snapshot_proc,
+                                                   target))
         return None
     _apply_status_now(ctx, sid, proc, target)
     return None
 
 
-def _apply_status_now(ctx, sid, proc, target):
-    """立即施加状态（查注册表分发；未知种类静默跳过——配置层已校验）。"""
-    sdef = ctx.game.statuses.get(sid, {})
-    kind = str(sdef.get("kind", ""))
-    handler = _STATUS_APPLY.get(kind)
-    if handler is not None:
-        handler(ctx, sid, sdef, proc, target)
-
-
-def _op_heal(ctx, proc):
-    """即时回复（不溢出上限）。"""
-    gained = _r(min(float(proc.get("value", 0.0)),
-                    ctx.owner.max_hp - ctx.owner.hp))
-    if gained > 0:
-        ctx.owner.hp += gained
-        ctx.ev("effect_heal", {"a": ctx.owner.name, "heal": format_num(gained)})
-    return None
+def _apply_status_now(ctx: _Ctx, sid: str, proc: dict, target):
+    """立即施加状态：合并参数（定义默认 <- 施加覆盖 <- 旧值保持）、按
+    stack 策略叠层、按 expire 策略持续，随后输出定义声明的施加事件。"""
+    game = ctx.game
+    sdef = game.statuses.get(sid)
+    if sdef is None:
+        return
+    st = statuses.ensure(target, sid)
+    merged = dict(statuses.status_defaults(sdef))
+    merged.update({k: v for k, v in proc.items()
+                   if k not in ("status", "target")})
+    st["params"].update(merged)
+    st["applier"] = ctx.owner
+    st["links"] = list(ctx.node.get("links") or [])
+    turns = max(1, int(st["params"].get("turns", 1)))
+    stack = sdef.get("stack", "refresh")
+    if stack == "layers":
+        st["layers"].append(ctx.tick + turns)
+    elif stack == "count":
+        cap = int(st["params"].get("max_stacks", sdef.get("max_stacks", 0)) or 0)
+        if st["stacks"] >= cap > 0:
+            return                      # 已满层：不再叠加也不刷新（乘胜到顶）
+        st["stacks"] += 1
+        st["expires"] = ctx.tick + turns
+    else:                               # refresh：刷新持续与数值
+        if sdef.get("expire") == "actions":
+            st["actions"] = turns
+        elif sdef.get("expire") != "none":
+            st["expires"] = ctx.tick + turns
+        interval = statuses.resolve(sdef.get("interval", 0), st["params"])
+        if interval:
+            st["next"] = ctx.tick + max(1, int(interval))
+    # 施加事件（定义 event 字段；参数为通用集，模板按需引用）
+    event = sdef.get("event")
+    if event:
+        n = statuses.live_stacks(target, sid, ctx.tick, sdef)
+        params = {"a": ctx.owner.name, "b": target.name,
+                  "turns": turns, "stacks": n, "hit": ctx.loop_i}
+        for key, val in st["params"].items():
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                fmt = ((sdef.get("params") or {}).get(key) or {}).get("fmt", "num")
+                params[key] = (format_pct(float(val)) if fmt == "pct"
+                               else format_num(float(val)))
+        for m in sdef.get("mods") or ():
+            if m.get("kind") == "dmg_out_pct":
+                v = float(statuses.resolve(m.get("value", 0.0), st["params"]))
+                per = n if m.get("per_stack") else 1
+                params["mult"] = format_pct(1.0 + v * per)
+        ctx.ev(str(event), params)
+    # 施加钩子效果图（on_status_apply）
+    plan = game.status_plans.get(sid, {}).get("on_status_apply")
+    if plan:
+        sctx = _Ctx(ctx.game, ctx.rng, ctx.ev, ctx.tick,
+                    target, ctx.opponent if target is ctx.owner else ctx.owner,
+                    ctx.combatants)
+        sctx.hook_name = "on_status_apply"
+        sctx.status = (sid, st)
+        for tree in plan:
+            _run_tree(tree, sctx)
 
 
 def _op_cleanse(ctx, proc):
-    """驱散双方可驱散状态，并按驱散种数回复生命。"""
-    count = statuses.dispel_all(ctx.combatants, ctx.tick, ctx.game)
+    """cleanse：驱散状态（scope=both 双方 / self / enemy），并按驱散种数
+    回复生命。"""
+    scope = str(proc.get("scope", "both"))
+    targets = list(ctx.combatants)
+    if scope == "self":
+        targets = [ctx.owner]
+    elif scope == "enemy":
+        targets = [ctx.opponent]
+    count = statuses.dispel_all(targets, ctx.tick, ctx.game)
     healed = _r(min(float(proc.get("value", 0.0))
                     + float(proc.get("per", 0.0)) * count,
                     ctx.owner.max_hp - ctx.owner.hp))
@@ -667,203 +799,70 @@ def _op_cleanse(ctx, proc):
     return None
 
 
-def _op_gauge_add(ctx, proc):
-    """疾影：命中结算后行动槽前进（暴击取 crit_value）——延迟到命中后生效。"""
-    snapshot_proc = dict(proc)
-    ctx.defer.append(lambda: _gauge_add_now(ctx, snapshot_proc))
-    return None
+def _op_skip_action(ctx, proc):
+    """skip_action：吞掉拥有者的本次行动（眩晕；返回 consume 信号）。"""
+    ctx.ev(str(proc.get("event") or "turn_stun"), {"a": ctx.owner.name})
+    return "consume"
 
 
-def _gauge_add_now(ctx, proc):
-    owner, opp = ctx.owner, ctx.opponent
-    if opp.hp > 0 and owner.hp > 0:
-        key = "crit_value" if ctx.ac and ctx.ac.get("crit") else "value"
-        owner.gauge += _r(float(proc.get(key, 0.0)))
-
-
-def _op_gauge_delay(ctx, proc):
-    """斩断退条：使对方行动槽倒退（打断其行动）。"""
-    ctx.opponent.gauge = max(0.0, ctx.opponent.gauge
-                             - _r(float(proc.get("delay", 0.0))))
-    return None
-
-
-def _op_quick_strike(ctx, proc):
-    """斩断抢攻：一次可闪避可暴击的小倍率打击（不吃攻击技能链）。"""
-    ctx.ev("sever_proc", {"a": ctx.owner.name, "b": ctx.opponent.name})
-    _quick_strike(ctx.owner, ctx.opponent, float(proc.get("value", 0.5)),
-                  ctx.game, ctx.rng, ctx.ev, ctx.tick)
-    return None
-
-
-def _op_stat_gain(ctx, proc):
-    """永久成长（渐入佳境类）：速度 / 攻击永久增加，层数与累计记入状态。"""
-    owner = ctx.owner
+def _op_record(ctx, proc):
+    """record：记录。what=damage_taken 把本次所受伤害记入 status 参数指向
+    的状态（记仇，至多 cap 条，下次命中以 strike basis=recorded_sum 释放）；
+    what=lifesteal 把本次吸血量累计到战斗者（血契转化的基准）。"""
+    if str(proc.get("what", "damage_taken")) == "lifesteal":
+        ctx.owner.steal_rec += ctx.dmg
+        return None
     sid = str(proc.get("status"))
-    gain = _r(float(proc.get("value", 0.0)))       # 本次速度增量
-    gain_atk = _r(float(proc.get("atk", 0.0)))     # 本次攻击增量
-    owner.spd += gain
-    owner.atk += gain_atk
-    s = statuses.ensure(owner, sid)
-    s["stacks"] += 1
-    s["spd_total"] += gain
-    s["atk_total"] += gain_atk
-    ctx.ev("tempo_stack", {"a": owner.name, "stacks": s["stacks"],
-                           "spd": format_num(owner.spd),
-                           "atk": format_num(owner.atk)})
-    return None
-
-
-def _op_stat_boost_once(ctx, proc):
-    """一次性爆发（背水一战类）：生命过低时永久攻速乘区加成，
-    每条状态每场一次。"""
-    sid = str(proc.get("status"))
-    marker = "boost:" + sid
-    if marker in ctx.owner.markers:
+    st = statuses.ensure(ctx.owner, sid)
+    cap = int(proc.get("cap", 0) or 0)
+    if cap and len(st["records"]) >= cap:
         return None
-    ctx.owner.markers.add(marker)
-    s = statuses.ensure(ctx.owner, sid)
-    s["value"] = float(proc.get("value", 0.5))
-    s["spd"] = float(proc.get("spd", 0.0))
-    ctx.ev("low_hp_trigger", {"a": ctx.owner.name,
-                              "value": format_pct(s["value"]),
-                              "spd": format_pct(s["spd"])})
-    return None
-
-
-def _op_will_register(ctx, proc):
-    """注册不屈类状态：致命伤害按衰减概率重生。"""
-    s = statuses.ensure(ctx.owner, str(proc.get("status")))
-    s["chance"] = float(proc.get("chance", 0.0))
-    s["heal"] = float(proc.get("value", 0.0))
-    s["decay"] = float(proc.get("decay", 0.0))
-    return None
-
-
-def _op_pact_cost(ctx, proc):
-    """血契献祭：行动开始扣血（不会自灭），本次攻击附带吸血；
-    转化比例存入状态，供 pact_convert 在行动后结算。"""
-    owner = ctx.owner
-    s = statuses.ensure(owner, str(proc.get("status")))
-    cost = _r(owner.max_hp * float(proc.get("cost", 0.0)))
-    owner.hp = max(1.0, owner.hp - cost)
-    s["active"] = True
-    s["steal"] = float(proc.get("value", 0.0))
-    s["convert"] = float(proc.get("convert", 0.0))
-    s["stolen"] = 0.0
-    ctx.ev("pact_proc", {"a": owner.name, "cost": format_num(cost),
-                         "value": format_pct(s["steal"])})
-    return None
-
-
-def _op_pact_convert(ctx, proc):
-    """血契转化：行动结束后把本次吸血按存入的转化比例永久化为攻击。"""
-    owner = ctx.owner
-    s = owner.st.get(str(proc.get("status")))
-    if not s or not s["active"]:
-        return None
-    s["active"] = False
-    gain = _r(s["stolen"] * s["convert"])
-    if gain > 0:
-        owner.atk += gain
-        s["total_gain"] += gain
-        ctx.ev("pact_gain", {"a": owner.name,
-                             "value": format_num(gain),
-                             "atk": format_num(owner.atk)})
-    return None
-
-
-def _op_record_damage(ctx, proc):
-    """记仇：记录本次所受伤害（至多 cap 条），拥有者下次命中追加打出。"""
-    s = statuses.ensure(ctx.owner, str(proc.get("status")))
-    if len(s["records"]) >= int(proc.get("cap", 0)):
-        return None
-    s["ratio"] = float(proc.get("ratio", 1.0))
-    s["cap"] = int(proc.get("cap", 0))
-    s["records"].append(float(ctx.dmg))
+    st["records"].append(float(ctx.dmg))
     ctx.ev("retribution_record", {"a": ctx.owner.name,
                                   "damage": format_num(ctx.dmg),
-                                  "stacks": len(s["records"])})
-    return None
-
-
-def _op_reflect_damage(ctx, proc):
-    """荆棘反甲：免除一部分伤害并按倍率反弹（反弹可触发不屈）。"""
-    bc = ctx.game.battle
-    defender, attacker = ctx.owner, ctx.opponent
-    if ctx.dc["dmg"] <= 0:
-        return None
-    split = min(bc.reflect_split_cap, float(proc.get("value", 0.0)))
-    avoided = ctx.dc["dmg"] * split                          # 被免除的部分
-    reflected = _r(avoided * float(proc.get("ratio", 1.0)))  # 反弹伤害
-    ctx.dc["dmg"] -= avoided
-    defender.damage_dealt += reflected
-    _hurt(attacker, reflected, ctx.ev, ctx.rng, ctx.game)
-    ctx.ev("effect_reflect", {"a": attacker.name, "b": defender.name,
-                              "damage": format_num(reflected)})
-    return None
-
-
-def _op_damage_reduce(ctx, proc):
-    """减伤：按比例降低本次所受伤害（下限 min_damage）。"""
-    bc = ctx.game.battle
-    ratio = float(proc.get("value", 0.0))
-    if ctx.dc["dmg"] > 0 and ratio > 0:
-        ctx.dc["dmg"] = max(float(bc.min_damage), ctx.dc["dmg"] * (1.0 - ratio))
-        ctx.ev("effect_bulwark", {"b": ctx.owner.name, "ratio": format_pct(ratio)})
-    return None
-
-
-def _op_immune_chance(ctx, proc):
-    """免疫：概率完全免除本次伤害（终止防御链，不触发后续防御效果）。"""
-    if ctx.dc["dmg"] > 0 and ctx.rng.next_float() < float(proc.get("immune", 0.0)):
-        ctx.ev("immune", {"b": ctx.owner.name})
-        return "immune"
+                                  "value": format_num(ctx.dmg),
+                                  "stacks": len(st["records"])})
     return None
 
 
 _OP_IMPL = {
-    "prepare_charge": _op_prepare_charge,
-    "thunder_strike": _op_thunder_strike,
-    "attack_mult": _op_attack_mult,
-    "random_mult": _op_random_mult,
-    "momentum_mult": _op_momentum_mult,
-    "armor_pen_flat": _op_armor_pen_flat,
-    "armor_pen_full": _op_armor_pen_full,
-    "self_cost": _op_self_cost,
+    "strike": _op_strike,
+    "hit_mod": _op_hit_mod,
+    "taken_mod": _op_taken_mod,
+    "grant_immune": _op_grant_immune,
+    "stat_mod": _op_stat_mod,
+    "hp_mod": _op_hp_mod,
+    "gauge_mod": _op_gauge_mod,
     "apply_status": _op_apply_status,
-    "heal": _op_heal,
     "cleanse": _op_cleanse,
-    "gauge_add": _op_gauge_add,
-    "gauge_delay": _op_gauge_delay,
-    "quick_strike": _op_quick_strike,
-    "stat_gain": _op_stat_gain,
-    "stat_boost_once": _op_stat_boost_once,
-    "will_register": _op_will_register,
-    "pact_cost": _op_pact_cost,
-    "pact_convert": _op_pact_convert,
-    "record_damage": _op_record_damage,
-    "reflect_damage": _op_reflect_damage,
-    "damage_reduce": _op_damage_reduce,
-    "immune_chance": _op_immune_chance,
+    "skip_action": _op_skip_action,
+    "record": _op_record,
 }
 
-assert set(_OP_IMPL) == set(effects.OPS), "效果原语实现与注册表不一致"
+_STRUCT_IMPL = ("loop",)   # 结构节点（loop）在 _run_tree 内联执行
+
+assert set(_OP_IMPL) == set(effects.OP_TYPES), "原子实现与注册表不一致"
+assert set(_STRUCT_IMPL) == set(effects.STRUCTS), "结构注册表不一致"
 
 
 # ---- 结算流程 ----
 
 def _defend(defender, attacker, dmg, game, rng, ev, tick):
-    """防守方结算：锻痕叠层减伤 -> 防御钩子链（免疫终止 / 减伤 / 反甲 /
-    锻痕叠层）。返回最终伤害（反弹伤害直接作用于攻击方）。"""
+    """防守方结算：锻痕类减伤修饰（mods 聚合）-> 防御钩子链（taken_mod
+    减免 / grant_immune 免疫终止 / 反甲反弹 / 锻痕叠层施加）。
+    返回最终伤害（反弹伤害直接作用于攻击方）。"""
     bc = game.battle
-    for _sid, s, _sdef in statuses.by_kind(defender, game, "guard"):
-        n = sum(1 for t in s["layers"] if t > tick)   # 在场层数
-        if n > 0 and dmg > 0:
-            ratio = min(bc.guard_reduction_cap, s["value"] * n)
+    for sid, st, sdef in statuses.each_live(defender, game, tick):
+        for m in sdef.get("mods") or ():
+            if m.get("kind") != "dmg_in_cut_pct" or dmg <= 0:
+                continue
+            n = statuses.live_stacks(defender, sid, tick, sdef)
+            v = float(statuses.resolve(m.get("value", 0.0), st["params"]))
+            ratio = min(bc.guard_reduction_cap, v * (n if m.get("per_stack") else 1))
             dmg = max(float(bc.min_damage), dmg * (1.0 - ratio))
-            ev("effect_reduction", {"b": defender.name, "ratio": format_pct(ratio)})
-    dc = {"dmg": dmg, "guard_done": False}   # 防御链累加器
+            ev("effect_reduction", {"b": defender.name,
+                                    "ratio": format_pct(ratio)})
+    dc = {"dmg": dmg, "absorbed": 0.0}   # 防御链累加器
     ctx = _Ctx(game, rng, ev, tick, defender, attacker, [defender, attacker])
     ctx.dc = dc
     if _run_hook(defender.skills, "on_defend", ctx) == "immune":
@@ -871,50 +870,40 @@ def _defend(defender, attacker, dmg, game, rng, ev, tick):
     return dc["dmg"]
 
 
-def _apply_lifesteal(actor, dmg, ev, game):
-    """命中后的吸血结算：全部嗜血状态 + 生效中的血契共享同一口吸血。"""
+def _apply_lifesteal(actor, dmg, ev, game, tick):
+    """命中后的吸血结算：聚合全部在场状态的 lifesteal_pct 修饰（嗜血 /
+    血契共享同一口吸血），带 record=lifesteal 标志的记录到本次行动累计。"""
+    if dmg <= 0 or actor.hp <= 0:
+        return
     steal = 0.0
-    for _sid, s, _sdef in statuses.by_kind(actor, game, "lifesteal"):
-        if s["turns"] > 0:
-            steal += s["value"]
-    pacts = []                                # 本次参与的血契（记录吸血量）
-    for _sid, s, _sdef in statuses.by_kind(actor, game, "pact"):
-        if s["active"]:
-            steal += s["steal"]
-            pacts.append(s)
-    if steal <= 0 or dmg <= 0 or actor.hp <= 0:
+    record_sids = []
+    for sid, st, sdef in statuses.each_live(actor, game, tick):
+        for m in sdef.get("mods") or ():
+            if m.get("kind") != "lifesteal_pct":
+                continue
+            n = statuses.live_stacks(actor, sid, tick, sdef)
+            v = float(statuses.resolve(m.get("value", 0.0), st["params"]))
+            steal += v * (n if m.get("per_stack") else 1)
+            if m.get("record") == "lifesteal":
+                record_sids.append(sid)
+    if steal <= 0:
         return
     gained = _r(min(dmg * steal, actor.max_hp - actor.hp))
-    if gained > 0:
-        actor.hp += gained
-        for s in pacts:
-            s["stolen"] += gained
-        ev("effect_lifesteal", {"a": actor.name, "heal": format_num(gained)})
-
-
-def _quick_strike(attacker, victim, mult, game, rng, ev, tick):
-    """斩断反击：一次小倍率的普通打击（可闪避可暴击，不吃攻击技能链）。"""
-    if rng.next_float() < victim.dodge / 100.0:
-        ev("attack_miss", {"a": attacker.name, "b": victim.name})
+    if gained <= 0:
         return
-    crit = rng.next_float() < attacker.crit / 100.0
-    if crit:
-        ev("attack_crit", {})
-    dmg = _compute_damage(attacker, victim, mult, crit, game, rng, tick=tick)
-    dmg = _defend(victim, attacker, dmg, game, rng, ev, tick)
-    dmg = _r(dmg)
-    if dmg > 0:
-        _hurt(victim, dmg, ev, rng, game)
-        attacker.damage_dealt += dmg
-        ev("attack_hit", {"a": attacker.name, "b": victim.name,
-                          "damage": format_num(dmg)})
-        _apply_lifesteal(attacker, dmg, ev, game)
-        _hit_reactions(attacker, victim, dmg, crit, game, rng, ev, tick)
+    actor.hp += gained
+    actor.steal_rec += gained       # 全部吸血都记入本次行动累计（转化基准）
+    ev("effect_lifesteal", {"a": actor.name, "heal": format_num(gained)})
+    # 带 record 标志的吸血状态单独累计（供其状态展示；血契）
+    for sid in record_sids:
+        st = actor.st.get(sid)
+        if st is not None:
+            st["total"] += gained
 
 
 def _hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick):
-    """一次命中后的反应结算：攻击方的命中钩子（乘胜叠层）与
-    受击方的被命中钩子（怨念积攒 / 记仇记录）。"""
+    """一次命中后的反应结算：攻击方的命中钩子（乘胜叠层 / 疾影推进 /
+    记仇释放）与受击方的被命中钩子（怨念积攒 / 记仇记录）。"""
     if dmg <= 0 or enemy.hp <= 0:
         return
     ctx = _Ctx(game, rng, ev, tick, actor, enemy, [actor, enemy])
@@ -927,67 +916,56 @@ def _hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick):
     _run_hook(enemy.skills, "on_hit_taken", ctx2)
 
 
-def _first_of_kind(c, game, kind):
-    """取某种类第一条在场状态（蓄力等单例语义用）。"""
-    items = statuses.by_kind(c, game, kind)
-    return items[0] if items else None
-
-
 def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
     bc = game.battle
+    combatants = [actor, enemy]
 
     # ---- 普通攻击宣告：让普攻在战报中同样可见（v1.0.0） ----
     ev("attack_start", {"a": actor.name})
 
-    # ---- 蓄力释放：必定命中、暴击率提升的巨大一击（替换常规攻击） ----
-    charging = _first_of_kind(actor, game, "charge")
-    if charging is not None:
-        sid, st, _sdef = charging
-        del actor.st[sid]
-        ctx = _Ctx(game, rng, ev, tick, actor, enemy, [actor, enemy])
-        fake_node = {"kind": "op", "type": "prepare_charge",
-                     "params": st["params"], "links": st["links"]}
-        proc = _proc_params(fake_node, ctx)
-        mult = float(proc.get("value", 3.0))
-        crit_bonus = float(proc.get("crit", 0.0))
-        ev("charge_release", {"a": actor.name, "mult": format_pct(mult),
-                              "crit": format_pct(crit_bonus)})
-        crit = rng.next_float() < min(bc.crit_cap / 100.0,
-                                      actor.crit / 100.0 + crit_bonus)
-        if crit:
-            ev("attack_crit", {})
-        dmg = _compute_damage(actor, enemy, mult, crit, game, rng, tick=tick)
-        dmg = _defend(enemy, actor, dmg, game, rng, ev, tick)
-        dmg = _r(dmg)
-        if dmg > 0:
-            _hurt(enemy, dmg, ev, rng, game)
-            actor.damage_dealt += dmg
-            ev("attack_hit", {"a": actor.name, "b": enemy.name,
-                              "damage": format_num(dmg)})
-            _apply_lifesteal(actor, dmg, ev, game)
-            _hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick)
+    # ---- 蓄力释放：首个带 on_owner_action_consume 效果图的状态替换本次行动 ----
+    for sid, st, sdef in statuses.each_live(actor, game, tick):
+        plan = game.status_plans.get(sid, {}).get("on_owner_action_consume")
+        if not plan:
+            continue
+        del actor.st[sid]           # 蓄力为一次性：释放即移除
+        ctx = _Ctx(game, rng, ev, tick, actor, enemy, combatants)
+        ctx.hook_name = "on_owner_action_consume"
+        # 释放前按当前值重算蓄力参数的共鸣（与 v2 一致；伪节点按
+        # apply_status 形态构建以复用状态参数规格查询）
+        if st["links"]:
+            fake = {"kind": "op", "type": "apply_status",
+                    "params": dict(st["params"]), "links": st["links"]}
+            proc = _proc_params(fake, ctx)
+            st["params"] = {k: v for k, v in proc.items()
+                            if not isinstance(v, str)}
+        ctx.status = (sid, st)
+        for tree in plan:
+            sig = _run_tree(tree, ctx)
+            if sig:
+                return
         return
 
     # ---- 攻击钩子链（技能按派生顺序） ----
-    ac = {"mult": 1.0, "pen": 0.0, "crit_flat": 0.0, "crit": False}
-    ctx = _Ctx(game, rng, ev, tick, actor, enemy, [actor, enemy])
+    ac = {"mult": 1.0, "pen": 0.0, "crit_flat": 0.0, "must_hit": False,
+          "crit": False, "replaced": False}
+    ctx = _Ctx(game, rng, ev, tick, actor, enemy, combatants)
     ctx.ac = ac
     ctx.defer = []
-    sig = _run_hook(actor.skills, "on_attack", ctx)
-    if sig in ("consume", "replace"):
-        return  # 蓄力占用本次行动 / 雷罚已替换攻击
+    if _run_hook(actor.skills, "on_attack", ctx) == "consume":
+        return                       # 蓄力占用了本次行动（skip_action 信号）
+    if ac["replaced"]:
+        return                       # 雷罚等 strike(mode=replace) 已替换攻击
 
-    # 怨念：挨打积累的层数转化为本次攻击伤害加成（每条状态独立乘区）
-    for _sid, s, _sdef in statuses.by_kind(actor, game, "grudge"):
-        n = sum(1 for t in s["layers"] if t > tick)
-        if n > 0 and s["value"] > 0:
-            ac["mult"] *= 1.0 + s["value"] * n
+    # 增伤修饰聚合（乘胜 / 怨念：dmg_out_pct × 在场层数）
+    out_pct = statuses.sum_mod(actor, game, tick, "dmg_out_pct")
+    if out_pct > 0:
+        ac["mult"] *= 1.0 + out_pct
 
-    # ---- 闪避判定（落空时乘胜清零） ----
-    if rng.next_float() < enemy.dodge / 100.0:
+    # ---- 闪避判定（落空时乘胜类清零；必中跳过） ----
+    if not ac["must_hit"] and rng.next_float() < enemy.dodge / 100.0:
         ev("attack_miss", {"a": actor.name, "b": enemy.name})
-        for _sid, s, _sdef in statuses.by_kind(actor, game, "momentum"):
-            s["stacks"] = 0
+        statuses.clear_stacks(actor, game, tick)
         return
 
     crit = rng.next_float() < min(bc.crit_cap / 100.0,
@@ -999,25 +977,13 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
                           pen=ac["pen"], tick=tick)
     dmg = _defend(enemy, actor, dmg, game, rng, ev, tick)
 
-    # 记仇：下次命中把各条记录的伤害按倍率追加打出（分量独立取整）
-    for _sid, ret, _sdef in statuses.by_kind(actor, game, "record"):
-        if not ret["records"]:
-            continue
-        bonus = _r(sum(ret["records"]) * ret["ratio"])
-        ret["records"] = []
-        if bonus > 0:
-            dmg += bonus
-            ev("retribution_release", {"a": actor.name,
-                                       "value": format_num(bonus),
-                                       "ratio": format_pct(ret["ratio"])})
-
     dmg = _r(dmg)
     if dmg > 0:
-        _hurt(enemy, dmg, ev, rng, game)
+        _hurt(enemy, dmg, ev, rng, game, tick)
         actor.damage_dealt += dmg
     ev("attack_hit", {"a": actor.name, "b": enemy.name,
                       "damage": format_num(dmg)})
-    _apply_lifesteal(actor, dmg, ev, game)
+    _apply_lifesteal(actor, dmg, ev, game, tick)
     _hit_reactions(actor, enemy, dmg, crit, game, rng, ev, tick)
 
     # ---- 延迟施加（命中结算后：敌方需仍存活） ----
@@ -1037,7 +1003,8 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                       key=lambda c: (-c.fighter.attrs["spd"], c.fighter.normalized))
     for i, c in enumerate(internal):
         c.seq = i
-    joined = bc.seed_separator.join(sorted((fighter_a.normalized, fighter_b.normalized)))
+    joined = bc.seed_separator.join(sorted((fighter_a.normalized,
+                                            fighter_b.normalized)))
     seed_hex = hashlib.md5(joined.encode("utf-8")).hexdigest()
     rng = DetRng(int(seed_hex, 16))
 
@@ -1087,34 +1054,36 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
             winner = enemy
         return winner is not None or draw
 
+    def _status_death(c):
+        """状态结算致死（毒 / 流血）：输出定义的 death_event 并结束战斗。
+        返回 True 表示战斗结束。"""
+        nonlocal winner
+        if c.hp > 0:
+            return False
+        for sid, st, sdef in statuses.each_live(c, game, tick):
+            death_event = sdef.get("death_event")
+            if death_event:
+                ev(str(death_event), {"a": c.name})
+                break
+        winner = internal[1] if c is internal[0] else internal[0]
+        return True
+
     while tick < bc.max_ticks and winner is None and not draw:
         tick += 1
-        # ---- 每刻开始：回春回复与到期层清理（按内部序，确定性顺序） ----
+        # ---- 每刻开始：状态 tick 图（毒发 / 回春回复，按施加顺序） ----
         for c in internal:
             if c.hp <= 0:
                 continue
-            for _sid, regen, _sdef in statuses.by_kind(c, game, "regen"):
-                if regen["until"] > tick - 1 and tick >= regen["next"]:
-                    gained = min(regen["value"], c.max_hp - c.hp)
-                    if gained > 0:
-                        c.hp += gained
-                        ev("regen_tick", {"a": c.name, "heal": format_num(gained)})
-                    regen["next"] += max(1, regen["interval"])
-            for kind in ("grudge", "guard"):
-                for _sid, s, _sdef in statuses.by_kind(c, game, kind):
-                    s["layers"] = [t for t in s["layers"] if t > tick - 1]
-        # ---- 每刻毒发（timing=every_tick 的 dot：每刻结算伤害） ----
-        for c in internal:
-            if c.hp <= 0:
-                continue
-            for _sid, s, sdef in statuses.by_kind(c, game, "dot"):
-                if sdef.get("timing") != "every_tick" or s["until"] <= tick:
+            enemy = internal[1] if c is internal[0] else internal[0]
+            for sid, st, sdef in statuses.each_live(c, game, tick):
+                interval = statuses.resolve(sdef.get("interval", 0),
+                                            st["params"])
+                if not interval or tick < st["next"]:
                     continue
-                _hurt(c, s["damage"], ev, rng, game)
-                ev("poison_tick", {"a": c.name, "damage": format_num(s["damage"])})
-                if c.hp <= 0:
-                    ev("poison_death", {"a": c.name})
-                    winner = internal[1] if c is internal[0] else internal[0]
+                st["next"] += max(1, int(interval))
+                _run_status_hooks(c, enemy, combatants, "on_status_tick",
+                                  game, rng, ev, tick, only=(sid, st))
+                if _status_death(c):
                     break
             if winner is not None:
                 break
@@ -1123,7 +1092,7 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
         # ---- 行动槽推进 ----
         for c in combatants:
             if c.hp > 0:
-                c.gauge += _eff_spd(c, game)
+                c.gauge += _eff_spd(c, game, tick)
         ready = [c for c in internal if c.hp > 0 and c.gauge >= bc.gauge_threshold]
         ready.sort(key=lambda c: (-c.gauge, c.seq))
         for actor in ready:
@@ -1133,56 +1102,43 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
                 break
             # ---- 打断钩子：敌方即将行动时（斩断退条 + 抢攻，消耗其行动） ----
             ictx = _Ctx(game, rng, ev, tick, enemy, actor, combatants)
+            ictx.defer = []
             _run_hook(enemy.skills, "action_interrupt", ictx)
+            for fn in ictx.defer or ():
+                fn()
             if ictx.executed:
                 if _settle_deaths(enemy, actor):
                     break
                 continue
-            # ---- 流血（timing=on_owner_action 的 dot：拥有者行动时结算） ----
-            bled_out = False
-            for _sid, bleed, sdef in statuses.by_kind(actor, game, "dot"):
-                if sdef.get("timing") != "on_owner_action":
-                    continue
-                if bleed["until"] > tick:
-                    _hurt(actor, bleed["damage"], ev, rng, game)
-                    ev("bleed_tick", {"a": actor.name,
-                                      "damage": format_num(bleed["damage"])})
-                    if actor.hp <= 0:
-                        ev("bleed_death", {"a": actor.name})
-                        winner = enemy
-                        bled_out = True
-                        break
-            if bled_out or winner is not None:
+            # ---- 拥有者行动开始状态图（流血损失 / 眩晕吞行动） ----
+            sig = _run_status_hooks(actor, enemy, combatants, "on_owner_action",
+                                    game, rng, ev, tick)
+            if _status_death(actor):
                 break
+            if sig == "consume":
+                continue
             # ---- 行动开始钩子（血契 / 回春 / 净化） ----
             sctx = _Ctx(game, rng, ev, tick, actor, enemy, combatants)
             sctx.defer = []
             _run_hook(actor.skills, "action_start", sctx)
-            for fn in sctx.defer:
+            for fn in sctx.defer or ():
                 fn()
-            if winner is not None:
+            if _settle_deaths(actor, enemy):
                 break
-            # ---- 眩晕：消耗本次行动 ----
-            stunned = any(s["until"] > tick
-                          for _sid, s, _sdef in statuses.by_kind(actor, game, "control"))
-            if stunned:
-                ev("turn_stun", {"a": actor.name})
-                continue
             # ---- 攻击前钩子（背水一战等一次性判定） ----
             bctx = _Ctx(game, rng, ev, tick, actor, enemy, combatants)
             _run_hook(actor.skills, "before_attack", bctx)
             _attack(actor, enemy, game, rng, ev, tick)
             if _settle_deaths(actor, enemy):
                 break
-            # ---- 行动后：成长钩子 / 嗜血递减 ----
+            # ---- 行动后：成长钩子 / 按行动衰减到期 / 吸血累计清零 ----
             if actor.hp > 0:
                 actx = _Ctx(game, rng, ev, tick, actor, enemy, combatants)
                 _run_hook(actor.skills, "after_action", actx)
-            for _sid, ls, _sdef in statuses.by_kind(actor, game, "lifesteal"):
-                if ls["turns"] > 0:
-                    ls["turns"] -= 1
-                    if ls["turns"] <= 0:
-                        ls["value"] = 0.0
+                for sid, st, sdef in statuses.each_live(actor, game, tick):
+                    if sdef.get("expire") == "actions":
+                        st["actions"] -= 1
+                actor.steal_rec = 0.0
 
     if winner is None and not draw:
         ev("timeout", {})
