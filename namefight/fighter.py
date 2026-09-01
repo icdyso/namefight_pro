@@ -307,7 +307,9 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
             if slots >= link_cfg.max_slots:
                 break
             specs = _node_specs(node, game)
-            candidates = [k for k, ps in specs.items() if ps.link]
+            candidates = [k for k, ps in specs.items() if ps.link
+                          and effects.spec_applicable(list(specs.values()),
+                                                      node["params"], ps)]
             if not candidates:
                 continue
             node_id = str(node.get("id", ""))
@@ -758,10 +760,35 @@ def _natural_text(pgraph: dict, fighter: Fighter, game: GameCfg,
                     parts.append(sub)
         return "，".join(parts)
 
+    def _subtree_ops(nid: str):
+        """以 nid 为根的子树内全部节点。"""
+        out, stack = [], [nid]
+        while stack:
+            cur = stack.pop()
+            node = node_by_id.get(cur)
+            if node is None:
+                continue
+            out.append(node)
+            for _gate, cid in children.get(cur, ()):
+                stack.append(cid)
+        return out
+
     for node in pgraph.get("nodes", ()):
         if node["kind"] != "trigger":
             continue
-        hook_word = str(stats.get("hook_" + node["type"], ""))
+        key = "hook_" + node["type"]
+        if node["type"] == "on_attack":
+            # 攻击链细分：子树为修饰 / 施加类（攻击照常）用「攻击时」；
+            # 含 replace 模式的 strike（雷罚等——本次攻击被替换）用
+            # 「替代攻击时」，避免读者误解为附带效果
+            replacing = any(
+                sub.get("kind") == "op" and sub.get("type") == "strike"
+                and str(sub.get("params", {}).get("mode")) == "replace"
+                for _gate, cid in children.get(node["id"], ())
+                for sub in _subtree_ops(cid))
+            if replacing:
+                key = "hook_on_attack_replace"
+        hook_word = str(stats.get(key, ""))
         parts = [p for p in [hook_word] if p]
         for _gate, cid in children.get(node["id"], ()):
             sub = chain_text(cid)

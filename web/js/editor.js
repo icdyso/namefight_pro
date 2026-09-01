@@ -205,6 +205,27 @@
     return base;
   }
 
+  function visibleSpecs(node) {
+    /* 当前取值下适用的参数规格（show_if 联动显隐：如 basis=固定量 时
+     * 不显示比例系数；依赖键缺省取其枚举首项，如 type 缺省为治疗）。 */
+    var specs = specList(node);
+    return specs.filter(function (ps) {
+      if (!ps.show_if) return true;
+      var dep = node.params && node.params[ps.show_if[0]];
+      if (dep === undefined) {
+        var ref = specs.filter(function (s) { return s.key === ps.show_if[0]; })[0];
+        dep = ref && ref.options && ref.options.length ? ref.options[0] : null;
+      }
+      return ps.show_if[1].indexOf(dep) !== -1;
+    });
+  }
+
+  function labelForKey(key) {
+    /* 参数键中文名（stats 的 fld_ 词表；查无显示原键，便于对照 JSON）。 */
+    var w = state.files.skills.stats["fld_" + key];
+    return w ? w + " " + key : key;
+  }
+
   function defaultParamValue(ps) {
     /* 新建节点时参数的默认值（按参数类型给一个安全初值）。 */
     switch (ps.kind) {
@@ -550,7 +571,7 @@
     var cx = Math.round((-state.view.x + 360) / state.view.s);
     var cy = Math.round((-state.view.y + 160) / state.view.s);
     node.pos = [Math.max(20, cx), Math.max(20, cy)];
-    specList(node).forEach(function (ps) {
+    visibleSpecs(node).forEach(function (ps) {
       if (ps.required || kind === "condition") node.params[ps.key] = defaultParamValue(ps);
     });
     if (kind === "condition" && type === "last_crit") node.params = {};
@@ -1171,11 +1192,12 @@
 
   function resonanceCandidates(sk) {
     /* 图内实际存在的可共鸣数值参数：[{node, param, first}]，按节点数组顺序；
-     * first 标记该参数名首次出现（无 node 锚定的配置条目匹配首个）。 */
+     * first 标记该参数名首次出现（无 node 锚定的配置条目匹配首个）；
+     * 仅统计当前取值下适用的参数（show_if 联动）。 */
     var out = [];
     (sk.effect.nodes || []).forEach(function (n) {
       if (n.kind !== "op" && n.kind !== "condition" && n.kind !== "struct") return;
-      specList(n).forEach(function (ps) {
+      visibleSpecs(n).forEach(function (ps) {
         if (!ps.link) return;
         var v = n.params && n.params[ps.key];
         if (typeof v !== "number") return;
@@ -1283,6 +1305,7 @@
   function unitHint(ps) {
     /* 参数的单位/口径提示文案。 */
     var units = { hp: "（点生命）", def: "（点防御）", gauge: "（行动槽）", spd: "（速度）", atk: "（攻击）" };
+    if (ps.key === "ratio") return "（与所选基准相乘的比例系数，0.06 = 6%）";
     if (ps.unit && units[ps.unit]) return units[ps.unit];
     if (ps.kind === "pct") return "（分数，0.06 = 6%）";
     if (ps.kind === "turns") return "（刻/次，≥1 整数）";
@@ -1290,17 +1313,18 @@
   }
 
   function inspectNode(sk, node) {
-    /* 属性面板：节点参数表单（按 schema 规格渲染类型化输入）。
+    /* 属性面板：节点参数表单（按 schema 规格渲染类型化输入；
+     * 仅显示当前取值下适用的参数——show_if 联动显隐）。
      * 状态引用参数渲染为全部状态下拉框（v3 状态图自由组合）。 */
     var forms = [];
-    specList(node).forEach(function (ps) {
-      var label = ps.key + unitHint(ps) + (ps.link ? " ⟡可共鸣" : "");
+    visibleSpecs(node).forEach(function (ps) {
+      var label = labelForKey(ps.key) + unitHint(ps) + (ps.link ? " ⟡可共鸣" : "");
       var has = Object.prototype.hasOwnProperty.call(node.params, ps.key);
       if (ps.kind === "bool") {
         forms.push(h("label", { class: "ed-check" }, [
           checkInput(function () { return has ? node.params[ps.key] : false; },
                      function (v) { if (v) node.params[ps.key] = true; else delete node.params[ps.key]; }),
-          ps.key + unitHint(ps),
+          labelForKey(ps.key) + unitHint(ps),
         ]));
         return;
       }

@@ -194,7 +194,8 @@ def make_handler(state: AppState):
                 return {"key": ps.key, "kind": ps.kind, "fmt": ps.fmt,
                         "unit": ps.unit, "link": ps.link, "required": ps.required,
                         "clamp": list(ps.clamp) if ps.clamp else None,
-                        "options": list(ps.options) if ps.options else None}
+                        "options": list(ps.options) if ps.options else None,
+                        "show_if": list(ps.show_if) if ps.show_if else None}
 
             def entry_json(meta):
                 return {"params": [ps_json(ps) for ps in meta["params"]],

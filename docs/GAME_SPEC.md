@@ -2,7 +2,7 @@
 
 > 本文档是游戏的**完整规则说明书**：流程图、全部细则与数值、每个 JSON 配置文件的
 > 意义与调整指南。按 AGENTS.md 第 3.6 条，**每次更新涉及规则/数值/配置结构时必须
-> 同步更新本文档**。当前版本：**v3.5.0**（与 `config/game/system.json` 的 `version` 一致）。
+> 同步更新本文档**。当前版本：**v3.6.0**（与 `config/game/system.json` 的 `version` 一致）。
 
 ---
 
@@ -382,6 +382,9 @@ spd = 含背水一战速度加成，crit/dodge = 面板。v0.10.0 起全部为�
   链拼接 `stats` 词表——钩子引导语 `hook_*` + 条件从句 `cond_*` + 原语句
   `op_<原语>`（状态类原语引用 `st_<状态id>` 名称）+ 标签 `lbl_*`，
   链间以「；」连接；模板占位符与参数同名（`{chance}` `{value}` `{ticks}` 等）；
+  **v3.6.0 攻击链细分**：on_attack 子树含 `mode=replace` 的 strike 时引导语
+  用 `hook_on_attack_replace`（「替代攻击时」——雷罚；子树为修饰 / 施加类则
+  仍为「攻击时」，攻击照常进行）；
 - **共鸣公式括号紧跟对应数值**（每技能至多 2 个）：
   「数值（基数 + 变量式*合并系数）」，基数与合并系数均为引擎真实值
   （合并系数 = 基数 × 倍率 ÷ 变量基准值）。变量式用属性 **emoji**：own 省略
@@ -621,7 +624,7 @@ dmg    = 取整一次( max( 100, raw × (1 − 免伤率) ) )
 | `POST /api/battle` | `{a,b}` -> 双方 + 逐条战报（含快照与 rich 段）+ 胜负 |
 | `POST /api/battle/fast` | `{a,b,runs}` 或 `{pairs:[[a,b],...],runs}` -> 极速结果（无快照/无文案渲染，含耗时 ms） |
 | `POST /api/power` | 真战力（v1.3.0）：`{name, count?}` -> 与 count（默认 `power_check.enemies`=10000）个编号敌人各打一场，`{true_power 胜场, total, rate, power 面板战力, elapsed_ms}` |
-| `GET /api/schema` | 引擎自描述（v2.0.0）：钩子 / 条件 / op（参数规格 + status_kind）/ 状态 kind / 状态定义注册表元数据，编辑器表单由此驱动 |
+| `GET /api/schema` | 引擎自描述（v2.0.0）：钩子 / 条件 / op（参数规格 + status_kind）/ 状态 kind / 状态定义注册表元数据，编辑器表单由此驱动；**v3.6.0 参数规格含 show_if**（依赖键 + 允许值：仅当另一参数取特定值时该参数适用——如 hp_mod 基准为固定量时无比例系数，类型为治疗时无可致死 / 保底；编辑器据此联动显隐，派生层共鸣候选同规则过滤） |
 | `GET /api/config` | 可视化编辑器：六个配置文件原文 + 当前版本（v1.0.0） |
 | `POST /api/config/preview` | 可视化编辑器：`{files, a, b}` 草稿试运行（校验 + 不落盘对战），`{ok, preview}` 或 `{ok:false, error}` |
 | `POST /api/config/save` | 可视化编辑器：`{files}` 校验后原子写盘并热重载，`{ok, version}` |

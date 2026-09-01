@@ -67,10 +67,13 @@ ALL_HOOKS = HOOKS + STATUS_HOOKS   # 全部钩子（任意挂载的原子用）
 @dataclass(frozen=True)
 class ParamSpec:
     """效果参数规格。kind: float / int / pct(0~1 分数) / turns(正整数) /
-    bool / text / enum；fmt 为共鸣展示格式（pct / num / turns），clamp 为
-    共鸣上下限 (lo, hi)（None = 不限）；unit 为展示量纲（词缀文案用）；
+    bool / text / enum；fmt 为共鸣展示格式（pct 百分数 / num 整数 / turns 刻数），
+    clamp 为共鸣上下限 (lo, hi)（None = 不限）；unit 为展示量纲（词缀文案用）；
     link=True 的参数可成为共鸣变数（槽位按遍历顺序分配，每技能至多
-    variable_link.max_slots 个）。"""
+    variable_link.max_slots 个）。
+    show_if = (依赖键, 允许值元组)：仅当依赖参数取这些值时该参数才适用
+    （编辑器据此联动显隐；依赖键缺省取其枚举首项，如 basis 缺省 flat）。
+    派生层的共鸣候选与编辑器表单共用同一判定，避免给不适用的参数共鸣。"""
     key: str                 # 参数名（图 params 字典里的键）
     kind: str = "float"      # 数值类型：float/int/pct/turns/bool/text/enum
     fmt: str = "pct"         # 共鸣展示格式：pct 百分数 / num 整数 / turns 刻数
@@ -79,16 +82,33 @@ class ParamSpec:
     link: bool = False       # 是否可成为共鸣变数（槽位候选）
     required: bool = True    # 基配置中是否必填（可选参数声明 False）
     options: tuple = None    # kind=enum 的合法取值（如 target: self/enemy）
+    show_if: tuple = None    # 联动适用条件 (依赖键, 允许值元组)
 
 
-def _pct(key, clamp=None, link=False, unit=None, required=True):
+def spec_applicable(specs, params: dict, spec) -> bool:
+    """参数在当前取值下是否适用（show_if 判定；依赖键缺省取其枚举首项）。
+    specs 为同节点全部规格（查依赖键的默认值用），params 为节点当前参数。"""
+    if spec.show_if is None:
+        return True
+    dep_key, allowed = spec.show_if
+    if dep_key in params:
+        current = params[dep_key]
+    else:
+        dep = next((s for s in specs if s.key == dep_key), None)
+        current = dep.options[0] if dep is not None and dep.options else None
+    return current in allowed
+
+
+def _pct(key, clamp=None, link=False, unit=None, required=True, show_if=None):
     """百分数参数（0~1 分数存储，展示 ×100）的规格快捷构造。"""
-    return ParamSpec(key, "pct", "pct", clamp, unit, link, required)
+    return ParamSpec(key, "pct", "pct", clamp, unit, link, required,
+                     None, show_if)
 
 
-def _num(key, clamp=None, link=False, unit=None, required=True):
+def _num(key, clamp=None, link=False, unit=None, required=True, show_if=None):
     """绝对数值参数（引擎真实值，展示取整）的规格快捷构造。"""
-    return ParamSpec(key, "float", "num", clamp, unit, link, required)
+    return ParamSpec(key, "float", "num", clamp, unit, link, required,
+                     None, show_if)
 
 
 def _turns(key, clamp=(1, 20), link=False, required=True):
@@ -134,7 +154,8 @@ CONDITIONS = dict([
     _cond("compare", [P("left", "enum", options=CMP_SOURCES),
                       P("op", "enum", options=CMP_OPS),
                       P("right", "enum", options=CMP_RIGHT),
-                      _pct("value", (0.0, 1.0), link=True, required=False)]),
+                      _pct("value", (0.0, 1.0), link=True, required=False,
+                           show_if=("right", ("const",)))]),
     # stacks_cmp：某状态在己方/敌方身上的在场层数与固定值比较
     _cond("stacks_cmp", [_st(),
                          P("target", "enum", options=("self", "enemy")),
@@ -144,7 +165,8 @@ CONDITIONS = dict([
     _cond("no_status", [_st()]),                           # 自身不在场某状态
     _cond("has_marker", [P("key", "text"),                 # 自身带有某标记
                          P("op", "enum", options=CMP_OPS, required=False),
-                         _num("count", (0.0, None), link=True, required=False)]),  # 层数比较
+                         _num("count", (0.0, None), link=True, required=False,
+                              show_if=("op", CMP_OPS))]),  # 层数比较（选了 op 才有）
     _cond("no_marker", [P("key", "text")]),                # 自身没有某标记（层数 0）
     _cond("once_per_battle", [P("key", "text")]),          # 每场一次（真执行才占位）
     _cond("last_crit", []),                                # 本次命中为暴击
@@ -176,7 +198,8 @@ OPS = dict([
          _pct("mult", (0.05, 8.0), link=True, required=False),
          P("basis", "enum", options=("none", "recorded_sum", "taken_absorbed"),
            required=False),
-         _pct("value", (0.05, 8.0), link=True, required=False),
+         _pct("value", (0.05, 8.0), link=True, required=False,
+              show_if=("basis", ("recorded_sum", "taken_absorbed"))),
          P("real", "bool", required=False),
          _pct("pen", (0.0, 1.0), link=True, required=False),
          _pct("crit_bonus", (0.0, 1.0), link=True, required=False),
@@ -228,10 +251,12 @@ OPS = dict([
         [P("target", "enum", options=("self", "enemy")),
          P("type", "enum", options=("heal", "loss")),
          P("basis", "enum", options=("flat", "maxhp", "curhp", "applier_atk", "dealt")),
-         _num("value", (0.0, None), link=True, unit="hp", required=False),
-         _pct("ratio", (0.0, 2.0), link=True, required=False),
-         P("can_kill", "bool", required=False),
-         P("floor1", "bool", required=False),
+         _num("value", (0.0, None), link=True, unit="hp", required=False,
+              show_if=("basis", ("flat",))),
+         _pct("ratio", (0.0, 2.0), link=True, required=False,
+              show_if=("basis", ("maxhp", "curhp", "applier_atk", "dealt"))),
+         P("can_kill", "bool", required=False, show_if=("type", ("loss",))),
+         P("floor1", "bool", required=False, show_if=("type", ("loss",))),
          P("event", "text", required=False)],
         logged=True),
     # gauge_mod：行动槽推进 / 倒退（×100 量纲，速度 ~1000）。
@@ -270,7 +295,8 @@ OPS = dict([
     _op("marker", ALL_HOOKS,
         [P("key", "text"),
          P("action", "enum", options=("set", "clear", "toggle", "add", "sub")),
-         _num("value", (-20.0, 20.0), required=False),
+         _num("value", (-20.0, 20.0), required=False,
+              show_if=("action", ("add", "sub"))),
          _turns("turns", (1, 40), link=True, required=False)],
         logged=False),
     # status_ctl：状态操控原子（对己方/敌方某状态运行时做延长 / 缩短 /
@@ -278,14 +304,16 @@ OPS = dict([
     _op("status_ctl", ALL_HOOKS,
         [_st(), P("target", "enum", options=("self", "enemy")),
          P("op", "enum", options=("extend", "shorten", "stacks", "clear")),
-         _num("value", (-20.0, 20.0), link=True, required=False),
+         _num("value", (-20.0, 20.0), link=True, required=False,
+              show_if=("op", ("extend", "shorten", "stacks"))),
          P("event", "text", required=False)],
         logged=True),
     # loop：循环结构节点（struct）。mode=chain：第 1 轮必定执行（外层
     # chance 已消耗首道概率），第 i 轮（i>=2）按 decay^(i-1) 概率续链
     # （雷罚连击）；mode=count：固定执行 max 轮，不掷骰。
     ("loop", {"params": (P("max", "int", "num"),
-                         _pct("decay", (0.3, 0.99), link=True, required=False),
+                         _pct("decay", (0.3, 0.99), link=True, required=False,
+                              show_if=("mode", ("chain",))),
                          P("mode", "enum", options=("chain", "count"),
                            required=False)),
               "text_key": "op_loop"}),
