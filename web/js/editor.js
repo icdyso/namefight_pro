@@ -525,23 +525,44 @@
     });
 
     // 3) 连线（loop 出端口在容器右缘，随包围盒自适应）
+    //    每条边两层：透明宽命中层（好点选）+ 可见细线；点击选中，Delete
+    //    删除，右键直接删除
     g.edges.forEach(function (edge, idx) {
       var from = nodeById(g, edge.from), to = nodeById(g, edge.to);
       if (!from || !to) return;
       var gate = edge.gate === "fail" ? "fail" : "pass";
-      var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      p.setAttribute("d", edgePath(portPos(from, "out", gate), portPos(to, "in")));
+      var d = edgePath(portPos(from, "out", gate), portPos(to, "in"));
       var sel = idx === state.selEdge;
-      p.setAttribute("stroke", sel ? "#e6b84c"
-                      : gate === "fail" ? "rgba(255,140,120,.75)" : "rgba(140,160,220,.7)");
-      p.setAttribute("stroke-width", String(2 / state.view.s + (sel ? 1 : 0)));
-      p.setAttribute("fill", "none");
-      p.addEventListener("mousedown", function (ev) {
+      var hit = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      hit.setAttribute("d", d);
+      hit.setAttribute("stroke", "rgba(0,0,0,0)");           // 透明命中层
+      hit.setAttribute("stroke-width", String(14 / state.view.s));
+      hit.setAttribute("fill", "none");
+      hit.style.cursor = "pointer";
+      var pick = function (ev) {
         ev.stopPropagation();
         state.selEdge = idx;
         state.selNode = null;
         renderAll();
+      };
+      hit.addEventListener("mousedown", pick);
+      hit.addEventListener("contextmenu", function (ev) {   // 右键直接删除
+        ev.preventDefault();
+        ev.stopPropagation();
+        g.edges.splice(idx, 1);
+        state.selEdge = null;
+        state.selNode = null;
+        setStatus("已删除连线");
+        renderAll();
       });
+      svg.appendChild(hit);
+      var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", d);
+      p.setAttribute("stroke", sel ? "#e6b84c"
+                      : gate === "fail" ? "rgba(255,140,120,.75)" : "rgba(140,160,220,.7)");
+      p.setAttribute("stroke-width", String(2 / state.view.s + (sel ? 1 : 0)));
+      p.setAttribute("fill", "none");
+      p.style.pointerEvents = "none";
       svg.appendChild(p);
     });
     bindCanvas();
@@ -681,17 +702,19 @@
   }
 
   function refreshEdges() {
-    /* 按节点当前位置刷新全部连线形状（不重建元素；loop 出端口随容器宽度）。 */
+    /* 按节点当前位置刷新全部连线形状（不重建元素；每条边占两层 path：
+     * 命中层 + 可见线，按 2×idx 定位；loop 出端口随容器宽度）。 */
     var svg = NF.qs("#ed-edges");
     var g = graph();
     if (!svg || !g) return;
-    Array.prototype.forEach.call(svg.children, function (path, idx) {
-      if (path.classList.contains("ed-link-temp")) return;   // 拖拽轨迹不是图边
-      var edge = g.edges[idx];
-      if (!edge) return;
+    g.edges.forEach(function (edge, idx) {
       var from = nodeById(g, edge.from), to = nodeById(g, edge.to);
       if (!from || !to) return;
-      path.setAttribute("d", edgePath(portPos(from, "out", edge.gate), portPos(to, "in")));
+      var d = edgePath(portPos(from, "out", edge.gate), portPos(to, "in"));
+      var hit = svg.children[idx * 2];
+      var line = svg.children[idx * 2 + 1];
+      if (hit) hit.setAttribute("d", d);
+      if (line) line.setAttribute("d", d);
     });
   }
 
@@ -728,9 +751,16 @@
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
       temp.remove();
-      var target = e.target.closest && e.target.closest(".ed-port");
-      if (!target) return;
-      var toId = target.dataset.node;
+      // 落点解析：优先端口圆点；其次节点主体（含 loop 容器）——拖到节点上
+      // 即连接到该节点，与主流节点编辑器一致
+      var toId = null;
+      var portEl = e.target.closest && e.target.closest(".ed-port");
+      if (portEl) {
+        toId = portEl.dataset.node;
+      } else {
+        var nodeEl = e.target.closest && e.target.closest(".ed-node");
+        if (nodeEl) toId = nodeIdOfElement(nodeEl);
+      }
       if (!toId || toId === fromId) return;
       var edge = isOut ? { from: fromId, to: toId } : { from: toId, to: fromId };
       if (gate === "fail") edge.gate = "fail";

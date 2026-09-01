@@ -103,16 +103,42 @@ def _cond(type_, params):
     return type_, {"params": tuple(params), "text_key": "cond_" + type_}
 
 
+# 值源注册表（compare 条件的 left/right 取值；id 形如 "self.hp_pct"）：
+# 比例类（hp_pct / gauge_pct / crit / dodge）均为 0~1 分数，绝对值类为引擎真实值
+CMP_SOURCES = (
+    "self.hp_pct", "enemy.hp_pct",
+    "self.atk", "enemy.atk",
+    "self.def", "enemy.def",
+    "self.spd", "enemy.spd",
+    "self.crit", "enemy.crit",
+    "self.dodge", "enemy.dodge",
+    "self.gauge_pct", "enemy.gauge_pct",
+)
+# 右值额外可取 "const"（固定值，由 value 参数给出）
+CMP_RIGHT = CMP_SOURCES + ("const",)
+# 比较运算（文案键 cmp_<op>）
+CMP_OPS = ("lt", "le", "gt", "ge")
+
+
 # ---- 条件注册表（判断；出边 gate=pass/fail 构成分支；文案键 cond_<type>） ----
 CONDITIONS = dict([
     _cond("chance", [_pct("chance")]),                     # 概率判定
-    _cond("self_hp_below", [_pct("threshold", (0.05, 0.9))]),    # 自身生命低于
-    _cond("self_hp_above", [_pct("threshold", (0.1, 0.9), link=True)]),   # 自身生命不低于
-    _cond("target_hp_below", [_pct("threshold", (0.05, 0.9), link=True)]),  # 敌方生命不高于
-    _cond("target_hp_above", [_pct("threshold", (0.05, 0.9), link=True)]),  # 敌方生命高于
+    # compare：比较值与值（通用判断）——自身/敌方的 生命比例、攻防速、暴击、
+    # 闪避、行动槽比例 两两比较，或与固定值比较（right=const 时用 value）
+    _cond("compare", [P("left", "enum", options=CMP_SOURCES),
+                      P("op", "enum", options=CMP_OPS),
+                      P("right", "enum", options=CMP_RIGHT),
+                      _pct("value", (0.0, 1.0), link=True, required=False)]),
+    # stacks_cmp：某状态在己方/敌方身上的在场层数与固定值比较
+    _cond("stacks_cmp", [_st(),
+                         P("target", "enum", options=("self", "enemy")),
+                         P("op", "enum", options=CMP_OPS),
+                         _num("value", (0.0, None), link=True, required=False)]),
     _cond("has_status", [_st()]),                          # 自身在场某状态
     _cond("no_status", [_st()]),                           # 自身不在场某状态
-    _cond("once_per_battle", [P("key", "text")]),          # 每场一次（通过即占位）
+    _cond("has_marker", [P("key", "text")]),               # 自身带有某标记
+    _cond("no_marker", [P("key", "text")]),                # 自身没有某标记
+    _cond("once_per_battle", [P("key", "text")]),          # 每场一次（真执行才占位）
     _cond("last_crit", []),                                # 本次命中为暴击
 ])
 
@@ -132,7 +158,8 @@ OPS = dict([
     # basis=none 时伤害 = 攻击 × mult；basis=recorded_sum 时 = 记录总和 × value
     # （记仇释放）；basis=taken_absorbed 时 = 本次被减免量 × value（反甲反弹）。
     # real=true 为真实伤害（无视防御 / 闪避 / 暴击）；mode：extra 追加打击 /
-    # replace 替换本次攻击 / append 附加到本次攻击的已结算伤害。
+    # replace 替换本次攻击 / append 附加到本次攻击的已结算伤害；
+    # lifesteal 本次攻击按造成伤害的比例吸血。
     _op("strike",
         ("on_attack", "action_interrupt", "on_defend", "on_hit_landed",
          "on_owner_action_consume", "on_status_apply"),
@@ -146,6 +173,7 @@ OPS = dict([
          _pct("crit_bonus", (0.0, 1.0), link=True, required=False),
          P("must_hit", "bool", required=False),
          P("mode", "enum", options=("extra", "replace", "append"), required=False),
+         _pct("lifesteal", (0.0, 1.5), link=True, required=False),
          P("event", "text", required=False)],
         logged=True),
     # hit_mod：修饰本次攻击（倍率 / 穿透 / 暴击加成 / 必中），不产生独立伤害。
@@ -180,14 +208,15 @@ OPS = dict([
     # hp_mod：体力变动原子。type=heal 治疗（不溢出）；type=loss 流失（不触发
     # 受击反应与不屈，can_kill=true 时可致死——毒 / 流血；floor1=true 时保底
     # 1 点不自灭——燃血 / 血契献祭）。basis=flat 用 value（固定量）；比例基准
-    # （maxhp 最大生命 / applier_atk 施加者攻击 / dealt 本次造成伤害）用 ratio。
+    # （maxhp 最大生命 / curhp 当前生命 / applier_atk 施加者攻击 /
+    # dealt 本次造成伤害）用 ratio。
     _op("hp_mod",
         ("on_attack", "action_start", "action_interrupt",
          "on_status_apply", "on_status_tick", "on_owner_action",
          "on_owner_attack_hit"),
         [P("target", "enum", options=("self", "enemy")),
          P("type", "enum", options=("heal", "loss")),
-         P("basis", "enum", options=("flat", "maxhp", "applier_atk", "dealt")),
+         P("basis", "enum", options=("flat", "maxhp", "curhp", "applier_atk", "dealt")),
          _num("value", (0.0, None), link=True, unit="hp", required=False),
          _pct("ratio", (0.0, 2.0), link=True, required=False),
          P("can_kill", "bool", required=False),
@@ -223,10 +252,26 @@ OPS = dict([
          P("what", "enum", options=("damage_taken", "lifesteal")),
          _turns("cap", (1, 20), link=True, required=False)],
         logged=False),
-    # loop：循环结构节点（struct）：子树反复执行——第 1 轮必定执行（外层
-    # chance 已消耗首道概率），第 i 轮（i>=2）按 decay^(i-1) 概率续链，
-    # 至多 max 轮（雷罚连击）。
-    ("loop", {"params": (P("max", "int"), _pct("decay", (0.3, 0.99), link=True)),
+    # marker：标记设置 / 清除（图内自由可用的布尔状态；配合 has_marker /
+    # no_marker 条件可搭一次性、开关、锁定类逻辑）。
+    _op("marker", ALL_HOOKS,
+        [P("key", "text"), P("action", "enum", options=("set", "clear"))],
+        logged=False),
+    # status_ctl：状态操控原子（对己方/敌方某状态运行时做延长 / 缩短 /
+    # 叠层增减 / 强制清除；value 为刻数或层数增量）。
+    _op("status_ctl", ALL_HOOKS,
+        [_st(), P("target", "enum", options=("self", "enemy")),
+         P("op", "enum", options=("extend", "shorten", "stacks", "clear")),
+         _num("value", (-20.0, 20.0), link=True, required=False),
+         P("event", "text", required=False)],
+        logged=True),
+    # loop：循环结构节点（struct）。mode=chain：第 1 轮必定执行（外层
+    # chance 已消耗首道概率），第 i 轮（i>=2）按 decay^(i-1) 概率续链
+    # （雷罚连击）；mode=count：固定执行 max 轮，不掷骰。
+    ("loop", {"params": (P("max", "int", "num"),
+                         _pct("decay", (0.3, 0.99), link=True, required=False),
+                         P("mode", "enum", options=("chain", "count"),
+                           required=False)),
               "text_key": "op_loop"}),
 ])
 

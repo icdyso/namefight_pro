@@ -177,10 +177,6 @@
     "hook_on_hit_taken": "被命中时",
     "hook_after_action": "每次行动完毕",
     "cond_chance": "有 {chance} 概率",
-    "cond_self_hp_below": "自身生命低于 {threshold} 时",
-    "cond_self_hp_above": "自身生命不低于 {threshold} 时",
-    "cond_target_hp_below": "敌方生命低于 {threshold} 时",
-    "cond_target_hp_above": "敌方生命高于 {threshold} 时",
     "cond_once_per_battle": "（每场战斗一次）",
     "op_cleanse": "驱散双方所有状态（每驱散 1 种回复 {per} 点生命），并回复 {value} 点生命",
     "st_poison": "使敌方中毒：其每刻损失 {value} 点生命，持续 {turns} 刻",
@@ -281,7 +277,7 @@
     "op_gauge_mod": "使行动槽变化 {gain}",
     "op_skip_action": "消耗本次行动",
     "op_record": "记录该次伤害（至多 {cap} 条），下次命中时追加打出",
-    "op_loop": "连续至多 {max} 次（逐次按 {decay} 衰减）",
+    "op_loop": "连续至多 {max} 次（{mode_word}）",
     "cond_last_crit": "本次为暴击时",
     "cond_has_status": "自身带有{status}时",
     "cond_no_status": "自身没有{status}时",
@@ -314,7 +310,41 @@
     "lbl_last_crit": "上次暴击",
     "lbl_has_status": "有状态",
     "lbl_no_status": "无状态",
-    "op_stat_mod_recorded": "把本次吸血量的 {value} 永久转化为{stat}"
+    "op_stat_mod_recorded": "把本次吸血量的 {value} 永久转化为{stat}",
+    "cond_compare": "{left} {op} {right}",
+    "cond_stacks_cmp": "{target_word}{status} 层数 {op} {value}",
+    "cond_has_marker": "带有标记 {key} 时",
+    "cond_no_marker": "没有标记 {key} 时",
+    "cmp_lt": "<",
+    "cmp_le": "≤",
+    "cmp_gt": ">",
+    "cmp_ge": "≥",
+    "cmp_const": "常数",
+    "cmp_self.hp_pct": "自身生命比例",
+    "cmp_enemy.hp_pct": "敌方生命比例",
+    "cmp_self.atk": "自身攻击",
+    "cmp_enemy.atk": "敌方攻击",
+    "cmp_self.def": "自身防御",
+    "cmp_enemy.def": "敌方防御",
+    "cmp_self.spd": "自身速度",
+    "cmp_enemy.spd": "敌方速度",
+    "cmp_self.crit": "自身暴击",
+    "cmp_enemy.crit": "敌方暴击",
+    "cmp_self.dodge": "自身闪避",
+    "cmp_enemy.dodge": "敌方闪避",
+    "cmp_self.gauge_pct": "自身行动槽",
+    "cmp_enemy.gauge_pct": "敌方行动槽",
+    "cmp_target_self": "自身",
+    "cmp_target_enemy": "敌方",
+    "op_marker": "设置标记 {key}（{action}）",
+    "op_status_ctl": "操控{target_word}{status}：{op} {value}",
+    "cmp_mode_chain": "逐次按 {decay} 衰减",
+    "cmp_mode_count": "固定次数",
+    "lbl_compare": "比较",
+    "lbl_stacks_cmp": "层数比较",
+    "lbl_marker": "标记",
+    "lbl_status_ctl": "状态操控",
+    "field_lifesteal": "吸血比例"
   },
   "skills": [
     {
@@ -428,9 +458,12 @@
           {
             "id": "n2",
             "kind": "condition",
-            "type": "target_hp_below",
+            "type": "compare",
             "params": {
-              "threshold": 0.33
+              "left": "enemy.hp_pct",
+              "op": "le",
+              "right": "const",
+              "value": 0.33
             },
             "pos": [
               560,
@@ -1075,9 +1108,12 @@
           {
             "id": "n1",
             "kind": "condition",
-            "type": "self_hp_above",
+            "type": "compare",
             "params": {
-              "threshold": 0.7
+              "left": "self.hp_pct",
+              "op": "ge",
+              "right": "const",
+              "value": 0.7
             },
             "pos": [
               300,
@@ -1458,9 +1494,12 @@
           {
             "id": "n2",
             "kind": "condition",
-            "type": "self_hp_below",
+            "type": "compare",
             "params": {
-              "threshold": 0.3
+              "left": "self.hp_pct",
+              "op": "lt",
+              "right": "const",
+              "value": 0.3
             },
             "pos": [
               560,

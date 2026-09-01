@@ -71,7 +71,9 @@
     "streak_up": "{a} 乘胜追击！连击 ×{stacks}，伤害倍率 {mult}",
     "effect_bulwark": "　　🛡️ {b} 稳守壁垒，伤害降低 {ratio}！",
     "retribution_record": "{a} 记仇：记录 {damage} 点伤害（{stacks} 条）",
-    "retribution_release": "{a} 记仇爆发：将记录总和以 {ratio} 追加，共 {value} 点！"
+    "retribution_release": "{a} 记仇爆发：将记录总和以 {ratio} 追加，共 {value} 点！",
+    "shield_absorb": "{a} 的护盾吸收了 {damage} 点伤害",
+    "barrier_gain": "{a} 获得护盾：可吸收 {value} 点伤害，持续 {turns} 刻"
   },
   "statuses": {
     "poison": {
@@ -802,6 +804,46 @@
       "expire": "none",
       "params": {},
       "mods": [],
+      "effects": {
+        "nodes": [],
+        "edges": []
+      }
+    },
+    "barrier": {
+      "name": "护盾",
+      "detail": "护盾余量 {value}（剩 {turns} 刻）",
+      "desc": "受到的伤害先消耗护盾余量（按施加顺序），可被净化驱散。",
+      "dispellable": true,
+      "stack": "refresh",
+      "expire": "ticks",
+      "event": "barrier_gain",
+      "params": {
+        "value": {
+          "fmt": "num",
+          "clamp": [
+            0,
+            null
+          ],
+          "link": true,
+          "unit": "hp",
+          "default": 500
+        },
+        "turns": {
+          "fmt": "turns",
+          "clamp": [
+            1,
+            20
+          ],
+          "link": true,
+          "default": 3
+        }
+      },
+      "mods": [
+        {
+          "kind": "shield",
+          "value": "$value"
+        }
+      ],
       "effects": {
         "nodes": [],
         "edges": []

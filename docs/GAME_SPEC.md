@@ -235,15 +235,19 @@ flowchart LR
 - **trigger 触发**（9 种钩子）：battle_start / action_interrupt / action_start /
   before_attack / on_attack / on_defend / on_hit_landed / on_hit_taken / after_action；
 - **condition 条件**（9 种，出边带 gate: pass/fail 构成**分支**）：chance /
-  self_hp_below / self_hp_above / target_hp_below / target_hp_above /
-  has_status / no_status / once_per_battle / last_crit；
-- **op 原子**（11 种最小原子）：strike（攻击：目标/倍率/真伤/穿透/暴击加成/
-  必中/追加·替换·附加/基准）、hit_mod（修饰本次攻击）、taken_mod（减免所受）、
-  grant_immune（完全免疫）、stat_mod（属性永久 ±）、hp_mod（体力治疗/流失）、
-  gauge_mod（行动槽）、apply_status（施加状态，唯一状态入口）、cleanse（驱散）、
-  record（记录所受伤害/吸血量）、skip_action（吞行动）；
-- **struct 结构**（loop **循环**：第 1 轮必定执行，第 i 轮按 decay^(i-1)
-  续链，至多 max 轮）。
+  **compare（比较值与值**：左右各取 14 种值源——自身/敌方 × 生命比例、攻、
+  防、速、暴击、闪避、行动槽比例，右值可 const 固定值；运算 < ≤ > ≥）/
+  stacks_cmp（层数比较）/ has_status / no_status / has_marker / no_marker /
+  once_per_battle / last_crit；
+- **op 原子**（13 个最小原子）：strike（攻击：目标/倍率/真伤/穿透/暴击加成/
+  必中/追加·替换·附加/基准/lifesteal 吸血）、hit_mod（修饰本次攻击）、
+  taken_mod（减免所受）、grant_immune（完全免疫）、stat_mod（属性永久 ±）、
+  hp_mod（体力治疗/流失，基准含 curhp 当前生命）、gauge_mod（行动槽）、
+  apply_status（施加状态，唯一状态入口）、cleanse（驱散）、
+  record（记录所受伤害/吸血量）、skip_action（吞行动）、
+  marker（标记设置/清除）、status_ctl（状态操控：延长/缩短/叠层/清除）；
+- **struct 结构**（loop **循环**：mode=chain 第 1 轮必定执行、第 i 轮按
+  decay^(i-1) 续链；mode=count 固定 max 轮不掷骰）。
 
 执行顺序 = 技能派生顺序 × 触发节点数组顺序 × 边数组顺序（pass 组先于
 fail 组）× loop 轮次（改变即 breaking）。
@@ -484,9 +488,10 @@ dmg    = 取整一次( max( 100, raw × (1 − 免伤率) ) )
     `lethal`（致命伤害按衰减概率重生——不屈，引擎级死亡拦截）；
   - `params`：数值参数规格（施加时以 apply_status 参数覆盖默认值，
     个性化 / 共鸣即作用于此；持续参数统一命名 `turns`）；
-  - `mods`：被动修饰表（8 种 kind：dmg_out_pct 增伤 / dmg_in_cut_pct 减伤
+  - `mods`：被动修饰表（10 种 kind：dmg_out_pct 增伤 / dmg_in_cut_pct 减伤
     （总量钳 guard_reduction_cap）/ atk_pct · spd_pct 乘区 / atk_flat · spd_flat
-    加值 / def_break 破甲 / lifesteal_pct 吸血（可 record 吸血量）），
+    加值 / def_break 破甲 / lifesteal_pct 吸血（可 record 吸血量）/
+    shield 护盾池——受击先按施加顺序消耗护盾余量（示例状态 barrier）），
     引擎在攻防聚合点按施加顺序聚合；
   - `effects`：**状态效果图**（与技能图同格式，钩子为 5 个状态钩子：
     on_status_apply / on_status_tick / on_owner_action / on_owner_action_consume

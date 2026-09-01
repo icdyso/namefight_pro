@@ -59,6 +59,10 @@ STATS_KEYS_USED = frozenset(
     | {"hook_" + h for h in effects.HOOKS}
     | {"cond_" + c for c in effects.CONDITIONS}
     | {"op_" + o for o in effects.OPS if o != "apply_status"}
+    # compare 条件的值源 / 运算词（数据驱动于 stats）
+    | {"cmp_" + op for op in effects.CMP_OPS}
+    | {"cmp_" + src for src in effects.CMP_SOURCES}
+    | {"cmp_const"}
 )
 
 # 对战实时技能数据的占位符：live 文本中每个共鸣数值位 = 该标记 + 槽位序号，
@@ -509,6 +513,27 @@ def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
             and str(disp.get("basis", "none")) != "none":
         out["basis_word"] = str(game.stats.get(
             "lbl_basis_" + str(disp.get("basis")), disp.get("basis")))
+    if node.get("kind") == "condition" and node.get("type") == "compare":
+        # compare 条件：值源与运算替换为显示词（「自身生命比例 ≤ 33%」）
+        stats_words = game.stats
+        for key in ("left", "right"):
+            src = str(disp.get(key, ""))
+            word = stats_words.get("cmp_" + src, src)
+            out[key] = (word + " " + out.get("value", "")) \
+                if src == "const" and key == "right" else word
+        out["op"] = str(stats_words.get("cmp_" + str(disp.get("op", "ge")),
+                                        disp.get("op", "ge")))
+    if node.get("kind") == "condition" and node.get("type") == "stacks_cmp":
+        sid = str(disp.get("status", ""))
+        out["status"] = str(game.statuses.get(sid, {}).get("name", sid))
+        out["op"] = str(game.stats.get("cmp_" + str(disp.get("op", "ge")),
+                                        disp.get("op", "ge")))
+    if node.get("kind") == "struct" and node.get("type") == "loop":
+        # loop 的模式词：chain 带 {decay} 展示位（共鸣注入由 render 重建）
+        mode = str(disp.get("mode", "chain"))
+        tmpl = str(game.stats.get("cmp_mode_" + mode, ""))
+        decay = out.get("decay", format_field(disp.get("decay", 0.9), "pct"))
+        out["mode_word"] = tmpl.replace("{decay}", str(decay))
     return out
 
 
@@ -622,6 +647,17 @@ def _natural_text(pgraph: dict, fighter: Fighter, game: GameCfg,
             # hp_mod 的比例基准参数在模板中以 {value} 位展示（见 _clause_params）
             if node.get("type") == "hp_mod" and param == "ratio":
                 params["value"] = params[param]
+            # compare 条件的固定值并入 {right} 显示位（「常数 33%」）
+            if node.get("kind") == "condition" and node.get("type") == "compare" \
+                    and param == "value":
+                params["right"] = str(game.stats.get("cmp_const", "常数")) \
+                    + " " + str(params[param])
+            # loop 的衰减参数并入 {mode_word} 显示位
+            if node.get("kind") == "struct" and node.get("type") == "loop" \
+                    and param == "decay":
+                tmpl = str(game.stats.get("cmp_mode_" +
+                           str(node.get("params", {}).get("mode", "chain")), ""))
+                params["mode_word"] = tmpl.replace("{decay}", str(params[param]))
             if tail:
                 tails.append(tail)
         key = _node_clause(node, disp, game)

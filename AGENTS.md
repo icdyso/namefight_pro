@@ -99,13 +99,15 @@ namefight_pro/
 
 ## 6. 设计备忘（现行规则速查）
 
-- **技能图模型（v3.0.0 最小原子）**：技能逻辑 = 节点图 `{nodes, edges}`，四类
-  节点——trigger（9 钩子）、condition（9 种，出边 gate: pass/fail 构成**分支**）、
-  op（**11 个最小原子**：strike / hit_mod / taken_mod / grant_immune / stat_mod /
-  hp_mod / gauge_mod / apply_status / cleanse / record / skip_action）、struct
-  （**loop 循环**：第 1 轮必定执行，第 i 轮按 decay^(i-1) 续链）；注册表与参数
-  规格在 `namefight/effects.py`，执行顺序 = 技能派生顺序 × 触发节点数组顺序 ×
-  边数组顺序（pass 组先于 fail 组）× loop 轮次（**改变即 breaking**）。
+- **技能图模型（v3.1.0 最小原子）**：技能逻辑 = 节点图 `{nodes, edges}`，四类
+  节点——trigger（9 钩子）、condition（9 种，出边 gate: pass/fail 构成**分支**；
+  compare 为通用「比较值与值」，14 种值源 × 4 种运算）、
+  op（**13 个最小原子**：strike / hit_mod / taken_mod / grant_immune / stat_mod /
+  hp_mod / gauge_mod / apply_status / cleanse / record / skip_action /
+  marker / status_ctl）、struct（**loop 循环**：chain 衰减续链 / count 固定
+  次数）；注册表与参数规格在 `namefight/effects.py`，执行顺序 = 技能派生顺序 ×
+  触发节点数组顺序 × 边数组顺序（pass 组先于 fail 组）× loop 轮次
+  （**改变即 breaking**）。
 - **状态系统（v3.0.0）**：运行时容器 `_Combatant.st`（通用字段 params/stacks/
   expires/layers/next/actions/records/total/links）+ `markers`；定义数据化于
   `battle.json` 的 `statuses`——策略字段（stack/expire/interval/reset_on_miss/

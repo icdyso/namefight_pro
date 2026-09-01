@@ -60,7 +60,7 @@ TEMPLATES_USED = frozenset({
     "immune", "guard_stack", "grudge_stack", "tempo_stack", "lifesteal_buff",
     "shred_apply", "bleed_apply", "overload_cost", "gamble_win", "gamble_lose",
     "streak_up", "effect_bulwark", "retribution_record", "retribution_release",
-    "effect_execution", "turn_stun",
+    "effect_execution", "turn_stun", "shield_absorb",
 })
 
 # 「使用了技能」行的输出挂点（其余挂点的效果以自身专属事件表达）
@@ -150,8 +150,28 @@ def _live_value(c: _Combatant, vid: str, game: GameCfg, tick: int = 0) -> float:
 
 
 def _hurt(c: _Combatant, amount: float, ev, rng, game: GameCfg, tick: int = 0) -> None:
-    """扣除生命；若致命且任一含 lethal 块的状态（不屈类）仍可触发，按施加
-    顺序取第一个判定：成功则回复一定百分比最大生命，且概率指数衰减。"""
+    """扣除生命（先按施加顺序消耗护盾类修饰的余量池）；若致命且任一含
+    lethal 块的状态（不屈类）仍可触发，按施加顺序取第一个判定：成功则
+    回复一定百分比最大生命，且概率指数衰减。"""
+    if amount > 0:
+        absorbed = 0.0
+        for sid, st, sdef in statuses.each_live(c, game, tick):
+            for m in sdef.get("mods") or ():
+                if m.get("kind") != "shield":
+                    continue
+                pool_key = m.get("pool", "value")
+                pool = float(st["params"].get(pool_key, 0.0) or 0.0)
+                if pool <= 0 or amount <= 0:
+                    continue
+                take = min(amount, pool)
+                st["params"][pool_key] = pool - take
+                amount -= take
+                absorbed += take
+        if absorbed > 0:
+            ev("shield_absorb", {"a": c.name, "damage": format_num(_r(absorbed)),
+                                 "value": format_num(_r(absorbed))})
+        if amount <= 0:
+            return
     c.hp -= amount
     for sid, st, sdef in statuses.each_live(c, game, tick):
         lethal = sdef.get("lethal")
@@ -331,6 +351,34 @@ def _emit_link_events(ctx: _Ctx, node: dict, proc: dict):
         })
 
 
+def _cmp_source(ctx: _Ctx, source: str) -> float:
+    """compare 条件的值源取值：id 形如 "self.hp_pct" / "enemy.atk"。
+    比例类（hp_pct / gauge_pct / crit / dodge）为 0~1 分数，
+    绝对值类（atk / def / spd）为引擎真实值（含被动修饰）。"""
+    who, what = str(source).split(".", 1)
+    c = ctx.owner if who == "self" else ctx.opponent
+    if what == "hp_pct":
+        return max(0.0, c.hp) / c.max_hp
+    if what == "gauge_pct":
+        return c.gauge / ctx.game.battle.gauge_threshold
+    if what == "crit":
+        return c.crit / 100.0
+    if what == "dodge":
+        return c.dodge / 100.0
+    return float(_live_value(c, what, ctx.game, ctx.tick))
+
+
+def _cmp(op: str, a: float, b: float) -> bool:
+    """四则比较运算（lt / le / gt / ge）。"""
+    if op == "lt":
+        return a < b
+    if op == "le":
+        return a <= b
+    if op == "gt":
+        return a > b
+    return a >= b
+
+
 def _cond_pass(node: dict, ctx: _Ctx, proc: dict) -> bool:
     """条件判定（判断）：返回走哪一组成员（pass / fail 分支）。"""
     t = node["type"]
@@ -338,14 +386,18 @@ def _cond_pass(node: dict, ctx: _Ctx, proc: dict) -> bool:
     game, tick = ctx.game, ctx.tick
     if t == "chance":
         return not (ctx.rng.next_float() > float(proc.get("chance", 1.0)))
-    if t == "self_hp_below":
-        return owner.hp < owner.max_hp * float(proc.get("threshold", 0.0))
-    if t == "self_hp_above":
-        return owner.hp >= owner.max_hp * float(proc.get("threshold", 0.0))
-    if t == "target_hp_below":
-        return opp.hp <= opp.max_hp * float(proc.get("threshold", 0.0))
-    if t == "target_hp_above":
-        return opp.hp > opp.max_hp * float(proc.get("threshold", 0.0))
+    if t == "compare":
+        left = _cmp_source(ctx, proc.get("left", "self.hp_pct"))
+        right = (float(proc.get("value", 0.0))
+                 if str(proc.get("right")) == "const"
+                 else _cmp_source(ctx, proc.get("right", "enemy.hp_pct")))
+        return _cmp(str(proc.get("op", "ge")), left, right)
+    if t == "stacks_cmp":
+        target = owner if str(proc.get("target", "self")) == "self" else opp
+        sid = str(proc.get("status"))
+        n = statuses.live_stacks(target, sid, tick, game.statuses.get(sid, {}))
+        return _cmp(str(proc.get("op", "ge")), float(n),
+                    float(proc.get("value", 0.0)))
     if t == "has_status":
         sid = str(proc.get("status"))
         sdef = game.statuses.get(sid, {})
@@ -354,6 +406,10 @@ def _cond_pass(node: dict, ctx: _Ctx, proc: dict) -> bool:
         sid = str(proc.get("status"))
         sdef = game.statuses.get(sid, {})
         return not statuses.live(owner, sid, tick, sdef)
+    if t == "has_marker":
+        return ("mk:" + str(proc.get("key"))) in owner.markers
+    if t == "no_marker":
+        return ("mk:" + str(proc.get("key"))) not in owner.markers
     if t == "once_per_battle":
         marker = "once:" + str(proc.get("key"))
         if marker in owner.markers:
@@ -399,9 +455,12 @@ def _run_tree(tree, ctx: _Ctx):
     if node["kind"] == "struct":                    # 循环结构（loop）
         proc = _proc_params(node, ctx)
         max_rounds = max(1, int(proc.get("max", 1)))
+        mode = str(proc.get("mode", "chain"))
         decay = float(proc.get("decay", 0.9))
         for i in range(1, max_rounds + 1):
-            if i > 1 and ctx.rng.next_float() >= decay ** (i - 1):
+            # chain：首轮必中、后续按 decay^(i-1) 续链；count：固定轮数不掷骰
+            if mode == "chain" and i > 1 \
+                    and ctx.rng.next_float() >= decay ** (i - 1):
                 break
             ctx.loop_i = i
             for _gate, child in children:
@@ -565,6 +624,14 @@ def _op_strike(ctx, proc):
             "mult": format_pct(mult), "crit": format_pct(crit_bonus),
             "hit": ctx.loop_i})
         _apply_lifesteal(owner, dmg, ev, game, ctx.tick)
+        lifesteal = float(proc.get("lifesteal", 0.0))   # 本次攻击的专属吸血
+        if lifesteal > 0 and owner.hp > 0:
+            gained = _r(min(dmg * lifesteal, owner.max_hp - owner.hp))
+            if gained > 0:
+                owner.hp += gained
+                owner.steal_rec += gained
+                ev("effect_lifesteal", {"a": owner.name,
+                                        "heal": format_num(gained)})
         _hit_reactions(owner, target, dmg, crit, game, rng, ev, ctx.tick)
     if mode == "replace" and ctx.ac is not None:
         ctx.ac["replaced"] = True     # 标记替换本次攻击（攻击管线查验）
@@ -663,6 +730,8 @@ def _op_hp_mod(ctx, proc):
     ratio = float(proc.get("ratio", 0.0))          # 比例基准的系数
     if basis == "maxhp":
         amount = target.max_hp * ratio
+    elif basis == "curhp":
+        amount = target.hp * ratio
     elif basis == "applier_atk":
         applier = ctx.status[1]["applier"] if ctx.status else ctx.owner
         amount = _eff_atk(applier, game, ctx.tick) * game.battle.atk_factor * ratio
@@ -825,6 +894,59 @@ def _op_record(ctx, proc):
     return None
 
 
+def _op_marker(ctx, proc):
+    """marker：标记设置 / 清除（has_marker / no_marker 条件的判据；
+    前缀 mk: 与一次性 / 不屈的内部标记隔离）。"""
+    key = "mk:" + str(proc.get("key"))
+    if str(proc.get("action", "set")) == "clear":
+        ctx.owner.markers.discard(key)
+    else:
+        ctx.owner.markers.add(key)
+    return None
+
+
+def _op_status_ctl(ctx, proc):
+    """status_ctl：状态操控——extend / shorten 延长或缩短在场刻数
+    （layers 模式平移各层到期），stacks 增减层数（count 模式，可负），
+    clear 强制清除（无视 dispellable）。"""
+    game = ctx.game
+    target = ctx.owner if str(proc.get("target", "self")) == "self" \
+        else ctx.opponent
+    sid = str(proc.get("status"))
+    sdef = game.statuses.get(sid, {})
+    st = target.st.get(sid)
+    if st is None or not statuses.live(target, sid, ctx.tick, sdef):
+        return None                      # 不在场：无可操控
+    op = str(proc.get("op", "extend"))
+    value = _r(float(proc.get("value", 0.0)))
+    if op == "extend":
+        if sdef.get("stack") == "layers":
+            st["layers"] = [t + max(0, int(value)) for t in st["layers"]]
+        else:
+            st["expires"] += max(0, int(value))
+    elif op == "shorten":
+        if sdef.get("stack") == "layers":
+            st["layers"] = [t - max(0, int(value)) for t in st["layers"]]
+        else:
+            st["expires"] -= max(0, int(value))
+    elif op == "stacks":
+        cap = int(st["params"].get("max_stacks", sdef.get("max_stacks", 0)) or 0)
+        st["stacks"] = max(0, st["stacks"] + int(value))
+        if cap > 0:
+            st["stacks"] = min(cap, st["stacks"])
+    elif op == "clear":
+        st["expires"] = 0
+        st["layers"] = []
+        st["stacks"] = 0
+        st["actions"] = 0
+        st["records"] = []
+    event = proc.get("event")
+    if event:
+        ctx.ev(str(event), {"a": ctx.owner.name, "b": target.name,
+                            "value": format_num(value)})
+    return None
+
+
 _OP_IMPL = {
     "strike": _op_strike,
     "hit_mod": _op_hit_mod,
@@ -837,6 +959,8 @@ _OP_IMPL = {
     "cleanse": _op_cleanse,
     "skip_action": _op_skip_action,
     "record": _op_record,
+    "marker": _op_marker,
+    "status_ctl": _op_status_ctl,
 }
 
 _STRUCT_IMPL = ("loop",)   # 结构节点（loop）在 _run_tree 内联执行
