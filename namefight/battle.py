@@ -27,7 +27,10 @@ tick 战斗模型：
   （rich），前端据此实时渲染 HUD 与着色战报；
 - v1.2.1 起战报中的角色名一律为「【称号】名字」（_Combatant.name），
   受击方剩余生命不再以「（X 剩余 N）」文本呈现，改由前端在角色名头顶
-  渲染无数字的简易血条（蓝=当前生命、红=本次损失、绿=本次回复、灰=空）。
+  渲染无数字的简易血条（白=当前生命、红=本次损失、绿=本次回复、灰=空）。
+- v1.3.0 起 charge/armor_pen 的暴击加成（crit 字段）以百分数分数存储与展示
+  （如 0.06 -> +6.00%），共鸣上下限同口径；record=False 时不记录战报条目
+  （真战力批量模拟用，随机数消耗与胜负和 record=True 完全一致）。
 """
 from __future__ import annotations
 
@@ -394,9 +397,10 @@ def _emit_link_events(actor, eff, proc, ev):
 
 
 def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
-               snapshots: bool = True) -> BattleOutcome:
+               snapshots: bool = True, record: bool = True) -> BattleOutcome:
     """运行一场对战。snapshots=False 时不为战报条目附带状态快照（极速模式，
-    供 /api/battle/fast 使用；胜负与事件序列与快照模式完全一致）。"""
+    供 /api/battle/fast 使用）；record=False 时不记录任何战报条目（真战力
+    批量模拟使用，随机数消耗、胜负与事件外的全部结算完全一致）。"""
     bc = game.battle
     combatants = [_make_combatant(f, pos, game)
                   for pos, f in enumerate((fighter_a, fighter_b))]
@@ -414,6 +418,8 @@ def run_battle(fighter_a: Fighter, fighter_b: Fighter, game: GameCfg,
 
     def ev(template, params=None):
         nonlocal last_logged_tick
+        if not record:
+            return
         state = _snapshot(combatants, bc.gauge_threshold, tick) if snapshots else None
         if tick != last_logged_tick:
             marker = {"tick": tick, "template": "tick_marker",
@@ -844,8 +850,10 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
         mult = float(proc.get("value", 3.0))
         crit_bonus = float(proc.get("crit", 0.0))
         ev("charge_release", {"a": actor.name, "mult": format_pct(mult),
-                              "crit": format_num(crit_bonus)})
-        crit = rng.next_float() < min(bc.crit_cap, actor.crit + crit_bonus) / 100.0
+                              "crit": format_pct(crit_bonus)})
+        # v1.3.0：charge 的 crit 为百分数分数（0.25 = +25%），与属性口径一致
+        crit = rng.next_float() < min(bc.crit_cap / 100.0,
+                                      actor.crit / 100.0 + crit_bonus)
         if crit:
             ev("attack_crit", {})
         dmg = _compute_damage(actor, enemy, mult, crit, game, rng)
@@ -984,7 +992,9 @@ def _attack(actor, enemy, game: GameCfg, rng, ev, tick: int):
                 break
         return
 
-    crit = rng.next_float() < min(bc.crit_cap, actor.crit + crit_flat) / 100.0
+    # v1.3.0：armor_pen 的 crit 为百分数分数（0.06 = +6%）
+    crit = rng.next_float() < min(bc.crit_cap / 100.0,
+                                  actor.crit / 100.0 + crit_flat)
     if crit:
         ev("attack_crit", {})
     dmg = _compute_damage(actor, enemy, mult, crit, game, rng, pen=pen)

@@ -61,7 +61,7 @@ LIVE_MARKER = "\x01"
 _TURNS = ("turns", 1, 20)
 RESONANCE_SPECS = {
     ("charge", "value"): ("pct", 0.5, 8.0),
-    ("charge", "crit"): ("num", 0.0, 200.0),
+    ("charge", "crit"): ("pct", 0.0, 1.0),
     ("damage_multiplier", "value"): ("pct", 0.1, 6.0),
     ("damage_multiplier", "threshold"): ("pct", 0.05, 0.9),
     ("lifesteal", "value"): ("pct", 0.05, 1.5),
@@ -104,7 +104,7 @@ RESONANCE_SPECS = {
     ("gamble", "penalty"): ("pct", 0.1, 1.0),
     ("tempo", "value"): ("num", 0.0, None),
     ("tempo", "atk"): ("num", 0.0, None),
-    ("armor_pen", "crit"): ("num", 0.0, 200.0),
+    ("armor_pen", "crit"): ("pct", 0.0, 1.0),
     ("blood_pact", "value"): ("pct", 0.05, 1.5),
     ("blood_pact", "convert"): ("pct", 0.05, 2.0),
     ("grudge", "value"): ("pct", 0.005, 0.3),
@@ -460,7 +460,7 @@ def _nat_params(display_eff: dict, game: GameCfg):
         return "nat_charge", {
             "chance": format_pct(chance),
             "value": format_pct(float(display_eff.get("value", 1.0))),
-            "crit": format_num(float(display_eff.get("crit", 0)))}
+            "crit": format_pct(float(display_eff.get("crit", 0)))}
     if ttype == "damage_multiplier":
         return "nat_execution", {
             "chance": format_pct(chance),
@@ -573,7 +573,7 @@ def _nat_params(display_eff: dict, game: GameCfg):
     if ttype == "armor_pen":
         return "nat_armor_pen", {
             "chance": format_pct(chance),
-            "crit": format_num(float(display_eff.get("crit", 0)))}
+            "crit": format_pct(float(display_eff.get("crit", 0)))}
     if ttype == "blood_pact":
         return "nat_blood_pact", {
             "chance": format_pct(chance),

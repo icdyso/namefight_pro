@@ -745,6 +745,15 @@
         "def": 150,
         "spd": -100
       }
+    },
+    {
+      "id": "new_title_73",
+      "name": "普通的",
+      "desc": "普普通通",
+      "weight": 5,
+      "bonus": {
+        "atk": 100
+      }
     }
   ],
   "cores": [

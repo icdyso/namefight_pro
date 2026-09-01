@@ -351,7 +351,7 @@
         "type": "charge",
         "chance": 0.14,
         "value": 2.2,
-        "crit": 25
+        "crit": 0.25
       }
     },
     {
@@ -730,7 +730,7 @@
       "effect": {
         "type": "armor_pen",
         "chance": 0.42,
-        "crit": 6
+        "crit": 0.06
       }
     },
     {

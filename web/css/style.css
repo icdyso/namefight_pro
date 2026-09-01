@@ -202,14 +202,14 @@ body {
 .log-entry .sk { font-weight: 800; }
 .log-entry .dmg { color: #ff8598; font-weight: 400; }
 .log-entry .heal { color: #5fd98f; font-weight: 400; }
-/* 角色名头顶血条（v1.2.1）：蓝=当前生命 红=本次掉血 绿=本次回血 灰=空，无数字 */
+/* 角色名头顶血条（v1.2.1，v1.3.0 当前段改白）：白=当前生命 红=本次掉血 绿=本次回血 灰=空，无数字 */
 .log-entry .nmw { display: inline-flex; flex-direction: column; align-items: center; vertical-align: bottom; padding: 0 1px; }
 .log-entry .nm-hp {
   display: flex; width: 72px; height: 4px; border-radius: 2px; overflow: hidden;
   background: rgba(140, 148, 176, .35); margin-bottom: 2px;
 }
 .log-entry .nm-hp i { height: 100%; flex: none; }
-.log-entry .nm-hp .hp-cur { background: var(--blue); }
+.log-entry .nm-hp .hp-cur { background: #f5f7ff; }
 .log-entry .nm-hp .hp-loss { background: var(--red); }
 .log-entry .nm-hp .hp-gain { background: var(--green); }
 .log-desc { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 2px; }
@@ -232,6 +232,31 @@ body {
 
 /* ---------- 页脚 / 提示 ---------- */
 .app-footer { margin-top: 34px; text-align: center; color: var(--muted); font-size: 12.5px; line-height: 2; }
+
+/* ---------- 真战力试炼页（v1.3.0，/power.html） ---------- */
+.power-panel { display: flex; gap: 12px; justify-content: center; align-items: center; }
+.power-panel .power-input { max-width: 320px; }
+.power-result { max-width: 640px; margin: 26px auto 0; }
+.power-waiting, .power-error { text-align: center; color: var(--muted); padding: 26px 0; }
+.power-error { color: var(--red); }
+.power-fighter { text-align: center; margin-bottom: 16px; font-size: 18px; }
+.power-fighter-title { color: var(--gold); margin-right: 6px; }
+.power-fighter-name { font-weight: 800; }
+.power-cards { display: flex; gap: 16px; justify-content: center; }
+.power-card {
+  flex: 1; max-width: 280px; border-radius: var(--radius); padding: 20px 16px;
+  text-align: center; border: 1px solid var(--line); background: var(--panel);
+}
+.power-card.true { border-color: rgba(240, 198, 116, .45); }
+.power-card-label { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.power-card .power-card-value { font-size: 40px; font-weight: 900; color: var(--gold); }
+.power-card.panel .power-card-value { color: var(--text); }
+.power-summary { text-align: center; margin-top: 16px; font-size: 15px; }
+.power-elapsed { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+.power-note {
+  margin-top: 14px; color: var(--muted); font-size: 12.5px; line-height: 1.8;
+  border-top: 1px solid var(--line); padding-top: 12px;
+}
 .toast {
   position: fixed; top: 18px; left: 50%; z-index: 50;
   transform: translateX(-50%) translateY(-90px);

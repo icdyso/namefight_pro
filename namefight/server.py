@@ -17,6 +17,7 @@ from .battle import battle_to_api, run_battle
 from .config import (CONFIG_FILES, ConfigError, load_game_config,
                      load_game_config_from_data, save_game_config)
 from .fighter import InvalidName, derive_fighter, fighter_to_api
+from .power import measure_true_power
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _WEB_ROOT = _REPO_ROOT / "web"
@@ -118,7 +119,7 @@ def make_handler(state: AppState):
 
         def do_POST(self):
             path = unquote(urlsplit(self.path).path)
-            if path not in ("/api/battle", "/api/battle/fast",
+            if path not in ("/api/battle", "/api/battle/fast", "/api/power",
                             "/api/config/preview", "/api/config/save"):
                 self._send_error_json("not_found", 404)
                 return
@@ -137,6 +138,8 @@ def make_handler(state: AppState):
                     self._api_battle(payload)
                 elif path == "/api/battle/fast":
                     self._api_battle_fast(payload)
+                elif path == "/api/power":
+                    self._api_power(payload)
                 elif path == "/api/config/preview":
                     self._api_config_preview(payload)
                 else:
@@ -246,6 +249,33 @@ def make_handler(state: AppState):
             self._send_json({"results": results, "runs": runs,
                              "elapsed_ms": elapsed_ms,
                              "version": game.system.version})
+
+        def _api_power(self, payload):
+            """真战力测量（v1.3.0）：与 N 个固定编号敌人（"1".."N"）各打一场，
+            胜场数即真战力；同时返回现行面板战力，两套并行显示。
+            body: {"name": "...", "count": 可选覆盖敌人数}。"""
+            game = state.game
+            if not isinstance(payload, dict) or not isinstance(payload.get("name"), str):
+                self._send_error_json("bad_request", 400)
+                raise _Handled()
+            count = payload.get("count")
+            if count is not None and (not isinstance(count, int)
+                                      or not 1 <= count <= 1000000):
+                self._send_error_json("bad_request", 400)
+                raise _Handled()
+            fighter, wins, elapsed = measure_true_power(payload["name"], game, count)
+            api = fighter_to_api(fighter, game)
+            total = int(count or game.battle.power_enemies)
+            self._send_json({
+                "name": api["name"],
+                "title": api["title"],
+                "power": api["power"],
+                "true_power": wins,
+                "total": total,
+                "rate": round(wins / total, 4),
+                "elapsed_ms": round(elapsed * 1000),
+                "version": game.system.version,
+            })
 
         # ---------- 创意工坊（v1.0.0） ----------
 

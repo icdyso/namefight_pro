@@ -12,6 +12,9 @@
   "crit_cap": 100,
   "dodge_cap": 80,
   "seed_separator": "-",
+  "power_check": {
+    "enemies": 10000
+  },
   "playback": {
     "message_delay_ms": 320,
     "action_pause_every": 5,

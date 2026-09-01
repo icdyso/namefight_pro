@@ -379,6 +379,7 @@
       NF.h("div", { class: "lang-row" },
         NF.h("label", { class: "simple-toggle", title: t("simple_mode_title") },
           simpleBox, NF.h("span", null, t("simple_mode_label"))),
+        NF.h("a", { class: "lang-btn", href: "/power.html" }, t("power_link")),
         NF.h("a", { class: "lang-btn", href: "/workshop.html" }, t("workshop_link"))),
       NF.h("h1", { class: "app-title" }, t("app_title")),
       NF.h("p", { class: "app-subtitle" }, t("app_subtitle"))
@@ -754,7 +755,7 @@
    * 后端为每条战报提供 rich 段列表：阵营名（红/蓝加粗）、技能名（各自配色
    * 加粗）、伤害（红）、治疗（绿）、普通文本；技能使用行后附个性化描述。
    * v1.2.1 起角色名自带【称号】，且名字头顶挂一条无数字的简易血条：
-   * 蓝=当前生命，红=本次掉血，绿=本次回血，灰=空。
+   * 白=当前生命，红=本次掉血，绿=本次回血，灰=空。
    * 血条数据 = 本条战报快照与上一条快照的生命差值（逐条/跳过/递进模式一致）。 */
 
   function nameWidget(text, colorClass, hp) {
@@ -763,10 +764,10 @@
       var cur = Math.max(0, Math.min(hp.cur, hp.max));
       var prev = Math.max(0, Math.min(hp.prev, hp.max));
       var pct = function (v) { return (v / hp.max * 100) + "%"; };
-      if (cur < prev) {          // 掉血：蓝=剩余，红=本次损失
+      if (cur < prev) {          // 掉血：白=剩余，红=本次损失
         bar.appendChild(NF.h("i", { class: "hp-cur", style: { width: pct(cur) } }));
         bar.appendChild(NF.h("i", { class: "hp-loss", style: { width: pct(prev - cur) } }));
-      } else if (cur > prev) {   // 回血：蓝=原有，绿=本次回复
+      } else if (cur > prev) {   // 回血：白=原有，绿=本次回复
         bar.appendChild(NF.h("i", { class: "hp-cur", style: { width: pct(prev) } }));
         bar.appendChild(NF.h("i", { class: "hp-gain", style: { width: pct(cur - prev) } }));
       } else {

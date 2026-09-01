@@ -74,9 +74,9 @@
 ```
 namefight_pro/
 ├── server.py                 # 启动入口
-├── namefight/                # 后端：rng / config / fighter / battle / text / server
+├── namefight/                # 后端：rng / config / fighter / battle / text / power / server
 ├── config/game/              # 六个配置 JSON（数值 + 文案同条目，单语言）
-├── web/                      # 前端：index.html + workshop.html + css + js(app/framework/workshop)
+├── web/                      # 前端：index + power + workshop 三页 + css + js(app/framework/power/workshop)
 ├── tests/                    # unittest（test_determinism 核心不变量 / test_config 完整性）
 ├── tools/balance_check.py    # 技能平衡蒙特卡洛（固定种子）
 └── docs/                     # GAME_SPEC.md 规则手册 + updates/ 更新文档 + title_candidates.md 称号候选库
@@ -86,8 +86,8 @@ namefight_pro/
 
 - 启动：`python server.py [--host 127.0.0.1] [--port 8000]`；创意工坊：`/workshop.html`。
 - API：`GET /api/health`、`GET /api/text`、`GET /api/fighter?name=`、
-  `POST /api/battle`、`POST /api/battle/fast`、`GET /api/config`、
-  `POST /api/config/preview`、`POST /api/config/save`（工坊保存 + 热重载）。
+  `POST /api/battle`、`POST /api/battle/fast`、`POST /api/power`（真战力）、
+  `GET /api/config`、`POST /api/config/preview`、`POST /api/config/save`（工坊保存 + 热重载）。
 - 错误统一 `{"error": "<code>"}` + 4xx/5xx。
 
 ## 6. 设计备忘（现行规则速查）
@@ -107,9 +107,14 @@ namefight_pro/
   连接符空串直拼）；字段自带 desc 与 bonus（最多三种属性、可负、与属性同量纲）。
   候选词条库：`docs/title_candidates.md`（500 前缀 + 500 主体，筛选后手动并入）。
 - **战报角色名**一律为「【称号】名字」（`_Combatant.name`）；受击剩余生命不以
-  文本呈现，由前端在角色名头顶渲染**无数字简易血条**（蓝=当前、红=本次掉血、
+  文本呈现，由前端在角色名头顶渲染**无数字简易血条**（白=当前、红=本次掉血、
   绿=本次回血、灰=空）。
 - 暴击上限 100%、闪避上限 80%；真实伤害（雷罚）无视防御但吃伤害减免并触发受击反应；
   不屈意志概率 ×0.5 乘算衰减。
+- **真战力（v1.3.0）**：`/power.html` 独立页 + `POST /api/power`，与
+  `power_check.enemies`（默认 10000）个固定编号敌人（名字 "1".."N"）各打一场
+  极速对战（不生成快照、不记录战报，`run_battle(record=False)`，随机数消耗
+  与常规对战一致），**胜场数即真战力**，与现行面板战力并行显示；
+  正常对战不触发；敌人斗士按配置快照缓存于 `namefight/power.py`。
 - 回放：逐条停顿 `message_delay_ms`，每 `action_pause_every` 次行动停
   `action_pause_ms`；支持单回合递进模式与简易显示模式。

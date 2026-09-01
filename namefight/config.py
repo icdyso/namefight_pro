@@ -157,6 +157,7 @@ class BattleCfg:
     crit_cap: float           # 百分数上限
     dodge_cap: float          # 百分数上限
     seed_separator: str
+    power_enemies: int        # 真战力测量：固定编号敌人数（名字 "1".."N"）
     message_delay_ms: int     # 前端战报逐条播放的停顿时长（可配置）
     action_pause_every: int   # 普通播放模式：每 N 次角色行动插入一次较长停顿
     action_pause_ms: int      # 该较长停顿的时长（ms）
@@ -473,6 +474,7 @@ def build_game_config(data: dict) -> GameCfg:
 
     playback = battle_data.get("playback", {})
     variance = battle_data.get("variance", [1.0, 1.0])
+    power_check = battle_data.get("power_check", {})
     battle = BattleCfg(
         crit_multiplier=float(battle_data.get("crit_multiplier", 1.8)),
         variance_lo=float(variance[0]),
@@ -485,10 +487,13 @@ def build_game_config(data: dict) -> GameCfg:
         crit_cap=float(battle_data.get("crit_cap", 100)),
         dodge_cap=float(battle_data.get("dodge_cap", 60)),
         seed_separator=str(battle_data.get("seed_separator", "")),
+        power_enemies=int(power_check.get("enemies", 10000)),
         message_delay_ms=int(playback.get("message_delay_ms", 320)),
         action_pause_every=int(playback.get("action_pause_every", 5)),
         action_pause_ms=int(playback.get("action_pause_ms", 1600)),
     )
+    if not 1 <= battle.power_enemies <= 1000000:
+        raise ConfigError("power_check.enemies 必须在 [1, 1000000]")
     if battle.max_ticks < 1:
         raise ConfigError("max_ticks 必须 >= 1")
     if battle.gauge_threshold <= 0:
