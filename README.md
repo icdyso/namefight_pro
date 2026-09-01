@@ -10,7 +10,11 @@
 
 ## 快速开始
 
+**一键启动**：Windows 双击 `启动.bat`（或 `python start.py`）——自动挑空闲端口
+（默认 8123 起，被占自动顺延）、启动服务并打开浏览器。
+
 ```bash
+python start.py             # 一键：自动端口 + 打开浏览器
 python server.py            # 默认 http://127.0.0.1:8000
 python server.py --port 8000 --host 0.0.0.0
 ```

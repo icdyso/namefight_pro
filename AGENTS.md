@@ -90,7 +90,9 @@ namefight_pro/
 
 ## 5. 运行与 API
 
-- 启动：`python server.py [--host 127.0.0.1] [--port 8000]`；可视化编辑器：`/editor.html`。
+- 启动：`python start.py`（一键：自动挑空闲端口 + 打开浏览器，Windows 可双击
+  `启动.bat`）或 `python server.py [--host 127.0.0.1] [--port 8000]`；
+  可视化编辑器：`/editor.html`。
 - API：`GET /api/health`、`GET /api/text`、`GET /api/fighter?name=`、
   `POST /api/battle`、`POST /api/battle/fast`、`POST /api/power`（真战力）、
   `GET /api/schema`（引擎自描述，编辑器表单驱动源）、
