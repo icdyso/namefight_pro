@@ -155,18 +155,18 @@ CONDITIONS = dict([
     _cond("compare", [P("left", "enum", options=CMP_SOURCES),
                       P("op", "enum", options=CMP_OPS),
                       P("right", "enum", options=CMP_RIGHT),
-                      _pct("value", (0.0, 1.0), link=True, required=False,
+                      _pct("value", (0.0, 1.0), required=False,
                            show_if=("right", ("const",)))]),
     # stacks_cmp：某状态在己方/敌方身上的在场层数与固定值比较
     _cond("stacks_cmp", [_st(),
                          P("target", "enum", options=("self", "enemy")),
                          P("op", "enum", options=CMP_OPS),
-                         _num("value", (0.0, None), link=True, required=False)]),
+                         _num("value", (0.0, None), required=False)]),
     _cond("has_status", [_st()]),                          # 自身在场某状态
     _cond("no_status", [_st()]),                           # 自身不在场某状态
     _cond("has_marker", [P("key", "text"),                 # 自身带有某标记
                          P("op", "enum", options=CMP_OPS, required=False),
-                         _num("count", (0.0, None), link=True, required=False,
+                         _num("count", (0.0, None), required=False,
                               show_if=("op", CMP_OPS))]),  # 层数比较（选了 op 才有）
     _cond("no_marker", [P("key", "text")]),                # 自身没有某标记（层数 0）
     _cond("once_per_battle", [P("key", "text")]),          # 每场一次（真执行才占位）

@@ -644,7 +644,7 @@
       "weight": 8,
       "mastery": [
         0.75,
-        1.35
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -705,7 +705,7 @@
       "weight": 9,
       "mastery": [
         0.8,
-        1.3
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -842,7 +842,7 @@
       "weight": 8,
       "mastery": [
         0.85,
-        1.15
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -999,7 +999,7 @@
       "weight": 7,
       "mastery": [
         0.7,
-        1.45
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -1090,7 +1090,7 @@
       "weight": 9,
       "mastery": [
         0.8,
-        1.25
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -1151,7 +1151,7 @@
       "weight": 8,
       "mastery": [
         0.7,
-        1.4
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -1250,7 +1250,7 @@
               "left": "self.hp_pct",
               "op": "ge",
               "right": "const",
-              "value": 1.0
+              "value": 0.7
             },
             "pos": [
               300,
@@ -1262,7 +1262,7 @@
             "kind": "op",
             "type": "taken_mod",
             "params": {
-              "cut": 0.5,
+              "cut": 0.35,
               "event": "effect_bulwark"
             },
             "pos": [
@@ -1322,7 +1322,7 @@
       "weight": 7,
       "mastery": [
         0.7,
-        1.45
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -1527,7 +1527,7 @@
       "weight": 8,
       "mastery": [
         0.75,
-        1.4
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -1669,7 +1669,7 @@
       "weight": 7,
       "mastery": [
         0.8,
-        1.3
+        1.5
       ],
       "mastery_on": [
         "value",
@@ -1753,7 +1753,7 @@
       "weight": 8,
       "mastery": [
         0.85,
-        1.2
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -1921,7 +1921,7 @@
       "weight": 8,
       "mastery": [
         0.75,
-        1.35
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -1983,7 +1983,7 @@
       "weight": 8,
       "mastery": [
         0.75,
-        1.35
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -2137,7 +2137,7 @@
       "weight": 7,
       "mastery": [
         0.85,
-        1.15
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -2198,7 +2198,7 @@
       "weight": 8,
       "mastery": [
         0.7,
-        1.45
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -2257,7 +2257,7 @@
       "weight": 6,
       "mastery": [
         0.7,
-        1.45
+        1.5
       ],
       "effect": {
         "nodes": [
@@ -2368,7 +2368,7 @@
       "weight": 8,
       "mastery": [
         0.75,
-        1.4
+        1.5
       ],
       "effect": {
         "nodes": [

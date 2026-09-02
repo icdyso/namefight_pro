@@ -679,8 +679,8 @@ def _link_formula(node: dict, link: dict, param: str, game: GameCfg):
     formula = render_template(tmpl.get("link_formula", ""),
                               {"base": base_display, "expr": expr, "merged": merged},
                               game)
-    if fmt == "pct":
-        formula += "%"
+    # pct 字段不再在公式括号外补尾部 %：数值位已含 %、括号内小值自带 %，
+    # 双百分号（「9.58%（7.32+🛡️*0.37%）%」）令人费解
     return formula, tail
 
 
