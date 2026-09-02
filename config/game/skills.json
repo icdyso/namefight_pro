@@ -478,7 +478,10 @@
     "fld_max": "轮数上限",
     "fld_decay": "续链概率",
     "fld_chance": "触发率",
-    "field_chance": "触发率"
+    "field_chance": "触发率",
+    "op_hp_swap": "与对方交换当前生命值（各自不超过上限）",
+    "lbl_hp_swap": "生命交换",
+    "dsc_hp_swap": "交换双方当前生命值（各自不超过自身上限）"
   },
   "skills": [
     {
@@ -2516,6 +2519,124 @@
           {
             "from": "n3",
             "to": "n4"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fate_scale",
+      "name": "命运天平",
+      "description": "天平两端，命运悄然易位。",
+      "weight": 7,
+      "mastery": [
+        0.6,
+        1.5
+      ],
+      "mastery_on": [
+        "chance"
+      ],
+      "effect": {
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "trigger",
+            "type": "on_hit_taken",
+            "params": {},
+            "pos": [
+              40,
+              60
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "condition",
+            "type": "compare",
+            "params": {
+              "left": "enemy.hp_pct",
+              "op": "gt",
+              "right": "self.hp_pct"
+            },
+            "pos": [
+              300,
+              60
+            ]
+          },
+          {
+            "id": "n2",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.095
+            },
+            "pos": [
+              560,
+              40
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "op",
+            "type": "hp_swap",
+            "params": {
+              "event": "fate_swap"
+            },
+            "pos": [
+              820,
+              40
+            ]
+          },
+          {
+            "id": "n4",
+            "kind": "condition",
+            "type": "chance",
+            "params": {
+              "chance": 0.6
+            },
+            "pos": [
+              560,
+              200
+            ]
+          },
+          {
+            "id": "n5",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "loss",
+              "basis": "flat",
+              "value": 350,
+              "floor1": true,
+              "event": "fate_cost"
+            },
+            "pos": [
+              820,
+              200
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "n0",
+            "to": "n1"
+          },
+          {
+            "from": "n1",
+            "to": "n2",
+            "gate": "pass"
+          },
+          {
+            "from": "n1",
+            "to": "n4",
+            "gate": "fail"
+          },
+          {
+            "from": "n2",
+            "to": "n3"
+          },
+          {
+            "from": "n4",
+            "to": "n5"
           }
         ]
       }

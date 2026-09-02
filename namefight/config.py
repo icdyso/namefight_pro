@@ -419,21 +419,22 @@ def build_game_config(data: dict) -> GameCfg:
                     raise ConfigError("技能 %s 的节点 %s 引用了未定义的战报模板: %s"
                                       % (s["id"], node.get("id"), ev_id))
         # 共鸣绑定覆盖表（可选）：声明即固定绑定，不再随机抽取；
-        # node 可选（节点 id），不填则命中图内首个该名可共鸣数值参数
+        # node 可选（节点 id），不填则命中图内首个该名可共鸣数值参数；
+        # variable 留空 = 禁用（该参数永不共鸣）
         resonance = []
         for r in s.get("resonance", []) or []:
-            if not isinstance(r, dict) or not r.get("param") \
-                    or not r.get("variable"):
-                raise ConfigError("技能 %s 的 resonance 条目必须含 param / variable" % s["id"])
+            if not isinstance(r, dict) or not r.get("param"):
+                raise ConfigError("技能 %s 的 resonance 条目必须含 param" % s["id"])
+            variable = str(r.get("variable", "") or "")
             rate = float(r.get("rate", 0.45))
-            if not 0.0 < rate <= 1.0:
+            if variable and not 0.0 < rate <= 1.0:
                 raise ConfigError("技能 %s 的 resonance 倍率必须在 (0, 1]" % s["id"])
             node_id = str(r.get("node", "") or "")
             if node_id and node_id not in {n.get("id") for n in s.get("effect", {}).get("nodes", [])}:
                 raise ConfigError("技能 %s 的共鸣覆盖引用了不存在的节点: %s"
                                   % (s["id"], node_id))
             resonance.append({
-                "param": str(r["param"]), "variable": str(r["variable"]),
+                "param": str(r["param"]), "variable": variable,
                 "mode": str(r.get("mode", "own")), "rate": rate,
                 "node": node_id,
             })
@@ -510,10 +511,10 @@ def build_game_config(data: dict) -> GameCfg:
     link_var_ids = {v.id for v in link_variables}
     for sk in skills:
         for r in sk.resonance:
-            if r["variable"] not in link_var_ids:
+            if r["variable"] and r["variable"] not in link_var_ids:
                 raise ConfigError("技能 %s 的共鸣覆盖引用了未定义变量: %s"
                                   % (sk.id, r["variable"]))
-            if r["mode"] not in VALID_LINK_MODES:
+            if r["variable"] and r["mode"] not in VALID_LINK_MODES:
                 raise ConfigError("技能 %s 的共鸣覆盖模式非法: %s"
                                   % (sk.id, r["mode"]))
 

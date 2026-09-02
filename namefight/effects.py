@@ -245,7 +245,7 @@ OPS = dict([
     # （maxhp 最大生命 / curhp 当前生命 / applier_atk 施加者攻击 /
     # dealt 本次造成伤害）用 ratio。
     _op("hp_mod",
-        ("on_attack", "action_start", "action_interrupt",
+        ("on_attack", "action_start", "action_interrupt", "on_hit_taken",
          "on_status_apply", "on_status_tick", "on_status_expire",
          "on_owner_action", "on_owner_attack_hit", "on_status_gain",
          "on_status_lose", "on_lethal"),
@@ -266,6 +266,11 @@ OPS = dict([
          "on_status_expire", "on_status_gain", "on_status_lose"),
         [P("target", "enum", options=("self", "enemy")),
          _num("gain", (-20000.0, 20000.0), link=True, unit="gauge")],
+        logged=True),
+    # hp_swap：交换双方当前生命值（各自不超过自身上限——命运天平；
+    # 无中间态的精确交换，不可由 hp_mod 组合表达，故为独立最小原子）。
+    _op("hp_swap", ALL_HOOKS,
+        [P("event", "text", required=False)],
         logged=True),
     # apply_status：施加状态（唯一状态入口；数值参数按状态定义声明，
     # 施加时覆盖定义默认值——个性化 / 共鸣即作用于此）。

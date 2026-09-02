@@ -1352,6 +1352,7 @@
         (!list[i].node && list[i].param === cand.param && cand.first);
       if (same) list.splice(i, 1);
     }
+    if (variable === "off") variable = "";    // 禁用：variable 留空
     if (variable) {
       list.push({ node: cand.node, param: cand.param, variable: variable,
                   mode: "own", rate: 0.45 });
@@ -1374,17 +1375,17 @@
     if (!state.schema) return null;
     var cands = resonanceCandidates(sk);
     if (!cands.length) return null;
-    var varOptions = [["", "随机（默认抽取）"]].concat(linkVariableIds().map(
-      function (id) { return [id, attrNameOf(id)]; }));
+    var varOptions = [["", "随机（默认抽取）"], ["off", "不共鸣（禁用）"]]
+      .concat(linkVariableIds().map(function (id) { return [id, attrNameOf(id)]; }));
     var forms = [];
     cands.forEach(function (cand) {
       var r = findRes(sk, cand);
       var suffix = cand.has ? "" : "（未设值，绑定时自动填默认）";
       forms.push(field("共鸣绑定 " + cand.node + " · " + cand.param + suffix,
         selectInput(varOptions,
-          function () { return r ? r.variable : ""; },
+          function () { return r ? (r.variable || "off") : ""; },
           function (v) { setResVariable(sk, cand, v); })));
-      if (r) {
+      if (r && r.variable) {
         forms.push(field(cand.node + " · " + cand.param + " 模式", selectInput(
           ["own", "enemy", "difference", "sum"].map(function (m) {
             return [m, enumWord("mode", m)];

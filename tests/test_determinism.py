@@ -363,10 +363,11 @@ class FighterDeterminism(unittest.TestCase):
                         "熟练度极端值占比过高，疑似截断堆积（实测 %.3f）" % edge)
 
     def test_trigger_chances_distinct_and_capped(self):
-        """触发率契约（v0.9.1）：各技能基础触发率按强度互不相同；
-        个性化后的触发率始终不超过 100%（基配置触发率取自技能图各节点的
-        chance 参数）。"""
-        chances = {}
+        """触发率契约（v0.9.1；v3.8.0 放宽同技能多掷）：各技能基础触发率
+        按强度互不相同（跨技能不重复）；同一技能允许至多两种 chance
+        （双掷设计——孤注一掷的触发/胜负、命运天平的交换/自扣）；
+        个性化后的触发率始终不超过 100%。"""
+        by_skill = {}
         for s in GAME.skills:
             for node in s.effect.get("nodes", ()):
                 params = node.get("params", {})
@@ -374,14 +375,19 @@ class FighterDeterminism(unittest.TestCase):
                     # 表达式 chance（如不屈衰减概率）不参与该数值契约
                     self.assertGreater(params["chance"], 0)
                     self.assertLessEqual(params["chance"], 0.95)
-                    if s.id in chances:
-                        # 同一技能的多个 chance（如乘胜两条链）应相同
-                        self.assertEqual(chances[s.id],
-                                         round(float(params["chance"]), 6))
-                    chances[s.id] = round(float(params["chance"]), 6)
-        self.assertGreater(len(chances), 10)
-        self.assertEqual(len(chances), len(set(chances.values())),
-                         "技能基础触发率应互不相同: %s" % sorted(chances.items()))
+                    by_skill.setdefault(s.id, set()).add(
+                        round(float(params["chance"]), 6))
+        self.assertGreater(len(by_skill), 10)
+        for sid, vals in by_skill.items():
+            self.assertLessEqual(len(vals), 2,
+                                 "同一技能的 chance 种类至多两种: %s" % sid)
+        owners = {}
+        for sid, vals in by_skill.items():
+            for v in vals:
+                owners.setdefault(v, []).append(sid)
+        clashes = {v: sids for v, sids in owners.items() if len(sids) > 1}
+        self.assertFalse(clashes,
+                         "技能基础触发率跨技能重复: %s" % sorted(clashes.items()))
         for i in range(40):
             f = derive_fighter("cap%02d" % i, GAME)
             for sdef, pg in personalized_effects(f, GAME):

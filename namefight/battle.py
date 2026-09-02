@@ -846,6 +846,20 @@ def _op_gauge_mod(ctx, proc):
     return None
 
 
+def _op_hp_swap(ctx, proc):
+    """hp_swap：交换双方当前生命值（各自不超过自身上限；命运天平）。
+    一次性以旧值互换、无中间态，交换后不触发受击反应与不屈。"""
+    a, b = ctx.owner, ctx.opponent
+    ha, hb = max(0.0, a.hp), max(0.0, b.hp)
+    a.hp = min(a.max_hp, hb)
+    b.hp = min(b.max_hp, ha)
+    ctx.ev(str(proc.get("event") or "fate_swap"),
+           {"a": a.name, "b": b.name,
+            "a_hp": format_num(a.hp), "b_hp": format_num(b.hp),
+            "value": format_num(a.hp)})
+    return None
+
+
 def _op_apply_status(ctx, proc):
     """apply_status：施加状态（唯一状态入口）。数值参数覆盖定义默认值
     （个性化 / 共鸣即作用于此）；叠层 / 到期 / 间隔策略由状态定义声明。
@@ -1087,6 +1101,7 @@ _OP_IMPL = {
     "stat_mod": _op_stat_mod,
     "hp_mod": _op_hp_mod,
     "gauge_mod": _op_gauge_mod,
+    "hp_swap": _op_hp_swap,
     "apply_status": _op_apply_status,
     "cleanse": _op_cleanse,
     "skip_action": _op_skip_action,

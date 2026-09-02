@@ -325,13 +325,15 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                                           by_param.get(param))
                 ov = sdef.resonance[ov_i] if ov_i is not None else None
                 if ov is not None and ov_i not in consumed:
+                    consumed.add(ov_i)
+                    if not ov["variable"]:
+                        continue          # 禁用共鸣：该参数永不绑定
                     mode = ov["mode"]
                     vdef = next((v for v in link_cfg.variables
                                  if v.id == ov["variable"]), None)
                     if vdef is None:
                         continue
                     rate = float(ov["rate"])
-                    consumed.add(ov_i)
                 else:
                     if rng.next_float() >= link_cfg.chance:
                         continue

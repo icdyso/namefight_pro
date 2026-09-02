@@ -77,7 +77,9 @@
     "baptism_heal": "✨ {a} 受到洗礼，回复 {heal} 点生命。",
     "judgment_gain": "⚖️ {b} 被刻下审判：每层到期造成 {value} 点伤害（{stacks} 层，各 {turns} 刻）",
     "judgment_strike": "⚡ {a} 的审判降临：受到 {damage} 点伤害",
-    "judgment_death": "⚖️ {a} 在审判之雷下倒下！"
+    "judgment_death": "⚖️ {a} 在审判之雷下倒下！",
+    "fate_swap": "⚖️ {a} 的命运天平倾斜：与 {b} 交换生命！（{a} → {a_hp}，{b} → {b_hp}）",
+    "fate_cost": "💔 {a} 向天平支付代价：损失 {damage} 点生命。"
   },
   "statuses": {
     "poison": {
