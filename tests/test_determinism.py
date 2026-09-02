@@ -385,7 +385,10 @@ class FighterDeterminism(unittest.TestCase):
         for sid, vals in by_skill.items():
             for v in vals:
                 owners.setdefault(v, []).append(sid)
-        clashes = {v: sids for v, sids in owners.items() if len(sids) > 1}
+        # v3.9.0 全池翻倍后多技能触发率触顶 0.95——封顶值（>=0.9）允许并列，
+        # 封顶以下仍须跨技能唯一（防复制技能忘改数值的防呆保留）
+        clashes = {v: sids for v, sids in owners.items()
+                   if len(sids) > 1 and v < 0.9}
         self.assertFalse(clashes,
                          "技能基础触发率跨技能重复: %s" % sorted(clashes.items()))
         for i in range(40):

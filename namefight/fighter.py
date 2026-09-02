@@ -28,7 +28,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from . import effects
+from . import effects, expr
 from .config import GameCfg, TITLE_FIELD_POOLS
 from .rng import DetRng
 from .text import format_num, format_pct, render_template
@@ -536,6 +536,20 @@ def _node_clause(node: dict, disp: dict, game: GameCfg):
     return "op_" + node["type"]
 
 
+def _pretty_expr(text: str) -> str:
+    """表达式的展示美化（仅显示层，不改变求值）：变量换中文名
+    （$self.mark:不屈 → 不屈层数）、pow(a, b) → a^b、* → ×。"""
+    import re as _re
+    out = str(text)
+    out = _re.sub(r"\$self\.mark:([^+\-*\/() ]+)", r"\1层数", out)
+    out = _re.sub(r"\$enemy\.mark:([^+\-*\/() ]+)", r"对方\1层数", out)
+    out = _re.sub(r"\$self\.", "自身", out)
+    out = _re.sub(r"\$enemy\.", "对方", out)
+    out = _re.sub(r"pow\(([^,]+),\s*([^)]+)\)", r"(\1)^\2", out)
+    out = out.replace(" * ", " × ")
+    return out
+
+
 def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
     """模板参数：数值按规格格式化（共鸣公式由调用方注入）；
     状态 id / 属性 id 等引用参数替换为显示名；hp_mod 的展示值取
@@ -556,6 +570,8 @@ def _clause_params(node: dict, disp: dict, game: GameCfg) -> dict:
                     out[key] = game.attr(str(disp[key])).name
                 except Exception:
                     out[key] = disp[key]
+            elif expr.is_expr(disp[key]):
+                out[key] = _pretty_expr(disp[key])   # 表达式美化显示
             else:
                 out[key] = disp[key]
         else:

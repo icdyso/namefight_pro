@@ -287,7 +287,7 @@
     "field_gain": "属性增量",
     "field_cut": "减伤比例",
     "st_charge": "改为蓄力：下次攻击必定命中、暴击率 +{crit}，伤害提升至 {value}",
-    "st_will": "注册不屈：致命伤害时按衰减概率重生",
+    "st_will": "不屈：濒死时有概率重生（每次触发后概率减半，永不耗尽）",
     "st_tempo": "速度 +{value}、攻击 +{atk}（永久叠加）",
     "st_last_stand": "攻击 +{value} 且速度 +{spd}，持续到战斗结束",
     "st_pact_steal": "本次攻击附带 {value} 吸血，行动结束后按吸血量转化为攻击",
@@ -338,7 +338,7 @@
     "cmp_enemy.gauge_pct": "敌方行动槽",
     "cmp_target_self": "自身",
     "cmp_target_enemy": "敌方",
-    "op_marker": "标记 {key}：{action_word}",
+    "op_marker": "标记「{key}」：{action_word}",
     "op_status_ctl": "操控{target_word}{status}：{op_word} {value}",
     "ctl_extend": "延长",
     "ctl_shorten": "缩短",
@@ -510,7 +510,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.14
+              "chance": 0.28
             },
             "pos": [
               300,
@@ -524,8 +524,8 @@
             "params": {
               "status": "charge",
               "target": "self",
-              "value": 2.2,
-              "crit": 0.25
+              "value": 3.0,
+              "crit": 0.5
             },
             "pos": [
               560,
@@ -585,7 +585,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.33
+              "chance": 0.66
             },
             "pos": [
               300,
@@ -600,7 +600,7 @@
               "left": "enemy.hp_pct",
               "op": "le",
               "right": "const",
-              "value": 0.33
+              "value": 0.5
             },
             "pos": [
               560,
@@ -612,7 +612,7 @@
             "kind": "op",
             "type": "hit_mod",
             "params": {
-              "mult": 2.45,
+              "mult": 3.0,
               "announce": true
             },
             "pos": [
@@ -663,7 +663,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.25
+              "chance": 0.5
             },
             "pos": [
               300,
@@ -677,7 +677,7 @@
             "params": {
               "status": "lifesteal",
               "target": "self",
-              "value": 0.28,
+              "value": 0.52,
               "turns": 2
             },
             "pos": [
@@ -724,7 +724,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.3
+              "chance": 0.6
             },
             "pos": [
               300,
@@ -738,7 +738,7 @@
             "params": {
               "status": "poison",
               "target": "enemy",
-              "value": 38,
+              "value": 92,
               "turns": 12
             },
             "pos": [
@@ -785,7 +785,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.125
+              "chance": 0.25
             },
             "pos": [
               300,
@@ -797,7 +797,7 @@
             "kind": "op",
             "type": "hit_mod",
             "params": {
-              "pen": 0.35
+              "pen": 0.85
             },
             "pos": [
               560,
@@ -861,7 +861,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.78
+              "chance": 0.95
             },
             "pos": [
               300,
@@ -873,8 +873,8 @@
             "kind": "struct",
             "type": "loop",
             "params": {
-              "max": 9,
-              "decay": 0.93
+              "max": 10,
+              "decay": 0.96
             },
             "pos": [
               560,
@@ -887,7 +887,7 @@
             "type": "strike",
             "params": {
               "target": "enemy",
-              "mult": 0.27,
+              "mult": 0.28,
               "real": true,
               "mode": "replace",
               "event": "thunder_hit"
@@ -940,7 +940,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.085
+              "chance": 0.17
             },
             "pos": [
               300,
@@ -953,7 +953,7 @@
             "type": "gauge_mod",
             "params": {
               "target": "enemy",
-              "gain": -900
+              "gain": -1000
             },
             "pos": [
               560,
@@ -966,7 +966,7 @@
             "type": "strike",
             "params": {
               "target": "enemy",
-              "mult": 0.45,
+              "mult": 0.6,
               "mode": "extra",
               "event": "sever_proc"
             },
@@ -1017,7 +1017,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.62
+              "chance": 0.95
             },
             "pos": [
               300,
@@ -1040,7 +1040,7 @@
             "type": "gauge_mod",
             "params": {
               "target": "self",
-              "gain": 4800
+              "gain": 6000
             },
             "pos": [
               820,
@@ -1053,7 +1053,7 @@
             "type": "gauge_mod",
             "params": {
               "target": "self",
-              "gain": 2800
+              "gain": 3800
             },
             "pos": [
               820,
@@ -1109,7 +1109,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.65
+              "chance": 0.95
             },
             "pos": [
               300,
@@ -1123,7 +1123,7 @@
             "params": {
               "status": "guard",
               "target": "self",
-              "value": 0.07,
+              "value": 0.14,
               "turns": 20
             },
             "pos": [
@@ -1170,7 +1170,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.23
+              "chance": 0.46
             },
             "pos": [
               300,
@@ -1182,7 +1182,7 @@
             "kind": "op",
             "type": "taken_mod",
             "params": {
-              "cut": 0.18
+              "cut": 0.22
             },
             "pos": [
               560,
@@ -1196,7 +1196,7 @@
             "params": {
               "target": "enemy",
               "basis": "taken_absorbed",
-              "value": 1.25,
+              "value": 1.7,
               "event": "effect_reflect"
             },
             "pos": [
@@ -1250,7 +1250,7 @@
               "left": "self.hp_pct",
               "op": "ge",
               "right": "const",
-              "value": 0.7
+              "value": 1.0
             },
             "pos": [
               300,
@@ -1262,7 +1262,7 @@
             "kind": "op",
             "type": "taken_mod",
             "params": {
-              "cut": 0.08,
+              "cut": 0.5,
               "event": "effect_bulwark"
             },
             "pos": [
@@ -1275,7 +1275,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.03
+              "chance": 0.06
             },
             "pos": [
               560,
@@ -1340,7 +1340,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.29
+              "chance": 0.58
             },
             "pos": [
               300,
@@ -1354,7 +1354,7 @@
             "params": {
               "status": "retribution",
               "what": "damage_taken",
-              "cap": 6
+              "cap": 12
             },
             "pos": [
               560,
@@ -1377,7 +1377,7 @@
             "params": {
               "target": "enemy",
               "basis": "recorded_sum",
-              "value": 0.38,
+              "value": 0.42,
               "mode": "append",
               "event": "retribution_release"
             },
@@ -1457,7 +1457,7 @@
               "target": "self",
               "type": "heal",
               "basis": "maxhp",
-              "ratio": 0.28,
+              "ratio": 0.6,
               "event": "will_trigger"
             },
             "pos": [
@@ -1472,7 +1472,7 @@
             "params": {
               "key": "不屈",
               "action": "add",
-              "value": 1
+              "value": 2
             },
             "pos": [
               820,
@@ -1515,7 +1515,10 @@
             "to": "l4"
           }
         ]
-      }
+      },
+      "mastery_on": [
+        "ratio"
+      ]
     },
     {
       "id": "spring_heal",
@@ -1543,7 +1546,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.15
+              "chance": 0.3
             },
             "pos": [
               300,
@@ -1558,7 +1561,7 @@
               "target": "self",
               "type": "heal",
               "basis": "flat",
-              "value": 550,
+              "value": 1300,
               "event": "effect_heal"
             },
             "pos": [
@@ -1573,8 +1576,8 @@
             "params": {
               "status": "regen",
               "target": "self",
-              "value": 150,
-              "tick": 10,
+              "value": 340,
+              "tick": 20,
               "turns": 30
             },
             "pos": [
@@ -1625,7 +1628,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.13
+              "chance": 0.26
             },
             "pos": [
               300,
@@ -1638,8 +1641,8 @@
             "type": "cleanse",
             "params": {
               "scope": "both",
-              "value": 215,
-              "per": 190
+              "value": 430,
+              "per": 380
             },
             "pos": [
               560,
@@ -1704,7 +1707,7 @@
               "left": "self.hp_pct",
               "op": "lt",
               "right": "const",
-              "value": 0.3
+              "value": 0.6
             },
             "pos": [
               560,
@@ -1769,7 +1772,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.8
+              "chance": 0.95
             },
             "pos": [
               300,
@@ -1783,8 +1786,8 @@
             "params": {
               "status": "momentum",
               "target": "self",
-              "value": 0.065,
-              "max_stacks": 5
+              "value": 0.13,
+              "max_stacks": 10
             },
             "pos": [
               560,
@@ -1808,7 +1811,7 @@
               "status": "momentum",
               "target": "self",
               "op": "stacks",
-              "value": -99
+              "value": -20.0
             },
             "pos": [
               300,
@@ -1858,7 +1861,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.35
+              "chance": 0.7
             },
             "pos": [
               300,
@@ -1873,7 +1876,7 @@
               "target": "self",
               "type": "loss",
               "basis": "maxhp",
-              "ratio": 0.05,
+              "ratio": 0.12,
               "floor1": true,
               "event": "overload_cost"
             },
@@ -1887,7 +1890,7 @@
             "kind": "op",
             "type": "hit_mod",
             "params": {
-              "mult": 2.15
+              "mult": 3.9
             },
             "pos": [
               820,
@@ -1937,7 +1940,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.36
+              "chance": 0.72
             },
             "pos": [
               300,
@@ -1951,9 +1954,9 @@
             "params": {
               "status": "shred",
               "target": "enemy",
-              "value": 340,
+              "value": 1050,
               "turns": 16,
-              "max_stacks": 3
+              "max_stacks": 6
             },
             "pos": [
               560,
@@ -1999,7 +2002,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.32
+              "chance": 0.64
             },
             "pos": [
               300,
@@ -2013,7 +2016,7 @@
             "params": {
               "status": "bleed",
               "target": "enemy",
-              "value": 0.2,
+              "value": 0.4,
               "turns": 12
             },
             "pos": [
@@ -2059,7 +2062,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.39
+              "chance": 0.78
             },
             "pos": [
               300,
@@ -2071,7 +2074,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.39
+              "chance": 0.78
             },
             "pos": [
               560,
@@ -2083,7 +2086,7 @@
             "kind": "op",
             "type": "hit_mod",
             "params": {
-              "mult": 2.2,
+              "mult": 2.1,
               "event": "gamble_win"
             },
             "pos": [
@@ -2096,7 +2099,7 @@
             "kind": "op",
             "type": "hit_mod",
             "params": {
-              "mult": 0.5,
+              "mult": 0.4,
               "event": "gamble_lose"
             },
             "pos": [
@@ -2153,7 +2156,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.16
+              "chance": 0.32
             },
             "pos": [
               300,
@@ -2167,8 +2170,8 @@
             "params": {
               "status": "tempo",
               "target": "self",
-              "value": 100,
-              "atk": 10
+              "value": 220,
+              "atk": 24
             },
             "pos": [
               560,
@@ -2214,7 +2217,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.42
+              "chance": 0.84
             },
             "pos": [
               300,
@@ -2227,7 +2230,7 @@
             "type": "hit_mod",
             "params": {
               "pen": 1.0,
-              "crit_bonus": 0.06
+              "crit_bonus": 0.12
             },
             "pos": [
               560,
@@ -2272,7 +2275,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.4
+              "chance": 0.8
             },
             "pos": [
               300,
@@ -2287,7 +2290,7 @@
               "target": "self",
               "type": "loss",
               "basis": "maxhp",
-              "ratio": 0.06,
+              "ratio": 0.12,
               "floor1": true,
               "event": "pact_proc"
             },
@@ -2303,7 +2306,7 @@
             "params": {
               "status": "pact_steal",
               "target": "self",
-              "value": 0.68,
+              "value": 0.85,
               "turns": 1
             },
             "pos": [
@@ -2328,7 +2331,7 @@
               "target": "self",
               "stat": "atk",
               "basis": "recorded_lifesteal",
-              "value": 0.11,
+              "value": 0.15,
               "status": "blood_pact",
               "event": "pact_gain"
             },
@@ -2384,7 +2387,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.6
+              "chance": 0.95
             },
             "pos": [
               300,
@@ -2398,7 +2401,7 @@
             "params": {
               "status": "grudge",
               "target": "self",
-              "value": 0.07,
+              "value": 0.14,
               "turns": 20
             },
             "pos": [
@@ -2448,7 +2451,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.22
+              "chance": 0.42
             },
             "pos": [
               280,
@@ -2463,7 +2466,7 @@
               "target": "self",
               "type": "heal",
               "basis": "flat",
-              "value": 600,
+              "value": 1200,
               "event": "baptism_heal"
             },
             "pos": [
@@ -2479,7 +2482,7 @@
               "target": "enemy",
               "type": "heal",
               "basis": "flat",
-              "value": 600,
+              "value": 1200,
               "event": "baptism_heal"
             },
             "pos": [
@@ -2494,7 +2497,7 @@
             "params": {
               "status": "judgment",
               "target": "enemy",
-              "value": 1300,
+              "value": 2200,
               "turns": 12
             },
             "pos": [
@@ -2566,7 +2569,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.115
+              "chance": 0.27
             },
             "pos": [
               560,
@@ -2593,7 +2596,7 @@
               "target": "self",
               "type": "loss",
               "basis": "flat",
-              "value": 420,
+              "value": 840,
               "floor1": true,
               "event": "fate_cost"
             },
@@ -2610,7 +2613,7 @@
               "target": "self",
               "type": "heal",
               "basis": "flat",
-              "value": 120,
+              "value": 240,
               "event": "fate_heal"
             },
             "pos": [
