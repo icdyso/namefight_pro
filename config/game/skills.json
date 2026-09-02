@@ -2566,7 +2566,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.095
+              "chance": 0.115
             },
             "pos": [
               560,
@@ -2586,18 +2586,6 @@
             ]
           },
           {
-            "id": "n4",
-            "kind": "condition",
-            "type": "chance",
-            "params": {
-              "chance": 0.58
-            },
-            "pos": [
-              560,
-              200
-            ]
-          },
-          {
             "id": "n5",
             "kind": "op",
             "type": "hp_mod",
@@ -2605,13 +2593,29 @@
               "target": "self",
               "type": "loss",
               "basis": "flat",
-              "value": 350,
+              "value": 420,
               "floor1": true,
               "event": "fate_cost"
             },
             "pos": [
               820,
               200
+            ]
+          },
+          {
+            "id": "n6",
+            "kind": "op",
+            "type": "hp_mod",
+            "params": {
+              "target": "self",
+              "type": "heal",
+              "basis": "flat",
+              "value": 120,
+              "event": "fate_heal"
+            },
+            "pos": [
+              1060,
+              40
             ]
           }
         ],
@@ -2627,7 +2631,7 @@
           },
           {
             "from": "n1",
-            "to": "n4",
+            "to": "n5",
             "gate": "fail"
           },
           {
@@ -2635,8 +2639,8 @@
             "to": "n3"
           },
           {
-            "from": "n4",
-            "to": "n5"
+            "from": "n3",
+            "to": "n6"
           }
         ]
       }

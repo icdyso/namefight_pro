@@ -79,7 +79,8 @@
     "judgment_strike": "⚡ {a} 的审判降临：受到 {damage} 点伤害",
     "judgment_death": "⚖️ {a} 在审判之雷下倒下！",
     "fate_swap": "⚖️ {a} 的命运天平倾斜：与 {b} 交换生命！（{a} → {a_hp}，{b} → {b_hp}）",
-    "fate_cost": "💔 {a} 向天平支付代价：损失 {damage} 点生命。"
+    "fate_cost": "💔 {a} 向天平支付代价：损失 {cost} 点生命。",
+    "fate_heal": "✨ {a} 从天平获得了 {heal} 点生命。"
   },
   "statuses": {
     "poison": {
