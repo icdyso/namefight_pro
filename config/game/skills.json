@@ -2590,7 +2590,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.6
+              "chance": 0.58
             },
             "pos": [
               560,
