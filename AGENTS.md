@@ -67,9 +67,9 @@
 3. **测试只在必要时**：仅当改动引擎 / 派生 / PRNG 等底层时运行
    `python -m unittest discover -s tests`（确定性测试失败为最高优先级事故）；
    纯配置数值 / 文案 / 前端改动可跳过，不写临时验证脚本。
-   **改动 Python 引擎 / 派生 / PRNG 时必须同步 `web/js/engine/` 的 JS 移植版**
-   （模块逐行对应），并跑 `node tools/port_check.mjs`（起服务器与 JS 引擎
-   全量差分对拍，0 不一致方可提交）——两版同名结果逐字节一致是硬契约。
+   `node tools/port_check.mjs` 可对拍 Python 服务器与 JS 引擎的一致性；
+   **JS 移植版独立维护，不强求与 Python 版同步**（需要发布静态包时重建并
+   对拍即可）。
 4. 涉及规则 / 数值 / 配置结构的变更同步 `docs/GAME_SPEC.md`（头部版本号）；
    行为不变的纯重构可免。
 5. 版本号唯一维护于 `config/game/system.json`：功能 +次版本、修复 +修订号、
@@ -90,8 +90,9 @@ namefight_pro/
 │                             #     双模式——静态包走 NF.localApi，服务器模式不变）
 ├── tests/                    # unittest（test_determinism 核心不变量 / test_config 完整性与图校验）
 ├── tools/balance_check.py    # 技能平衡蒙特卡洛（固定种子）
-├── tools/port_check.mjs      # JS 引擎 vs Python 服务器差分对拍（引擎改动必跑）
+├── tools/port_check.mjs      # JS 引擎 vs Python 服务器差分对拍（按需使用）
 ├── tools/build_toy.py        # B站 Toy 静态包构建（dist/toy，纯静态可发布）
+├── start_toy.py              # Toy 静态版一键启动（构建 + 静态服务 + 开浏览器）
 └── docs/                     # GAME_SPEC.md 规则手册 + updates/ 更新文档 + title_candidates.md 称号候选库
 ```
 

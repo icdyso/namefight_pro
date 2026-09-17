@@ -34,6 +34,12 @@ PAGES = ["index.html", "power.html"]          # 编辑器需后端，不进静�
 INJECT_MARK = '  <script src="./js/framework.js"></script>'
 
 
+def current_version() -> str:
+    """当前配置版本号（system.json，启动器展示用）。"""
+    with (CONFIG / "system.json").open("r", encoding="utf-8") as f:
+        return str(json.load(f)["version"])
+
+
 def build(out_dir: Path) -> None:
     if out_dir.exists():
         shutil.rmtree(out_dir)
