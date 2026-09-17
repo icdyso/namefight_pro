@@ -1,4 +1,4 @@
-"""Toy 静态包构建：把对战页 + JS 引擎 + 嵌入式配置打成一个可直接发布的目录。
+"""Toy 静态包构建：把对战页 + JS 引擎 + 原样配置 JSON 打成一个可直接发布的目录。
 
 用法：
     python tools/build_toy.py            # 输出到 dist/toy/
@@ -8,7 +8,8 @@
 - index.html / power.html：源页面注入引擎脚本与本地 API 引导（编辑器不随包）
 - css/ + js/：与源前端相同文件（相对路径，子路径托管安全）
 - js/engine/：Python 引擎的 JS 移植（web/js/engine/，差分验证见 port_check.mjs）
-- nf_data.js：六份配置 JSON 构建时嵌入（配置即输入：包内快照固定同名结果）
+- config/game/*.json：六份配置**原样随包**（与编辑器同源同格式，运行时 fetch；
+  注意 file:// 直开不可用——fetch 本地 JSON 受 CORS 限制，需经 http 访问）
 
 发布前请跑 toy_doctor 预检与预览确认（见 docs/updates 对应条目）。
 """
@@ -45,18 +46,12 @@ def build(out_dir: Path) -> None:
         shutil.rmtree(out_dir)
     (out_dir / "css").mkdir(parents=True)
     (out_dir / "js" / "engine").mkdir(parents=True)
+    (out_dir / "config" / "game").mkdir(parents=True)
 
-    # 配置数据嵌入（单文件，无额外请求，file:// 也可用）
-    data = {}
+    # 配置原样随包（与编辑器同源同格式；运行时 fetch 加载，见 engine/api.js）
     for key in CONFIG_KEYS:
-        with (CONFIG / (key + ".json")).open("r", encoding="utf-8") as f:
-            data[key] = json.load(f)
-    version = data["system"]["version"]
-    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    (out_dir / "nf_data.js").write_text(
-        "/* 自动生成（tools/build_toy.py）：配置快照，来源 config/game/*.json。 */\n"
-        "/* 勿手改——改配置请编辑源文件后重新构建。版本 v%s */\n" % version +
-        "window.NFDATA = %s;\n" % payload, encoding="utf-8")
+        shutil.copy2(CONFIG / (key + ".json"), out_dir / "config" / "game" / (key + ".json"))
+    version = current_version()
 
     # 静态资源
     shutil.copy2(WEB / "css" / "style.css", out_dir / "css" / "style.css")
@@ -65,11 +60,10 @@ def build(out_dir: Path) -> None:
     for name in ENGINE_FILES:
         shutil.copy2(WEB / "js" / "engine" / name, out_dir / "js" / "engine" / name)
 
-    # 页面注入：引擎脚本 -> 数据 -> 本地 API 引导（framework.js 挂 NF.localApi）
-    inject = ["  <!-- Toy 静态包构建注入：本地引擎 + 配置快照 -->"]
+    # 页面注入：引擎脚本 -> 本地 API 引导（异步加载包内配置，framework 挂 NF.localApi）
+    inject = ["  <!-- Toy 静态包构建注入：本地引擎 + 原样配置 JSON -->"]
     inject += ['  <script src="./js/engine/%s"></script>' % f for f in ENGINE_FILES]
-    inject += ['  <script src="./nf_data.js"></script>',
-               "  <script>window.NF_ENGINE_API = NFE.createApi(NFDATA);</script>"]
+    inject += ["  <script>window.NF_ENGINE_API = NFE.loadConfig();</script>"]
     snippet = "\n".join(inject)
     for page in PAGES:
         html = (WEB / page).read_text(encoding="utf-8")
@@ -79,10 +73,10 @@ def build(out_dir: Path) -> None:
                                     encoding="utf-8")
 
     total = sum(p.stat().st_size for p in out_dir.rglob("*") if p.is_file())
-    print("Toy 静态包已构建: %s（v%s，%d 个文件，%.1f KB）"
+    print("Toy 静态包已构建: %s（v%s，%d 个文件，%.1f KB；配置 JSON 原样随包）"
           % (out_dir, version, len([p for p in out_dir.rglob("*") if p.is_file()]),
              total / 1024))
-    print("本地预览: python -m http.server -d %s" % out_dir)
+    print("本地预览: python start_toy.py（或 python -m http.server -d %s）" % out_dir)
 
 
 def make_zip(out_dir: Path, zip_path: Path) -> None:

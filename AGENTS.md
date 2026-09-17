@@ -113,8 +113,10 @@ namefight_pro/
 - 错误统一 `{"error": "<code>"}` + 4xx/5xx。
 - **Toy 静态包（v3.10.0）**：`python tools/build_toy.py --zip` 构建纯静态发布包
   （`dist/toy/` + zip），可发布到 B站 Toy 平台（`/toy/<slug>/` 子路径静态托管）：
-  对战页 + 真战力页走 JS 引擎（配置构建时嵌入 `nf_data.js` 快照），编辑器不随包。
-  本地预览：`python -m http.server -d dist/toy`；发布前跑 toy_doctor 预检。
+  对战页 + 真战力页走 JS 引擎，六份配置 **JSON 原样随包**（`config/game/`，
+  与编辑器同源同格式，运行时 fetch；file:// 直开不可用，需 http 访问），
+  编辑器不随包。本地预览：`python start_toy.py`（一键）或
+  `python -m http.server -d dist/toy`；发布前跑 toy_doctor 预检。
 
 ## 6. 设计备忘（现行规则速查）
 

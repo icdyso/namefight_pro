@@ -106,15 +106,19 @@
     root.appendChild(resultBox);
   }
 
-  var textJob = NF.localApi
-    ? Promise.resolve(NF.localApi.text())
-    : NF.fetchJSON("/api/text");
-  textJob.then(function (data) {
-    state.text = data.ui || {};
-    document.title = t("power_page_title") + " · " + t("app_title");
-    renderAll();
-  }).catch(function (e) {
-    document.body.appendChild(
-      NF.h("div", { class: "toast show" }, String((e && e.message) || e)));
+  // 静态包：本地引擎的配置异步加载完成后再启动（失败回落服务器模式）
+  (NF.engineReady ? NF.engineReady.catch(function () { return null; })
+                  : Promise.resolve()).then(function () {
+    var textJob = NF.localApi
+      ? Promise.resolve(NF.localApi.text())
+      : NF.fetchJSON("/api/text");
+    textJob.then(function (data) {
+      state.text = data.ui || {};
+      document.title = t("power_page_title") + " · " + t("app_title");
+      renderAll();
+    }).catch(function (e) {
+      document.body.appendChild(
+        NF.h("div", { class: "toast show" }, String((e && e.message) || e)));
+    });
   });
 })();

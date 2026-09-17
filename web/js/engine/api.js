@@ -129,4 +129,24 @@
     if (!isFinite(v) || v < 1) v = 1;
     return v;
   }
+
+  /* 配置文件清单（文件名 = 键 + ".json"，与 config/game 及编辑器同源） */
+  NFE.CONFIG_KEYS = ["system", "attributes", "skills", "titles", "battle", "ui"];
+
+  /* 静态包运行时加载：fetch 包内原样 config/game/*.json（相对页面路径，
+     子路径托管安全），完成后构建本地 API。返回 Promise<api>；
+     加载失败则 reject（页面回落服务器模式）。 */
+  NFE.loadConfig = function (base) {
+    var root = base || "";
+    return Promise.all(NFE.CONFIG_KEYS.map(function (key) {
+      return fetch(root + "config/game/" + key + ".json").then(function (r) {
+        if (!r.ok) throw new Error("config_fetch_" + key);
+        return r.json();
+      });
+    })).then(function (list) {
+      var data = {};
+      for (var i = 0; i < list.length; i++) data[NFE.CONFIG_KEYS[i]] = list[i];
+      return NFE.createApi(data);
+    });
+  };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -880,5 +880,7 @@
       });
   }
 
-  init();
+  // 静态包：本地引擎的配置异步加载完成后再启动（失败回落服务器模式）
+  (NF.engineReady ? NF.engineReady.catch(function () { return null; })
+                  : Promise.resolve()).then(init);
 })();

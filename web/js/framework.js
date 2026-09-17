@@ -71,6 +71,13 @@
   }
 
   window.NF = { h: h, clear: clear, qs: qs, fetchJSON: fetchJSON };
-  // 静态包（Toy 发布）注入本地引擎 API：优先于服务器请求（见 tools/build_toy.py）
-  if (window.NF_ENGINE_API) window.NF.localApi = window.NF_ENGINE_API;
+  // 静态包（Toy 发布）注入本地引擎 API：NF_ENGINE_API 可为实例或 Promise
+  // （配置以原样 JSON 文件随包分发时为异步加载）；就绪后启用本地模式，
+  // 加载失败则保持服务器模式（页面自会回落到 fetch /api/*）。
+  if (window.NF_ENGINE_API) {
+    window.NF.engineReady = Promise.resolve(window.NF_ENGINE_API).then(function (api) {
+      window.NF.localApi = api;
+      return api;
+    });
+  }
 })();
