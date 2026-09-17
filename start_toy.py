@@ -58,9 +58,9 @@ def main() -> None:
     httpd = ThreadingHTTPServer((args.host, port), handler)
 
     url = "http://%s:%s/index.html" % (args.host, port)
-    print("Toy 静态版 v%s 已启动: %s" % (build_toy.current_version(), url))
-    print("真战力页: http://%s:%s/power.html" % (args.host, port))
-    print("Ctrl+C 退出")
+    print("Toy 静态版 v%s 已启动: %s" % (build_toy.current_version(), url), flush=True)
+    print("真战力页: http://%s:%s/power.html" % (args.host, port), flush=True)
+    print("Ctrl+C 退出", flush=True)
     if not args.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
 
