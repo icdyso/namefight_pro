@@ -76,6 +76,11 @@
    会改同名结果的变更需明确 breaking 标注。
 6. 完成后 git commit（Conventional Commits）并 push；远端不可达则提交本地并在
    更新文档注明。禁止提交 `__pycache__` 等运行时产物。
+7. **每次调试之后必须关闭所有服务**：任何为调试 / 验证启动的本地服务
+   （`python server.py`、`python -m http.server`、`start_toy.py`、
+   port_check 起的临时服务器等），调试结束后**全部关闭**，并用 netstat
+   核实端口已释放（后台方式起的服务要显式 kill，不留监听进程）。
+   仅供用户手动使用的启动器（`启动.bat` / `启动Toy.bat`，前台 Ctrl+C 退出）除外。
 
 ## 4. 目录结构
 
