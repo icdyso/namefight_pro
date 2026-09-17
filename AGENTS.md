@@ -67,6 +67,9 @@
 3. **测试只在必要时**：仅当改动引擎 / 派生 / PRNG 等底层时运行
    `python -m unittest discover -s tests`（确定性测试失败为最高优先级事故）；
    纯配置数值 / 文案 / 前端改动可跳过，不写临时验证脚本。
+   **改动 Python 引擎 / 派生 / PRNG 时必须同步 `web/js/engine/` 的 JS 移植版**
+   （模块逐行对应），并跑 `node tools/port_check.mjs`（起服务器与 JS 引擎
+   全量差分对拍，0 不一致方可提交）——两版同名结果逐字节一致是硬契约。
 4. 涉及规则 / 数值 / 配置结构的变更同步 `docs/GAME_SPEC.md`（头部版本号）；
    行为不变的纯重构可免。
 5. 版本号唯一维护于 `config/game/system.json`：功能 +次版本、修复 +修订号、
@@ -83,8 +86,12 @@ namefight_pro/
 │                             #   + effects（钩子/条件/op 注册表与图编译）/ statuses（状态 kind 系统）
 ├── config/game/              # 六个配置 JSON（数值 + 文案同条目，单语言）
 ├── web/                      # 前端：index + power + editor 三页 + css + js(app/framework/power/editor)
+│                             #   + js/engine/（JS 静态引擎：Python 引擎逐模块移植，
+│                             #     双模式——静态包走 NF.localApi，服务器模式不变）
 ├── tests/                    # unittest（test_determinism 核心不变量 / test_config 完整性与图校验）
 ├── tools/balance_check.py    # 技能平衡蒙特卡洛（固定种子）
+├── tools/port_check.mjs      # JS 引擎 vs Python 服务器差分对拍（引擎改动必跑）
+├── tools/build_toy.py        # B站 Toy 静态包构建（dist/toy，纯静态可发布）
 └── docs/                     # GAME_SPEC.md 规则手册 + updates/ 更新文档 + title_candidates.md 称号候选库
 ```
 
@@ -98,6 +105,10 @@ namefight_pro/
   `GET /api/schema`（引擎自描述，编辑器表单驱动源）、
   `GET /api/config`、`POST /api/config/preview`、`POST /api/config/save`（编辑器保存 + 热重载）。
 - 错误统一 `{"error": "<code>"}` + 4xx/5xx。
+- **Toy 静态包（v3.10.0）**：`python tools/build_toy.py --zip` 构建纯静态发布包
+  （`dist/toy/` + zip），可发布到 B站 Toy 平台（`/toy/<slug>/` 子路径静态托管）：
+  对战页 + 真战力页走 JS 引擎（配置构建时嵌入 `nf_data.js` 快照），编辑器不随包。
+  本地预览：`python -m http.server -d dist/toy`；发布前跑 toy_doctor 预检。
 
 ## 6. 设计备忘（现行规则速查）
 

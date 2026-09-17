@@ -274,8 +274,8 @@
       ev.stopPropagation();           // 不触发全局 Delete 等快捷键
     });
     return h("header", { class: "ed-header" }, [
-      h("a", { class: "ed-btn", href: "/" }, "返回对战"),
-      h("a", { class: "ed-btn", href: "/power.html" }, "真战力"),
+      h("a", { class: "ed-btn", href: "./index.html" }, "返回对战"),
+      h("a", { class: "ed-btn", href: "./power.html" }, "真战力"),
       h("span", { class: "ed-title" }, "可视化编辑器"),
       h("span", { class: "ed-version" }, "v" + state.version),
       h("div", { class: "ed-quickwrap" }, [

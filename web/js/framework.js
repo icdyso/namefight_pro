@@ -71,4 +71,6 @@
   }
 
   window.NF = { h: h, clear: clear, qs: qs, fetchJSON: fetchJSON };
+  // 静态包（Toy 发布）注入本地引擎 API：优先于服务器请求（见 tools/build_toy.py）
+  if (window.NF_ENGINE_API) window.NF.localApi = window.NF_ENGINE_API;
 })();

@@ -29,12 +29,22 @@
     state.busy = true;
     btn.disabled = true;
     NF.clear(box);
-    box.appendChild(NF.h("div", { class: "power-waiting" }, t("power_measuring")));
-    NF.fetchJSON("/api/power", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name })
-    }).then(function (r) {
+    var waiting = NF.h("div", { class: "power-waiting" }, t("power_measuring"));
+    box.appendChild(waiting);
+    var job;
+    if (NF.localApi) {
+      // 静态包：本地引擎分块模拟（默认 10000 场，逐块让出主线程保持页面响应）
+      job = NF.localApi.measurePower(name, null, function (done, total) {
+        waiting.textContent = t("power_measuring") + " (" + done + "/" + total + ")";
+      });
+    } else {
+      job = NF.fetchJSON("/api/power", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name })
+      });
+    }
+    job.then(function (r) {
       state.busy = false;
       btn.disabled = false;
       renderResult(box, r);
@@ -87,8 +97,8 @@
     }, t("power_run_button"));
     root.appendChild(NF.h("header", { class: "app-header" },
       NF.h("div", { class: "lang-row" },
-        NF.h("a", { class: "lang-btn", href: "/" }, t("power_back")),
-        NF.h("a", { class: "lang-btn", href: "/editor.html" }, t("editor_link"))),
+        NF.h("a", { class: "lang-btn", href: "./index.html" }, t("power_back")),
+        NF.localApi ? null : NF.h("a", { class: "lang-btn", href: "./editor.html" }, t("editor_link"))),
       NF.h("h1", { class: "app-title" }, t("power_page_title")),
       NF.h("p", { class: "app-subtitle" }, t("power_page_subtitle"))));
     root.appendChild(NF.h("section", { class: "input-panel power-panel" },
@@ -96,7 +106,10 @@
     root.appendChild(resultBox);
   }
 
-  NF.fetchJSON("/api/text").then(function (data) {
+  var textJob = NF.localApi
+    ? Promise.resolve(NF.localApi.text())
+    : NF.fetchJSON("/api/text");
+  textJob.then(function (data) {
     state.text = data.ui || {};
     document.title = t("power_page_title") + " · " + t("app_title");
     renderAll();
