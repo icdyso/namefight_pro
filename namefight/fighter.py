@@ -250,10 +250,14 @@ def personalized_effects(fighter: Fighter, game: GameCfg):
                  "edges": [dict(e) for e in sdef.effect.get("edges", [])]}
         seed_hex = hashlib.md5((fighter.normalized + ":" + sid).encode("utf-8")).hexdigest()
         rng = DetRng(int(seed_hex, 16))
-        # 熟练度：[0,100] 三角形分布投掷（集中于 50），按技能区间换算为倍率
+          # 熟练度：[0,100] 三角形分布投掷（集中于 50），按技能区间换算为倍率。
+        # v3.12.0 扩散映射：投掷值从中点向外扩 1.8 倍后钳回 [0,100]——中央
+        # 80% 的实例铺满几乎整个倍率区间（典型触发率 10 倍落差，熟练度对
+        # 最终触发率的贡献 ≥60%）；两端少量实例落在区间端点。随机数消耗不变。
         mastery = rng.next_triangular_range(0, 100)
         lo, hi = sdef.mastery
-        mult = lo + (hi - lo) * mastery / 100.0
+        spread = max(0.0, min(100.0, 50.0 + (mastery - 50.0) * 1.8))
+        mult = lo + (hi - lo) * spread / 100.0
         graph["mastery"] = mastery
         graph["mastery_mult"] = mult
         for param in sdef.mastery_on:

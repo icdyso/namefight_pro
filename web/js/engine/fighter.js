@@ -195,9 +195,11 @@
       var rng = new NFE.DetRng(BigInt("0x" + seedHex));
 
       // 熟练度（0~100 三角形投掷）-> 倍率缩放 mastery_on 参数
+      // v3.12.0 扩散映射：与 Python 引擎逐字节一致（差分验证见 port_check.mjs）
       var mastery = rng.nextTriangularRange(0, 100);
       var lo = sdef.mastery[0], hi = sdef.mastery[1];
-      var mult = lo + (hi - lo) * mastery / 100.0;
+      var spread = Math.max(0.0, Math.min(100.0, 50.0 + (mastery - 50.0) * 1.8));
+      var mult = lo + (hi - lo) * spread / 100.0;
       graph.mastery = mastery;
       graph.mastery_mult = mult;
       for (var mi = 0; mi < sdef.masteryOn.length; mi++) {

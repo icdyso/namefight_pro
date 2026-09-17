@@ -585,7 +585,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.66
+              "chance": 0.43
             },
             "pos": [
               300,
@@ -724,7 +724,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.6
+              "chance": 0.39
             },
             "pos": [
               300,
@@ -861,7 +861,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.95
+              "chance": 0.36
             },
             "pos": [
               300,
@@ -1017,7 +1017,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.95
+              "chance": 0.37
             },
             "pos": [
               300,
@@ -1109,7 +1109,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.95
+              "chance": 0.33
             },
             "pos": [
               300,
@@ -1340,7 +1340,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.58
+              "chance": 0.31
             },
             "pos": [
               300,
@@ -1772,7 +1772,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.95
+              "chance": 0.34
             },
             "pos": [
               300,
@@ -1861,7 +1861,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.7
+              "chance": 0.45
             },
             "pos": [
               300,
@@ -1940,7 +1940,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.72
+              "chance": 0.47
             },
             "pos": [
               300,
@@ -2002,7 +2002,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.64
+              "chance": 0.41
             },
             "pos": [
               300,
@@ -2062,7 +2062,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.78
+              "chance": 0.51
             },
             "pos": [
               300,
@@ -2074,7 +2074,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.78
+              "chance": 0.51
             },
             "pos": [
               560,
@@ -2217,7 +2217,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.84
+              "chance": 0.55
             },
             "pos": [
               300,
@@ -2275,7 +2275,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.8
+              "chance": 0.52
             },
             "pos": [
               300,
@@ -2387,7 +2387,7 @@
             "kind": "condition",
             "type": "chance",
             "params": {
-              "chance": 0.95
+              "chance": 0.35
             },
             "pos": [
               300,
