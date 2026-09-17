@@ -806,15 +806,21 @@ class BattleDeterminism(unittest.TestCase):
                                   .read_text(encoding="utf-8"))
                 for name in ("system", "attributes", "skills", "titles",
                              "battle", "ui")}
+        # 普攻伤害压到保底（atk_factor -> 极小）：让多层审判落雷决定生死，
+        # 避免普攻抢在层到期前终结战斗（不动属性 base——审判共鸣以其为归一化基准）
+        data["battle"]["atk_factor"] = 0.0001
         for s in data["skills"]["skills"]:
             if s["id"] == "baptism":
                 s["weight"] = 99
+                s["mastery"] = [1, 1]   # 钉死熟练度倍率：本测试只验证逐层到期机制
                 for n in s["effect"]["nodes"]:
                     if n.get("type") == "chance":
                         n["params"]["chance"] = 1.0
+                    if n.get("type") == "hp_mod":
+                        n["params"]["value"] = 0   # 去掉互奶干扰，聚焦审判落雷
                     if n.get("type") == "apply_status":
                         n["params"]["turns"] = 25
-                        n["params"]["value"] = 800
+                        n["params"]["value"] = 2000
             else:
                 s["weight"] = 1
                 for n in s["effect"]["nodes"]:
@@ -846,7 +852,7 @@ class BattleDeterminism(unittest.TestCase):
         self.assertGreaterEqual(len(strikes), 3)
         self.assertIn("judgment_death",
                       [e["template"] for e in out.events],
-                      "800×多层审判应能致死")
+                      "2000×多层审判应能致死")
         out2, gains2, strikes2 = play()
         self.assertEqual((out.winner_name, out.events),
                          (out2.winner_name, out2.events),

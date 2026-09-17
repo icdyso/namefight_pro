@@ -490,8 +490,8 @@
       "description": "这一拳下去可能会很痛。",
       "weight": 9,
       "mastery": [
-        0.55,
-        1.65
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -565,8 +565,8 @@
       "description": "弱者不配存活。",
       "weight": 6,
       "mastery": [
-        0.7,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -643,8 +643,8 @@
       "description": "伤口即是源泉。",
       "weight": 8,
       "mastery": [
-        0.75,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -704,8 +704,8 @@
       "description": "刀锋上的毒液缓慢侵蚀敌人。",
       "weight": 9,
       "mastery": [
-        0.8,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -765,8 +765,8 @@
       "description": "该安静一会了。",
       "weight": 6,
       "mastery": [
-        0.6,
-        1.55
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -841,8 +841,8 @@
       "description": "天雷滚滚，你往哪里逃。",
       "weight": 8,
       "mastery": [
-        0.85,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -920,8 +920,8 @@
       "description": "来一场愉快的博弈吧。",
       "weight": 8,
       "mastery": [
-        0.65,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -998,8 +998,8 @@
       "description": "我的回合，我的回合，还是我的回合。",
       "weight": 7,
       "mastery": [
-        0.7,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1089,8 +1089,8 @@
       "description": "杀不死我的，只会让我更强大。",
       "weight": 9,
       "mastery": [
-        0.8,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1150,8 +1150,8 @@
       "description": "以彼之道，还至彼身。",
       "weight": 8,
       "mastery": [
-        0.7,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1227,8 +1227,8 @@
       "description": "气势如虹，坚不可摧。",
       "weight": 8,
       "mastery": [
-        0.6,
-        1.6
+        0.25,
+        2.5
       ],
       "mastery_on": "chance",
       "effect": {
@@ -1321,8 +1321,8 @@
       "description": "这个仇，我记下了。",
       "weight": 7,
       "mastery": [
-        0.7,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1409,8 +1409,8 @@
       "description": "只要还站着，就还没输。",
       "weight": 6,
       "mastery": [
-        0.5,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1526,8 +1526,8 @@
       "description": "他想去哪就去哪。",
       "weight": 8,
       "mastery": [
-        0.75,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1608,8 +1608,8 @@
       "description": "一念清光，万般污秽俱散。",
       "weight": 5,
       "mastery": [
-        0.7,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1668,8 +1668,8 @@
       "description": "不残血，不会玩。",
       "weight": 7,
       "mastery": [
-        0.8,
-        1.5
+        0.25,
+        2.5
       ],
       "mastery_on": [
         "value",
@@ -1752,8 +1752,8 @@
       "description": "白帝圣剑，御剑跟着我。",
       "weight": 8,
       "mastery": [
-        0.85,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1841,8 +1841,8 @@
       "description": "以生命为薪，燃尽一切。",
       "weight": 7,
       "mastery": [
-        0.65,
-        1.55
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1920,8 +1920,8 @@
       "description": "你的防御毫无作用。",
       "weight": 8,
       "mastery": [
-        0.75,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -1982,8 +1982,8 @@
       "description": "伤口绽开，血流不止。",
       "weight": 8,
       "mastery": [
-        0.75,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -2043,8 +2043,8 @@
       "description": "要么轰轰烈烈，要么一无所有。",
       "weight": 8,
       "mastery": [
-        0.7,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -2136,8 +2136,8 @@
       "description": "越战越勇，渐入佳境。",
       "weight": 7,
       "mastery": [
-        0.85,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -2197,8 +2197,8 @@
       "description": "再厚的护甲也有弱点。",
       "weight": 8,
       "mastery": [
-        0.7,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -2256,8 +2256,8 @@
       "description": "血祭血神……",
       "weight": 6,
       "mastery": [
-        0.7,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -2367,8 +2367,8 @@
       "description": "每一道伤痕，都是在积蓄力量。",
       "weight": 8,
       "mastery": [
-        0.75,
-        1.5
+        0.25,
+        2.5
       ],
       "effect": {
         "nodes": [
@@ -2428,8 +2428,8 @@
       "description": "圣光洗净罪孽，审判随后降临。",
       "weight": 7,
       "mastery": [
-        0.55,
-        1.65
+        0.25,
+        2.5
       ],
       "mastery_on": [
         "value"
@@ -2532,8 +2532,8 @@
       "description": "天平两端，命运悄然易位。",
       "weight": 7,
       "mastery": [
-        0.6,
-        1.5
+        0.25,
+        2.5
       ],
       "mastery_on": [
         "chance"
